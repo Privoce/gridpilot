@@ -11,3 +11,6 @@ data/
 dist/
 build/
 *.log
+.vercel/
+.python-version
+.vercel

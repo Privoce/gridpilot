@@ -79,13 +79,15 @@ Keep keys in `.env` only. Rotate any key that was pasted into chat. Drawing uplo
 
 ## Deploy (Vercel)
 
-The FastAPI app deploys as a single Vercel Function (`backend.app.main:app`).
+**Live:** https://gridpilot-three.vercel.app  
+
+Entrypoint: `main.py` → FastAPI app. GitHub repo is connected for auto-deploys on `main`.
 
 ```bash
 npm i -g vercel
-vercel link          # link to Privoce/gridpilot project
-vercel env add XAI_API_KEY
-vercel env add SECRET_KEY
+vercel link --scope suhan1996s-projects
+vercel env add XAI_API_KEY production
+vercel env add SECRET_KEY production
 vercel --prod
 ```
 
