@@ -9,7 +9,7 @@ from sqlalchemy.orm import Session
 
 from backend.app.auth import create_session_token
 from backend.app.billing import maybe_roll_period
-from backend.app.config import ROOT, settings
+from backend.app.config import settings
 from backend.app.db import get_db
 from backend.app.db_models import (
     AuditRun,
@@ -25,33 +25,61 @@ from backend.app.seed import DEMO_EMAIL, DEMO_PASSWORD, ensure_sample_pdf, seed_
 
 router = APIRouter(prefix="/api/demo", tags=["demo"])
 
+DEMO_PROJECT_NAME = "Cedar Ridge Solar + Storage"
+
+# AES Indiana Facilities Connection Requirements — common SLD gaps (demo)
 INTENTIONAL_DEFECTS = [
     {
         "severity": "blocking",
-        "title": "Inverter LVRT / ride-through not documented",
-        "why": "PJM IBR filings expect LVRT/HVRT callouts on the inverter schedule.",
+        "rule_id": "R-PROTECT-01",
+        "title": "Protective relays missing ANSI function numbers",
+        "why": "AES Indiana expects relays labeled with ANSI device numbers (27/59/81/67, etc.).",
     },
     {
         "severity": "blocking",
-        "title": "POI breaker interrupting rating (kA) missing",
-        "why": "52-POI is drawn but the interrupting capability field is blank — common requeue cause.",
+        "rule_id": "R-METER-01",
+        "title": "CT/PT ratios not annotated at POI metering",
+        "why": "Revenue metering CT/PT ratios are required on the interconnection SLD.",
+    },
+    {
+        "severity": "blocking",
+        "rule_id": "R-IBR-01",
+        "title": "IBR P-Q / capability curves not shown",
+        "why": "New IBRs on AES Indiana must document reactive capability (NERC VAR-002 / FERC 842).",
     },
     {
         "severity": "warning",
-        "title": "Transformer %Z / X/R not annotated",
-        "why": "GSU MVA is present; impedance is required for model quality.",
+        "rule_id": "R-TITLE-01",
+        "title": "As-built revision / date block incomplete",
+        "why": "AES Indiana requires as-built one-lines with revision number and date before energization.",
     },
     {
         "severity": "warning",
-        "title": "SCADA / RTU telemetry path omitted",
-        "why": "ISO reviewers expect a telemetry note for new generation.",
-    },
-    {
-        "severity": "warning",
-        "title": "Grounding transformer / IEEE 1547 citation missing",
-        "why": "Completeness items that often trigger RFIs before acceptance.",
+        "rule_id": "R-METER-02",
+        "title": "Bidirectional / AES Indiana meter labeling incomplete",
+        "why": "POI revenue meter should call out bidirectional metering for the AES Indiana interconnection.",
     },
 ]
+
+SCENARIO = {
+    "project": DEMO_PROJECT_NAME,
+    "capacity_mw": 120,
+    "iso": "MISO",
+    "utility": "AES Indiana",
+    "poi": "AES Indiana — Cedar Ridge 138 kV",
+    "state": "IN",
+    "role": "Interconnection manager at Northwind Renewables (developer)",
+    "buyer": "Developer",
+    "filing_path": "Transmission-scale → MISO DPP (AES Indiana is the transmission owner)",
+    "channel": "MISO DPP + AES Indiana Facilities Connection Requirements",
+    "why_this_demo": (
+        "120 MW exceeds typical distribution thresholds, so the primary queue is MISO. "
+        "AES Indiana still reviews TO / Facilities Connection Requirements (SLD, protection, metering). "
+        "GridPilot runs that checklist before you pay for another consultant revision or burn queue time."
+    ),
+    "portal": "https://www.aesindiana.com/interconnections",
+    "powerclerk": "https://aesindianainterconnection.powerclerk.com",
+}
 
 
 def _demo_user(db: Session) -> User:
@@ -66,7 +94,7 @@ def _demo_user(db: Session) -> User:
 def _demo_project(db: Session, org_id: str) -> Project:
     project = (
         db.query(Project)
-        .filter(Project.org_id == org_id, Project.name == "Cedar Ridge Solar + Storage")
+        .filter(Project.org_id == org_id, Project.name == DEMO_PROJECT_NAME)
         .first()
     )
     if not project:
@@ -78,37 +106,40 @@ def _demo_project(db: Session, org_id: str) -> Project:
         )
     if not project:
         raise HTTPException(status_code=404, detail="Demo project not found")
+    # Keep seeded demo aligned with AES Indiana / MISO scenario
+    project.iso = SCENARIO["iso"]
+    project.state = SCENARIO["state"]
+    project.poi_substation = SCENARIO["poi"]
+    project.capacity_mw = float(SCENARIO["capacity_mw"])
     return project
 
 
 def _ensure_drawing(db: Session, project: Project, user_id: str) -> Drawing:
+    sample = ensure_sample_pdf()
     latest = (
         db.query(Drawing)
         .filter(Drawing.project_id == project.id, Drawing.is_latest.is_(True))
         .order_by(Drawing.created_at.desc())
         .first()
     )
-    if latest and Path(latest.stored_path).exists():
-        return latest
-
-    sample = ensure_sample_pdf()
     dest_dir = settings.upload_dir / project.org_id / project.id
     dest_dir.mkdir(parents=True, exist_ok=True)
     dest = dest_dir / f"demo_{sample.name}"
     shutil.copy2(sample, dest)
 
-    for old in (
-        db.query(Drawing)
-        .filter(Drawing.project_id == project.id, Drawing.is_latest.is_(True))
-        .all()
-    ):
-        old.is_latest = False
+    if latest:
+        latest.stored_path = str(dest)
+        latest.filename = sample.name
+        latest.version_label = "Rev A — AES Indiana demo SLD"
+        db.commit()
+        db.refresh(latest)
+        return latest
 
     drawing = Drawing(
         project_id=project.id,
         filename=sample.name,
         stored_path=str(dest),
-        version_label="Rev A — demo SLD",
+        version_label="Rev A — AES Indiana demo SLD",
         page_count=1,
         uploaded_by=user_id,
         is_latest=True,
@@ -125,23 +156,20 @@ def demo_info():
     return {
         "email": DEMO_EMAIL,
         "password": DEMO_PASSWORD,
-        "scenario": {
-            "project": "Cedar Ridge Solar + Storage",
-            "capacity_mw": 120,
-            "iso": "PJM",
-            "poi": "Cedar Ridge 138 kV",
-            "state": "IN",
-            "role": "Interconnection manager at Northwind Renewables",
-        },
+        "scenario": SCENARIO,
         "sample_drawing": "cedar_ridge_sld_demo.pdf",
         "intentional_defects": INTENTIONAL_DEFECTS,
         "steps": [
-            "Enter the demo workspace as Alex Rivera (interconnection manager).",
-            "Open the seeded Cedar Ridge project and review the sample SLD PDF.",
-            "Run a PJM interconnection readiness audit on that drawing.",
-            "Triage blocking findings (resolve / acknowledge) until the filing gate clears.",
-            "Export the Interconnection Readiness Report.",
+            "Enter as Alex Rivera — interconnection manager at a developer (not the utility).",
+            "Review the Cedar Ridge SLD that would go into the AES Indiana / MISO filing packet.",
+            "Run a pre-filing audit against published AES Indiana Facilities Connection Requirements.",
+            "Triage blockers before consultants resubmit or you enter the MISO DPP queue.",
+            "Export a readiness report — then you would file (PowerClerk / MISO), not GridPilot.",
         ],
+        "links": {
+            "aes_indiana_interconnections": SCENARIO["portal"],
+            "powerclerk": SCENARIO["powerclerk"],
+        },
     }
 
 
@@ -188,7 +216,7 @@ def start_demo(response: Response, db: Session = Depends(get_db)):
         "project_id": project.id,
         "drawing_id": drawing.id,
         "latest_audit_id": latest_audit.id if latest_audit else None,
-        "onboarding_path": f"onboarding",
+        "onboarding_path": "onboarding",
     }
 
 
@@ -205,6 +233,7 @@ def demo_context(auth: AuthContext = Depends(get_auth), db: Session = Depends(ge
         .order_by(AuditRun.created_at.desc())
         .first()
     )
+    db.commit()
 
     open_blocking = latest_audit.blocking_open if latest_audit else 0
     completed = bool(latest_audit and latest_audit.status.value == "completed")
@@ -212,6 +241,7 @@ def demo_context(auth: AuthContext = Depends(get_auth), db: Session = Depends(ge
     return {
         "is_demo": True,
         "scenario": {
+            **SCENARIO,
             "project": project.name,
             "capacity_mw": project.capacity_mw,
             "iso": project.iso,
@@ -229,8 +259,12 @@ def demo_context(auth: AuthContext = Depends(get_auth), db: Session = Depends(ge
         "open_blocking": open_blocking,
         "can_file": completed and open_blocking == 0,
         "intentional_defects": INTENTIONAL_DEFECTS,
+        "links": {
+            "aes_indiana_interconnections": SCENARIO["portal"],
+            "powerclerk": SCENARIO["powerclerk"],
+        },
         "progress": {
-            "viewed_project": True,  # client tracks finer steps in localStorage
+            "viewed_project": True,
             "has_drawing": True,
             "has_audit": latest_audit is not None,
             "audit_completed": completed,
@@ -258,9 +292,9 @@ def reset_demo(auth: AuthContext = Depends(get_auth), db: Session = Depends(get_
 
     project = _demo_project(db, auth.org.id)
     audits = db.query(AuditRun).filter(AuditRun.project_id == project.id).all()
-    for audit in audits:
-        db.query(FindingRow).filter(FindingRow.audit_id == audit.id).delete()
-        db.delete(audit)
+    for a in audits:
+        db.query(FindingRow).filter(FindingRow.audit_id == a.id).delete()
+        db.delete(a)
     _ensure_drawing(db, project, auth.user.id)
     db.commit()
-    return {"ok": True, "project_id": project.id, "message": "Demo audits cleared. Sample SLD retained."}
+    return {"ok": True, "message": "Demo audits cleared. Re-run the AES Indiana SLD audit."}

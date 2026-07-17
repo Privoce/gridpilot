@@ -4,9 +4,9 @@ import { button, field, label, panel, pill as uiPill, table } from "./ui.js";
 const root = document.getElementById("root");
 const ONBOARD_KEY = "gp_demo_onboard_v2";
 const WIZARD_META = [
-  { n: 1, label: "Welcome" },
-  { n: 2, label: "Drawing" },
-  { n: 3, label: "Audit" },
+  { n: 1, label: "Role" },
+  { n: 2, label: "SLD" },
+  { n: 3, label: "Pre-file" },
   { n: 4, label: "Triage" },
   { n: 5, label: "Report" },
 ];
@@ -226,16 +226,23 @@ async function renderDemo() {
   root.innerHTML = `
   <div class="grid min-h-screen place-items-center bg-canvas p-6">
     <div class="${panel} w-full max-w-lg p-8">
-      <p class="mb-3 font-mono text-[12px] uppercase tracking-[0.12em] text-muted">Product demo</p>
-      <h1 class="mb-3 text-3xl tracking-tightish">Try GridPilot in five guided steps</h1>
+      <p class="mb-3 font-mono text-[12px] uppercase tracking-[0.12em] text-muted">Developer demo · AES Indiana</p>
+      <h1 class="mb-3 text-3xl tracking-tightish">Pre-filing QA before you submit</h1>
       <p class="mb-6 text-[15px] leading-relaxed text-muted">
-        Experience how an interconnection manager reviews a utility-scale SLD,
-        runs a ${esc(s.iso)} readiness audit, clears filing blockers, and exports a report.
+        You are the <strong class="text-ink">developer</strong> — not the utility.
+        Walk the loop consultants do manually: check the SLD against AES Indiana / ${esc(s.iso)} published rules,
+        clear blockers, then export a report <em>before</em> PowerClerk or the ISO queue.
       </p>
       <div class="mb-4 overflow-hidden rounded-card border border-line">
+        <div class="flex justify-between gap-3 border-b border-line px-3 py-2.5 text-[13px]"><span class="text-muted">Your role</span><strong>Developer interconnection manager</strong></div>
         <div class="flex justify-between gap-3 border-b border-line px-3 py-2.5 text-[13px]"><span class="text-muted">Project</span><strong>${esc(s.project)}</strong></div>
-        <div class="flex justify-between gap-3 border-b border-line px-3 py-2.5 text-[13px]"><span class="text-muted">Market</span><strong>${esc(s.iso)} · ${esc(s.capacity_mw)} MW</strong></div>
-        <div class="flex justify-between gap-3 px-3 py-2.5 text-[13px]"><span class="text-muted">Sample file</span><strong class="font-mono text-[12px]">${esc(info.sample_drawing)}</strong></div>
+        <div class="flex justify-between gap-3 border-b border-line px-3 py-2.5 text-[13px]"><span class="text-muted">File to</span><strong class="text-right">${esc(s.utility || "AES Indiana")} (TO) · ${esc(s.iso)} DPP · ${esc(s.capacity_mw)} MW</strong></div>
+        <div class="flex justify-between gap-3 border-b border-line px-3 py-2.5 text-[13px]"><span class="text-muted">POI</span><strong class="text-right">${esc(s.poi)}</strong></div>
+        <div class="flex justify-between gap-3 px-3 py-2.5 text-[13px]"><span class="text-muted">Sample SLD</span><strong class="font-mono text-[12px]">${esc(info.sample_drawing)}</strong></div>
+      </div>
+      <div class="mb-4 flex flex-wrap gap-x-4 gap-y-1 text-[12px]">
+        <a class="text-ink underline-offset-2 hover:underline" href="${esc(info.links?.aes_indiana_interconnections || "https://www.aesindiana.com/interconnections")}" target="_blank" rel="noopener">AES Indiana interconnections</a>
+        <a class="text-ink underline-offset-2 hover:underline" href="${esc(info.links?.powerclerk || "https://aesindianainterconnection.powerclerk.com")}" target="_blank" rel="noopener">PowerClerk portal</a>
       </div>
       <div class="mb-5 rounded-card border border-line bg-soft px-4 py-3 text-[13px]">
         <strong>Demo sign-in</strong>
@@ -332,21 +339,29 @@ function renderWizardStep(step, ctx, auditDetail) {
     return `
       <div class="flex-1 p-7">
         <p class="mb-2 font-mono text-[12px] uppercase tracking-[0.12em] text-muted">Step 1 of 5</p>
-        <h2 class="mb-3 text-2xl tracking-tightish">Meet the filing scenario</h2>
-        <p class="mb-6 max-w-xl text-[15px] leading-relaxed text-muted">
-          You are an interconnection manager at <strong class="text-ink">Northwind Renewables</strong>.
-          Your team is preparing to submit <strong class="text-ink">${esc(ctx.scenario?.project)}</strong>
-          into <strong class="text-ink">${esc(ctx.scenario?.iso)}</strong>.
+        <h2 class="mb-3 text-2xl tracking-tightish">You are the developer</h2>
+        <p class="mb-4 max-w-xl text-[15px] leading-relaxed text-muted">
+          At <strong class="text-ink">Northwind Renewables</strong> you build plants — you are not AES Indiana and not MISO.
+          <strong class="text-ink">${esc(ctx.scenario?.project)}</strong> is ${esc(ctx.scenario?.capacity_mw)} MW, so the primary queue is
+          <strong class="text-ink">${esc(ctx.scenario?.iso)} DPP</strong>, with
+          <strong class="text-ink">${esc(ctx.scenario?.utility || "AES Indiana")}</strong> as transmission owner reviewing Facilities Connection Requirements.
+        </p>
+        <p class="mb-5 max-w-xl text-[14px] leading-relaxed text-muted">
+          ${esc(ctx.scenario?.why_this_demo || "Run the public-rules checklist before another consultant cycle or queue RFI.")}
         </p>
         <div class="mb-5 grid gap-3 sm:grid-cols-2">
           <div class="rounded-card border border-line bg-soft p-4"><span class="font-mono text-[11px] uppercase tracking-[0.08em] text-muted">Capacity</span><strong class="mt-1 block">${esc(ctx.scenario?.capacity_mw)} MW</strong></div>
           <div class="rounded-card border border-line bg-soft p-4"><span class="font-mono text-[11px] uppercase tracking-[0.08em] text-muted">POI</span><strong class="mt-1 block">${esc(ctx.scenario?.poi)}</strong></div>
-          <div class="rounded-card border border-line bg-soft p-4"><span class="font-mono text-[11px] uppercase tracking-[0.08em] text-muted">State</span><strong class="mt-1 block">${esc(ctx.scenario?.state)}</strong></div>
-          <div class="rounded-card border border-line bg-soft p-4"><span class="font-mono text-[11px] uppercase tracking-[0.08em] text-muted">Market</span><strong class="mt-1 block">${esc(ctx.scenario?.iso)}</strong></div>
+          <div class="rounded-card border border-line bg-soft p-4"><span class="font-mono text-[11px] uppercase tracking-[0.08em] text-muted">Utility (TO)</span><strong class="mt-1 block">${esc(ctx.scenario?.utility || "AES Indiana")}</strong></div>
+          <div class="rounded-card border border-line bg-soft p-4"><span class="font-mono text-[11px] uppercase tracking-[0.08em] text-muted">ISO queue</span><strong class="mt-1 block">${esc(ctx.scenario?.iso)} DPP</strong></div>
+        </div>
+        <div class="mb-3 flex flex-wrap gap-x-4 gap-y-1 text-[12px]">
+          <a class="text-ink underline-offset-2 hover:underline" href="${esc(ctx.links?.aes_indiana_interconnections || "https://www.aesindiana.com/interconnections")}" target="_blank" rel="noopener">AES Indiana interconnections →</a>
+          <a class="text-ink underline-offset-2 hover:underline" href="${esc(ctx.links?.powerclerk || "https://aesindianainterconnection.powerclerk.com")}" target="_blank" rel="noopener">PowerClerk (utility portal) →</a>
         </div>
         <div class="rounded-card border border-line bg-soft px-4 py-3 text-[13px] text-muted">
-          <strong class="mb-1 block text-ink">What you will practice</strong>
-          Review a sample SLD, run an automated readiness audit, clear blockers, and export a report.
+          <strong class="mb-1 block text-ink">What GridPilot replaces in this loop</strong>
+          Not the PE stamp or the ISO study — the weeks of manual “did we miss ANSI numbers / CT ratios / IBR curves?” before you file.
         </div>
       </div>
       ${footer(`<span class="text-[12px] text-muted">About 5–8 minutes</span>`, `<button type="button" class="${button("primary")}" id="wiz-next">Continue</button>`)}`;
@@ -358,7 +373,7 @@ function renderWizardStep(step, ctx, auditDetail) {
         <p class="mb-2 font-mono text-[12px] uppercase tracking-[0.12em] text-muted">Step 2 of 5</p>
         <h2 class="mb-3 text-2xl tracking-tightish">Review the sample single-line diagram</h2>
         <p class="mb-4 max-w-xl text-[15px] leading-relaxed text-muted">
-          This CAD-exported PDF includes intentional gaps (blank LVRT notes, missing breaker kA) so the audit has clear findings.
+          This CAD-exported PDF includes intentional AES Indiana gaps (missing ANSI relay numbers, blank CT/PT ratios, no IBR P-Q curves) so the audit has clear findings.
         </p>
         <div class="overflow-hidden rounded-card border border-line bg-soft">
           <iframe class="min-h-[340px] w-full border-0" title="Sample SLD" src="${esc(ctx.drawing_url || ctx.sample_pdf_url)}"></iframe>
@@ -387,8 +402,12 @@ function renderWizardStep(step, ctx, auditDetail) {
     return `
       <div class="flex-1 p-7">
         <p class="mb-2 font-mono text-[12px] uppercase tracking-[0.12em] text-muted">Step 3 of 5</p>
-        <h2 class="mb-3 text-2xl tracking-tightish">Run the ${esc(ctx.scenario?.iso || "PJM")} interconnection audit</h2>
-        <p class="mb-5 max-w-xl text-[15px] leading-relaxed text-muted">GridPilot reads SLD pages with a vision model, then scores them against the regional rule pack.</p>
+        <h2 class="mb-3 text-2xl tracking-tightish">Pre-filing audit (before you submit)</h2>
+        <p class="mb-5 max-w-xl text-[15px] leading-relaxed text-muted">
+          GridPilot reads the SLD with a vision model and scores it against published
+          AES Indiana Facilities Connection Requirements (${esc(ctx.scenario?.iso || "MISO")} pack).
+          This is the developer-side check — utilities/ISOs may use other tools after you file.
+        </p>
         ${statusBox}
       </div>
       ${footer(
@@ -444,12 +463,16 @@ function renderWizardStep(step, ctx, auditDetail) {
   return `
     <div class="flex-1 p-7">
       <p class="mb-2 font-mono text-[12px] uppercase tracking-[0.12em] text-muted">Step 5 of 5</p>
-      <h2 class="mb-3 text-2xl tracking-tightish">Export the readiness report</h2>
-      <p class="mb-5 max-w-xl text-[15px] leading-relaxed text-muted">Share a structured Interconnection Readiness Report before portal submission.</p>
+      <h2 class="mb-3 text-2xl tracking-tightish">Export — then file outside GridPilot</h2>
+      <p class="mb-5 max-w-xl text-[15px] leading-relaxed text-muted">
+        Share this readiness report with your consultant or internal PE. Next real step: submit to
+        <strong class="text-ink">${esc(ctx.scenario?.utility || "AES Indiana")}</strong> / <strong class="text-ink">${esc(ctx.scenario?.iso || "MISO")}</strong>
+        — GridPilot stops at pre-filing QA.
+      </p>
       <div class="mb-5 grid gap-3 sm:grid-cols-3">
         <div class="rounded-card border border-line bg-soft p-4"><span class="font-mono text-[11px] uppercase tracking-[0.08em] text-muted">Score</span><strong class="mt-1 block text-xl">${esc(auditDetail?.readiness_score ?? ctx.readiness_score ?? "—")}</strong></div>
         <div class="rounded-card border border-line bg-soft p-4"><span class="font-mono text-[11px] uppercase tracking-[0.08em] text-muted">Status</span><strong class="mt-1 block">${esc(auditDetail?.readiness_status || "—")}</strong></div>
-        <div class="rounded-card border border-line bg-soft p-4"><span class="font-mono text-[11px] uppercase tracking-[0.08em] text-muted">ISO pack</span><strong class="mt-1 block">${esc(ctx.scenario?.iso)}</strong></div>
+        <div class="rounded-card border border-line bg-soft p-4"><span class="font-mono text-[11px] uppercase tracking-[0.08em] text-muted">Rule pack</span><strong class="mt-1 block">${esc(ctx.scenario?.utility || "AES")} / ${esc(ctx.scenario?.iso)}</strong></div>
       </div>
     </div>
     ${footer(

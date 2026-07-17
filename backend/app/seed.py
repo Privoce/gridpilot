@@ -65,6 +65,11 @@ def seed_demo(db: Session) -> None:
                 .first()
             )
             if project:
+                # Keep demo project on AES Indiana / MISO scenario
+                project.iso = "MISO"
+                project.state = "IN"
+                project.poi_substation = "AES Indiana — Cedar Ridge 138 kV"
+                project.capacity_mw = 120.0
                 has_drawing = (
                     db.query(Drawing)
                     .filter(Drawing.project_id == project.id, Drawing.is_latest.is_(True))
@@ -98,10 +103,10 @@ def seed_demo(db: Session) -> None:
     project = Project(
         org_id=org.id,
         name="Cedar Ridge Solar + Storage",
-        iso="PJM",
+        iso="MISO",
         capacity_mw=120.0,
         state="IN",
-        poi_substation="Cedar Ridge 138 kV",
+        poi_substation="AES Indiana — Cedar Ridge 138 kV",
     )
     db.add(project)
     db.flush()
@@ -122,7 +127,7 @@ def _attach_sample(db: Session, project: Project, user_id: str) -> None:
             project_id=project.id,
             filename=sample.name,
             stored_path=str(dest),
-            version_label="Rev A — demo SLD",
+            version_label="Rev A — AES Indiana demo SLD",
             page_count=1,
             uploaded_by=user_id,
             is_latest=True,

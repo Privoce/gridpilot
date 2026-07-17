@@ -58,8 +58,8 @@ def assert_can_run_audit(org: Organization) -> None:
 
 def plan_features(plan: Plan) -> list[str]:
     base = [
-        "SLD multimodal audit",
-        "PJM / MISO / ERCOT rule packs",
+        "Developer pre-filing SLD audit",
+        "Utility + ISO rule packs (AES Indiana / MISO demo)",
         "Finding triage workflow",
         "Filing readiness gate",
         "HTML + JSON export",
@@ -76,6 +76,6 @@ def plan_features(plan: Plan) -> list[str]:
     return base + [
         "Unlimited audits",
         "SSO / VPC / on-prem options",
-        "Custom ISO rule packs",
+        "Custom utility + ISO rule packs",
         "Dedicated success engineer",
     ]

@@ -1,46 +1,68 @@
 iso: MISO
-name: MISO
-description: Midcontinent Independent System Operator generator interconnection (demo rule pack)
-version: "2024.1"
+name: MISO + AES Indiana (demo)
+description: >
+  Midcontinent Independent System Operator generator interconnection with AES Indiana
+  Facilities Connection Requirements overlays used in the GridPilot demo.
+version: "2026.1-aes-indiana"
 references:
   - FERC Order 2023
   - MISO BPM-015 Generator Interconnection
+  - AES Indiana Facilities Connection Requirements (2026)
+  - FERC Order 842 (primary frequency response)
+  - NERC VAR-002
   - IEEE 1547-2018
 rules:
-  - id: MISO-SLD-001
+  - id: R-POI-01
     severity: blocking
-    title: POI and ownership boundary labeled
+    title: POI voltage and ownership boundary labeled
     check: poi_and_metering
-    description: MISO interconnection exhibits require POI, metering, and ownership demarcation on the SLD.
-    recommendation: Label POI, revenue meter, and ownership line clearly.
+    description: AES Indiana / MISO exhibits require POI voltage, metering, and ownership demarcation on the SLD.
+    recommendation: Label POI kV, revenue meter, and ownership line clearly.
 
-  - id: MISO-INV-RIDE
+  - id: R-PROTECT-01
     severity: blocking
-    title: Ride-through / LVRT documentation
-    check: lvrt_capability
-    description: Inverter-based resources must document voltage/frequency ride-through capability.
-    recommendation: Call out LVRT/HVRT and frequency ride-through on the inverter schedule.
+    title: Protective relays with ANSI function numbers
+    check: protection_devices
+    description: All relays must be labeled with ANSI device numbers (27/59/81/67, etc.).
+    recommendation: Annotate each relay with ANSI function numbers for AES Indiana review.
+
+  - id: R-METER-01
+    severity: blocking
+    title: CT/PT ratios at POI metering
+    check: poi_and_metering
+    description: CT and PT ratios must be shown for interconnection revenue metering.
+    recommendation: Add CT/PT ratios matching the metering design package.
+
+  - id: R-IBR-01
+    severity: blocking
+    title: IBR P-Q / capability curves
+    check: reactive_power
+    description: >
+      New IBRs on AES Indiana must document reactive capability / P-Q curves, primary frequency
+      response (FERC 842, ≤5% droop outside ±0.036 Hz deadband), and closed-loop voltage control
+      (NERC VAR-002, POI voltage within ±2%).
+    recommendation: Attach P-Q capability, PFR/droop, and AVC notes from inverter data.
+
+  - id: R-TITLE-01
+    severity: warning
+    title: As-built revision and date
+    check: site_reference
+    description: AES Indiana requires as-built one-lines with revision number and date before energization.
+    recommendation: Complete revision letter, date, and as-built stamp.
+
+  - id: R-METER-02
+    severity: warning
+    title: Bidirectional AES Indiana meter labeling
+    check: poi_and_metering
+    description: Bidirectional revenue metering at the AES Indiana POI should be explicitly labeled.
+    recommendation: Call out bidirectional metering and utility meter identification.
 
   - id: MISO-XFMR-001
-    severity: blocking
+    severity: warning
     title: Interconnecting transformer data
     check: transformer_mva
-    description: Transformer MVA, impedance (%Z), and voltage ratios are required for study modeling.
+    description: Transformer MVA, impedance (%Z), and voltage ratios support MISO study modeling.
     recommendation: Annotate MVA, %Z, and kV ratio on each GSU / station transformer.
-
-  - id: MISO-BREAKER
-    severity: blocking
-    title: Interrupting device at POI
-    check: protection_devices
-    description: Show the interconnecting breaker / switchgear with interrupting rating.
-    recommendation: Add breaker symbol and kA rating at the POI.
-
-  - id: MISO-REACTIVE
-    severity: warning
-    title: Reactive capability / power factor
-    check: reactive_power
-    description: Reactive power capability or PF operating range should be noted for IBR plants.
-    recommendation: Add PF / Q capability note or capacitor/STATCOM equipment if applicable.
 
   - id: MISO-CAP
     severity: warning
@@ -48,17 +70,3 @@ rules:
     check: capacity_consistency
     description: Stated project MW should match inverter/transformer equipment totals.
     recommendation: Align title-block MW with equipment schedule totals.
-
-  - id: MISO-GIS
-    severity: warning
-    title: Site / one-line correspondence
-    check: site_reference
-    description: Drawing should reference project name, county/state, and POI substation.
-    recommendation: Complete title block with site, POI substation, and revision.
-
-  - id: MISO-IEEE
-    severity: ready
-    title: Applicable standards cited
-    check: ieee1547_reference
-    description: Notes citing IEEE 1547 / NERC PRC standards improve review readiness.
-    recommendation: Retain standards references in drawing notes.

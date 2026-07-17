@@ -1,24 +1,30 @@
 # GridPilot
 
-Interconnection readiness platform for utility-scale renewables.
+**Pre-filing interconnection QA for renewable developers.**
 
-Not a chat demo. A workspace for developers and EPCs to:
+US power markets have no national grid company. Three roles matter:
 
-1. Manage **projects** (ISO, capacity, POI)
-2. Version **SLD drawings**
-3. Run **queued audits** (Vision + ISO rule packs)
-4. **Triage findings** until the filing gate clears
-5. Track **plan usage** (Free / Pro)
+| Role | Who | What they do |
+|------|-----|----------------|
+| **Utility** | AES Indiana, etc. | Wires / retail; primary counterparty for many distribution filings (e.g. PowerClerk) |
+| **Developer** | IPPs, project cos | Site, design, and **assemble the application** to connect a plant |
+| **ISO + FERC** | MISO, PJM, ERCOT… | Market operator + federal frame; large / transmission projects enter the ISO queue |
 
-## Design system
+Developers today hire consultants for 3–6 months to build packets, then wait another 3–6 months for utility/ISO review — with no guarantee of acceptance. AI is starting to help **utilities/ISOs review inbound filings**. Almost nothing helps the **developer check the same public requirements before submit**. That is GridPilot.
 
-UI uses **Tailwind CSS** with tokens mirrored from [x.ai/api](https://x.ai/api):
+MVP: audit the **single-line diagram (SLD)** against published utility + ISO rule packs → triage blockers → export a readiness report → *then* file outside GridPilot.
 
-- Tokens: `backend/app/static/css/theme.css` (`--gp-*` variables)
-- Tailwind bridge: `backend/app/static/js/theme-config.js`
-- Component recipes: `backend/app/static/js/ui.js`
+## Guided demo (AES Indiana)
 
-Change colors/fonts in `theme.css` to restyle the whole product. Optional dark mode: set `<html data-theme="dark">`.
+Concrete TO example used for interviews / GTM credibility:
+
+1. You play a **developer** interconnection manager (not the utility)
+2. Project: Cedar Ridge Solar + Storage · **120 MW** · Indiana
+3. Path: **MISO DPP** (transmission-scale) with **AES Indiana** as TO
+4. Audit against AES Indiana Facilities Connection gaps (`R-PROTECT-01`, `R-METER-01`, `R-IBR-01`, …)
+5. Export report — filing to [AES Indiana](https://www.aesindiana.com/interconnections) / [PowerClerk](https://aesindianainterconnection.powerclerk.com) is out of band
+
+Demo login (shown on demo page): `demo@gridpilot.dev` / `gridpilot`
 
 ## Quick start
 
@@ -37,67 +43,37 @@ python samples/generate_sample_sld.py
 - Marketing: http://127.0.0.1:8000  
 - App: http://127.0.0.1:8000/app  
 - Guided demo: http://127.0.0.1:8000/app#/demo  
-- Demo credentials (shown on demo page): `demo@gridpilot.dev` / `gridpilot`
 
-### Guided demo path
-
-1. **Try Demo** → scenario brief + intentional SLD defects  
-2. One-click enter workspace (sample `cedar_ridge_sld_demo.pdf` attached)  
-3. Review drawing → run PJM audit → triage blockers → export readiness report  
-4. Use **Reset demo audits** in the Demo guide to re-run cleanly
+**Live (Vercel):** https://gridpilot-three.vercel.app  
 
 ## Product surface
 
 | Area | What you get |
 |------|----------------|
-| Auth + orgs | Signup creates an org; session cookies |
-| Projects | ISO target, capacity, POI metadata |
+| Auth + orgs | Signup creates a developer org; session cookies |
+| Projects | Utility/ISO target, capacity, POI metadata |
 | Drawings | Versioned SLD uploads per project |
-| Audits | Async jobs with queued → running → completed |
+| Audits | Vision + rule packs; async locally, inline on Vercel |
 | Findings | Acknowledge / resolve / dismiss triage |
 | Filing gate | Blocked until open blockers = 0 |
-| Billing | Metered audits + demo Pro upgrade |
+| Billing | Metered pre-filing audits |
 
-## API (authenticated)
+## Design system
 
-- `POST /api/auth/signup|login|logout` · `GET /api/auth/me`
-- `GET|POST /api/projects` · `GET /api/projects/{id}`
-- `POST /api/projects/{id}/drawings` · `POST /api/projects/{id}/audits`
-- `GET /api/audits` · `GET /api/audits/{id}`
-- `PATCH /api/audits/{id}/findings/{finding_id}`
-- `GET /api/dashboard` · `GET /api/billing`
+- Tokens: `backend/app/static/css/theme.css` (`--gp-*`)
+- Tailwind bridge: `backend/app/static/js/theme-config.js`
+- Recipes: `backend/app/static/js/ui.js`
+
+## Deploy (Vercel)
+
+Entrypoint: `main.py`. Set `XAI_API_KEY` + `SECRET_KEY` in the Vercel project. SQLite/uploads under `/tmp` on Vercel (demo reseeds on cold start).
 
 ## Roadmap
 
-- **Now:** Audit Engine SaaS spine (this repo)
-- **Next:** Chrome auto-filler for ISO portals
+- **Now:** Developer pre-filing SLD audit (this repo) · AES Indiana / MISO demo
+- **Next:** More utility rule packs + distribution vs transmission pathing; Chrome assist for portal forms
 - **Later:** Congestion / curtailment analytics (DaaS)
 
 ## Security
 
-Keep keys in `.env` only. Rotate any key that was pasted into chat. Drawing uploads stay on local disk under `uploads/{org}/{project}/`.
-
-## Deploy (Vercel)
-
-**Live:** https://gridpilot-three.vercel.app  
-
-Entrypoint: `main.py` → FastAPI app. GitHub repo is connected for auto-deploys on `main`.
-
-```bash
-npm i -g vercel
-vercel link --scope suhan1996s-projects
-vercel env add XAI_API_KEY production
-vercel env add SECRET_KEY production
-vercel --prod
-```
-
-Notes:
-- SQLite + uploads live under `/tmp/gridpilot` (ephemeral; demo reseeds on cold start)
-- Audit jobs run inline on Vercel (300s `maxDuration`) so Vision audits can finish
-- Set `CORS_ORIGINS` if you use a custom domain
-
-## GitHub Pages
-
-Marketing site: https://privoce.github.io/gridpilot/
-
-Prefer the Vercel deploy for the full interactive app. Pages hosts the static landing only.
+Keep keys in `.env` only. Rotate any key pasted into chat. Uploads stay under `uploads/` (or `/tmp/gridpilot` on Vercel).

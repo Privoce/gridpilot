@@ -52,6 +52,7 @@ def _merge_findings(ai: list[Finding], det: list[Finding]) -> list[Finding]:
 
 
 def _demo_extract(iso: ISORegion) -> tuple[AuditExtract, list[Finding], str]:
+    """AES Indiana interconnection SLD demo findings (MISO TO path)."""
     extract = AuditExtract(
         project_name="Cedar Ridge Solar + Storage",
         capacity_mw=120.0,
@@ -59,78 +60,99 @@ def _demo_extract(iso: ISORegion) -> tuple[AuditExtract, list[Finding], str]:
         inverter_models=["Sungrow SG3600UD", "Sungrow SG3600UD"],
         transformers=["GSU 150 MVA 34.5/138 kV", "Collector pad 4.0 MVA"],
         equipment=[
-            EquipmentItem(type="Inverter", label="INV-A", rating="3.6 MW", notes="No LVRT callout"),
-            EquipmentItem(type="Inverter", label="INV-B bank", rating="116.4 MW aggregate"),
-            EquipmentItem(type="Transformer", label="GSU-1", rating="150 MVA", notes="%Z missing"),
-            EquipmentItem(type="Breaker", label="52-POI", rating="missing kA"),
-            EquipmentItem(type="Meter", label="Revenue meter", rating=None, notes="Shown at POI"),
+            EquipmentItem(type="Inverter", label="INV Bank A", rating="57.6 MW", notes="No P-Q curve"),
+            EquipmentItem(type="Inverter", label="INV Bank B", rating="57.6 MW", notes="No PFR / droop note"),
+            EquipmentItem(type="Transformer", label="GSU-1", rating="150 MVA", notes="%Z present in demo"),
+            EquipmentItem(type="Relay", label="POI protection", rating=None, notes="ANSI numbers missing"),
+            EquipmentItem(type="Meter", label="Revenue meter", rating=None, notes="CT/PT ratios blank"),
+            EquipmentItem(type="Breaker", label="52-POI", rating="40 kA"),
         ],
         observed_notes=[
-            "POI labeled at 138 kV bus",
-            "No SCADA/RTU block",
-            "IEEE 1547 not cited",
-            "Grounding transformer not shown",
+            "AES Indiana / MISO 138 kV POI labeled",
+            "Relay package drawn without ANSI 27/59/81/67 callouts",
+            "CT/PT ratios blank at revenue meter",
+            "IBR P-Q / capability curves omitted",
+            "Title-block revision date incomplete",
         ],
         raw_summary=(
-            "120 MW solar SLD interconnecting at 138 kV. GSU MVA present but impedance and "
-            "inverter ride-through annotations are incomplete; telemetry path absent."
+            "120 MW solar + storage SLD for AES Indiana (MISO) interconnection. "
+            "POI and ownership demarcation are present; protection ANSI numbers, "
+            "metering ratios, and IBR capability curves are intentionally incomplete."
         ),
     )
     findings = [
         Finding(
-            id="DEMO-LVRT",
+            id="DEMO-R-PROTECT-01",
             severity=Severity.BLOCKING,
-            title="Inverter LVRT / ride-through not documented",
+            title="Protective relays missing ANSI function numbers",
             detail=(
-                f"Inverter schedule lists SG3600UD units but does not show LVRT/HVRT setpoints "
-                f"required for {iso.value} IBR ride-through review."
+                "POI protection is shown but relays are not labeled with ANSI device numbers "
+                "(27/59/81/67, etc.) required by AES Indiana Facilities Connection Requirements."
             ),
-            rule_id=f"{iso.value}-INV",
-            location="Inverter schedule / INV-A notes",
-            recommendation="Add LVRT/HVRT capability table from the datasheet before filing.",
-            evidence="Demo SLD intentionally omits ride-through annotations.",
+            rule_id="R-PROTECT-01",
+            location="POI protection package",
+            recommendation="Annotate each relay with ANSI function numbers before AES Indiana review.",
+            evidence="Demo SLD shows protection block without ANSI labels.",
         ),
         Finding(
-            id="DEMO-KA",
+            id="DEMO-R-METER-01",
             severity=Severity.BLOCKING,
-            title="POI breaker interrupting rating missing",
-            detail="Breaker 52-POI is drawn but interrupting capability (kA) is blank.",
-            rule_id=f"{iso.value}-PROT",
-            location="POI breaker 52-POI",
-            recommendation="Annotate interrupting rating consistent with short-circuit study.",
-            evidence="Breaker symbol present without kA text.",
+            title="CT/PT ratios not annotated at POI metering",
+            detail="Revenue meter is drawn at the AES Indiana POI but CT and PT ratios are blank.",
+            rule_id="R-METER-01",
+            location="Revenue meter / POI",
+            recommendation="Add CT and PT ratios matching the metering design package.",
+            evidence="Meter symbol present; ratio fields marked MISSING.",
         ),
         Finding(
-            id="DEMO-Z",
+            id="DEMO-R-IBR-01",
+            severity=Severity.BLOCKING,
+            title="IBR P-Q / capability curves not shown",
+            detail=(
+                "Inverter banks list MWAC totals but omit P-Q / reactive capability curves. "
+                "AES Indiana requires primary frequency response (FERC 842) and closed-loop "
+                "voltage control per NERC VAR-002 (±2% at POI)."
+            ),
+            rule_id="R-IBR-01",
+            location="Inverter schedule",
+            recommendation="Attach P-Q capability and PFR/droop notes from the inverter datasheet.",
+            evidence="Demo SLD notes intentionally omit IBR capability curves.",
+        ),
+        Finding(
+            id="DEMO-R-TITLE-01",
             severity=Severity.WARNING,
-            title="Transformer impedance (%Z) not annotated",
-            detail="GSU-1 shows 150 MVA 34.5/138 kV but %Z / X/R are missing for model quality.",
-            rule_id=f"{iso.value}-XFMR",
-            location="GSU-1",
-            recommendation="Add %Z and X/R from transformer datasheet.",
-            evidence="MVA and voltage ratio present; impedance absent.",
+            title="As-built revision / date block incomplete",
+            detail=(
+                "AES Indiana requires three as-built one-lines with revision number and date "
+                "before Facility energization; the demo title block leaves the date blank."
+            ),
+            rule_id="R-TITLE-01",
+            location="Title block",
+            recommendation="Complete revision letter, date, and as-built stamp before filing.",
+            evidence="Rev A shown; date field blank.",
         ),
         Finding(
-            id="DEMO-SCADA",
+            id="DEMO-R-METER-02",
             severity=Severity.WARNING,
-            title="Telemetry / SCADA path not shown",
-            detail=f"{iso.value} reviewers expect an RTU/SCADA/ICCP note for new generation.",
-            rule_id=f"{iso.value}-COMM",
-            recommendation="Add telemetry block referencing ISO communication requirements.",
-            evidence="No SCADA/RTU keywords on drawing.",
+            title="Bidirectional / AES Indiana meter labeling incomplete",
+            detail="POI meter should explicitly call out bidirectional revenue metering for AES Indiana.",
+            rule_id="R-METER-02",
+            location="Revenue meter",
+            recommendation="Label bidirectional metering and AES Indiana interconnection meter ID.",
+            evidence="Generic 'Revenue Meter' text only.",
         ),
         Finding(
-            id="DEMO-POI-OK",
+            id="DEMO-R-POI-01",
             severity=Severity.READY,
-            title="POI and revenue metering labeled",
-            detail="Point of Interconnection and revenue meter are clearly marked at the 138 kV bus.",
-            rule_id=f"{iso.value}-SLD",
-            evidence="POI + meter annotations present on demo SLD.",
+            title="POI voltage and ownership boundary labeled",
+            detail="AES Indiana 138 kV POI and ownership demarcation at 52-POI are clearly marked.",
+            rule_id="R-POI-01",
+            evidence="POI bus + ownership note present on demo SLD.",
         ),
     ]
     summary = (
-        f"Demo audit against {iso.value}: 2 blocking issues and 2 warnings. "
-        "Fix LVRT documentation and POI breaker kA before submission to avoid requeue risk."
+        f"AES Indiana / {iso.value} demo audit: 3 blocking issues and 2 warnings. "
+        "Clear R-PROTECT-01, R-METER-01, and R-IBR-01 before PowerClerk / MISO DPP submission."
     )
     return extract, findings, summary
 
