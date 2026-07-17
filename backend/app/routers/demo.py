@@ -252,7 +252,9 @@ def demo_context(auth: AuthContext = Depends(get_auth), db: Session = Depends(ge
         "drawing_id": drawing.id,
         "drawing_filename": drawing.filename,
         "drawing_url": f"/api/projects/{project.id}/drawings/{drawing.id}/file",
+        "drawing_preview_url": f"/api/projects/{project.id}/drawings/{drawing.id}/preview.png",
         "sample_pdf_url": "/api/demo/sample.pdf",
+        "sample_preview_url": "/assets/img/cedar_ridge_sld_demo.png",
         "latest_audit_id": latest_audit.id if latest_audit else None,
         "latest_audit_status": latest_audit.status.value if latest_audit else None,
         "readiness_score": latest_audit.readiness_score if latest_audit else None,
@@ -273,7 +275,7 @@ def demo_context(auth: AuthContext = Depends(get_auth), db: Session = Depends(ge
     }
 
 
-@router.get("/sample.pdf")
+@router.api_route("/sample.pdf", methods=["GET", "HEAD"])
 def sample_pdf():
     path = ensure_sample_pdf()
     return FileResponse(

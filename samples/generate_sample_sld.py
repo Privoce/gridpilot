@@ -90,8 +90,14 @@ def main() -> Path:
         y += 11
 
     doc.save(out)
+    # Browser PDF iframes are flaky — keep a PNG preview for the guided demo.
+    preview = Path(__file__).resolve().parents[1] / "backend" / "app" / "static" / "img" / "cedar_ridge_sld_demo.png"
+    preview.parent.mkdir(parents=True, exist_ok=True)
+    pix = page.get_pixmap(matrix=fitz.Matrix(2, 2), alpha=False)
+    pix.save(preview)
     doc.close()
     print(f"Wrote {out}")
+    print(f"Wrote {preview}")
     return out
 
 

@@ -192,7 +192,7 @@ async def upload_drawing(
     return drawing_out(drawing)
 
 
-@router.get("/{project_id}/drawings/{drawing_id}/file")
+@router.api_route("/{project_id}/drawings/{drawing_id}/file", methods=["GET", "HEAD"])
 def download_drawing(
     project_id: str,
     drawing_id: str,
@@ -212,6 +212,33 @@ def download_drawing(
         media_type=drawing.content_type,
         content_disposition_type="inline",
     )
+
+
+@router.get("/{project_id}/drawings/{drawing_id}/preview.png")
+def preview_drawing(
+    project_id: str,
+    drawing_id: str,
+    auth: AuthContext = Depends(get_auth),
+    db: Session = Depends(get_db),
+):
+    """Rasterize page 1 — more reliable than embedding PDFs in iframes."""
+    import fitz
+    from fastapi.responses import Response
+
+    project = _get_project(db, auth, project_id)
+    drawing = db.get(Drawing, drawing_id)
+    if not drawing or drawing.project_id != project.id:
+        raise HTTPException(status_code=404, detail="Drawing not found")
+    path = Path(drawing.stored_path)
+    if not path.exists():
+        raise HTTPException(status_code=404, detail="File missing")
+    doc = fitz.open(path)
+    try:
+        page = doc[0]
+        pix = page.get_pixmap(matrix=fitz.Matrix(1.5, 1.5), alpha=False)
+        return Response(content=pix.tobytes("png"), media_type="image/png")
+    finally:
+        doc.close()
 
 
 @router.post("/{project_id}/audits")

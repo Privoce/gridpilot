@@ -376,9 +376,16 @@ function renderWizardStep(step, ctx, auditDetail) {
           This CAD-exported PDF includes intentional AES Indiana gaps (missing ANSI relay numbers, blank CT/PT ratios, no IBR P-Q curves) so the audit has clear findings.
         </p>
         <div class="overflow-hidden rounded-card border border-line bg-soft">
-          <iframe class="min-h-[340px] w-full border-0" title="Sample SLD" src="${esc(ctx.drawing_url || ctx.sample_pdf_url)}"></iframe>
+          <img
+            class="max-h-[420px] w-full object-contain object-top bg-white"
+            alt="Sample AES Indiana interconnection SLD"
+            src="${esc(ctx.drawing_preview_url || ctx.sample_preview_url || "/assets/img/cedar_ridge_sld_demo.png")}"
+          />
         </div>
-        <p class="mt-2 font-mono text-[12px] text-muted">${esc(ctx.drawing_filename)} · <a class="text-ink hover:underline" href="${esc(ctx.sample_pdf_url)}" target="_blank">Open in new tab</a></p>
+        <p class="mt-2 font-mono text-[12px] text-muted">${esc(ctx.drawing_filename)} ·
+          <a class="text-ink hover:underline" href="${esc(ctx.drawing_url || ctx.sample_pdf_url)}" target="_blank" rel="noopener">Open PDF</a>
+          · <a class="text-ink hover:underline" href="${esc(ctx.sample_pdf_url)}" target="_blank" rel="noopener">Sample PDF</a>
+        </p>
       </div>
       ${footer(
         `<button type="button" class="${button("ghost")}" id="wiz-back">Back</button>`,
@@ -801,7 +808,9 @@ async function renderProject(id) {
       data.drawings[0]
         ? `<div class="${panel} mb-4 overflow-hidden">
             <div class="flex items-center justify-between border-b border-line px-4 py-3"><h3 class="text-[14px]">Latest drawing</h3><span class="font-mono text-[11px] text-muted">${esc(data.drawings[0].filename)}</span></div>
-            <iframe class="min-h-[400px] w-full border-0 bg-soft" src="/api/projects/${esc(p.id)}/drawings/${esc(data.drawings[0].id)}/file"></iframe>
+            <a href="/api/projects/${esc(p.id)}/drawings/${esc(data.drawings[0].id)}/file" target="_blank" rel="noopener" class="block bg-soft">
+              <img class="max-h-[480px] w-full object-contain object-top bg-white" alt="SLD preview" src="/api/projects/${esc(p.id)}/drawings/${esc(data.drawings[0].id)}/preview.png" />
+            </a>
           </div>`
         : ""
     }
@@ -959,7 +968,13 @@ async function renderAudit(id) {
       <div class="space-y-4">
         <div class="${panel} overflow-hidden">
           <div class="flex items-center justify-between border-b border-line px-4 py-3"><h3 class="text-[14px]">Drawing</h3><span class="font-mono text-[11px] text-muted">${esc(a.drawing_filename || "")}</span></div>
-          ${a.project_id ? `<iframe class="min-h-[400px] w-full border-0 bg-soft" src="/api/projects/${esc(a.project_id)}/drawings/${esc(a.drawing_id)}/file"></iframe>` : ""}
+          ${
+            a.project_id && a.drawing_id
+              ? `<a href="/api/projects/${esc(a.project_id)}/drawings/${esc(a.drawing_id)}/file" target="_blank" rel="noopener" class="block bg-soft">
+                   <img class="max-h-[480px] w-full object-contain object-top bg-white" alt="SLD preview" src="/api/projects/${esc(a.project_id)}/drawings/${esc(a.drawing_id)}/preview.png" />
+                 </a>`
+              : ""
+          }
         </div>
         <div class="${panel} p-4">
           <h3 class="mb-3 border-b border-line pb-2 text-[14px]">Extracted equipment</h3>
