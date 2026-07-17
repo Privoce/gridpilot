@@ -22,21 +22,21 @@ rules:
   - id: R-PROTECT-01
     severity: blocking
     title: Protective relays with ANSI function numbers
-    check: protection_devices
+    check: ansi_relay_labels
     description: All relays must be labeled with ANSI device numbers (27/59/81/67, etc.).
     recommendation: Annotate each relay with ANSI function numbers for AES Indiana review.
 
   - id: R-METER-01
     severity: blocking
     title: CT/PT ratios at POI metering
-    check: poi_and_metering
+    check: ct_pt_ratios
     description: CT and PT ratios must be shown for interconnection revenue metering.
     recommendation: Add CT/PT ratios matching the metering design package.
 
   - id: R-IBR-01
     severity: blocking
     title: IBR P-Q / capability curves
-    check: reactive_power
+    check: ibr_capability
     description: >
       New IBRs on AES Indiana must document reactive capability / P-Q curves, primary frequency
       response (FERC 842, ≤5% droop outside ±0.036 Hz deadband), and closed-loop voltage control
@@ -46,14 +46,14 @@ rules:
   - id: R-TITLE-01
     severity: warning
     title: As-built revision and date
-    check: site_reference
+    check: title_revision_date
     description: AES Indiana requires as-built one-lines with revision number and date before energization.
     recommendation: Complete revision letter, date, and as-built stamp.
 
   - id: R-METER-02
     severity: warning
     title: Bidirectional AES Indiana meter labeling
-    check: poi_and_metering
+    check: bidirectional_meter
     description: Bidirectional revenue metering at the AES Indiana POI should be explicitly labeled.
     recommendation: Call out bidirectional metering and utility meter identification.
 

@@ -169,7 +169,8 @@ async def run_audit(
 
     mode = "live"
     if force_demo:
-        extract, ai_findings, summary = _demo_extract(iso)
+        # Guided demo: fixed AES Indiana blockers — never dilute with live/DET noise.
+        extract, findings, summary = _demo_extract(iso)
         mode = "demo"
     else:
         try:
@@ -187,9 +188,9 @@ async def run_audit(
             summary = (
                 "[Demo fallback — live Vision audit unavailable] " + summary
             )
+        det = deterministic_findings(iso, extract, pdf.text)
+        findings = _merge_findings(ai_findings, det)
 
-    det = deterministic_findings(iso, extract, pdf.text)
-    findings = _merge_findings(ai_findings, det)
     score, status = score_report(findings)
 
     report = AuditReport(

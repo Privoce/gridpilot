@@ -31,7 +31,8 @@ def _recompute_open_counts(db, audit: AuditRun) -> None:  # noqa: ANN001
     blocking = 0
     warning = 0
     for f in findings:
-        if f.triage != FindingTriage.OPEN:
+        # Only resolved/dismissed clear the open counts; acknowledged still blocks.
+        if f.triage in {FindingTriage.RESOLVED, FindingTriage.DISMISSED}:
             continue
         sev = f.severity.value if hasattr(f.severity, "value") else str(f.severity)
         if sev == FindingSeverity.BLOCKING.value:
@@ -52,9 +53,18 @@ async def execute_audit_run(audit_id: str) -> None:
         if not audit:
             return
 
+        from backend.app.db_models import User
+        from backend.app.seed import DEMO_EMAIL
+
         drawing_path = Path(audit.drawing.stored_path)
         project_name = audit.project.name if audit.project else ""
         iso = audit.iso
+        creator = db.get(User, audit.created_by) if audit.created_by else None
+        # Guided demo must always surface the intentional AES Indiana blockers.
+        force_demo = bool(
+            (creator and creator.email == DEMO_EMAIL)
+            or project_name == "Cedar Ridge Solar + Storage"
+        )
 
         audit.status = AuditStatus.RUNNING
         audit.started_at = datetime.now(timezone.utc)
@@ -65,7 +75,7 @@ async def execute_audit_run(audit_id: str) -> None:
             file_path=drawing_path,
             iso=ISORegion(iso),
             project_name=project_name,
-            force_demo=False,
+            force_demo=force_demo,
         )
 
         audit = db.get(AuditRun, audit_id)

@@ -254,9 +254,10 @@ def start_audit(
     drawing = None
     if drawing_id:
         drawing = db.get(Drawing, drawing_id)
-        if not drawing or drawing.project_id != project.id:
-            raise HTTPException(status_code=404, detail="Drawing not found")
-    else:
+        if drawing and drawing.project_id != project.id:
+            drawing = None
+    if not drawing:
+        # Stale client drawing ids are common on serverless cold starts — use latest.
         drawing = _latest_drawing(db, project.id)
     if not drawing:
         raise HTTPException(status_code=400, detail="Upload a drawing before running an audit")

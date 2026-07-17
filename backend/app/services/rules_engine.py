@@ -59,9 +59,34 @@ def deterministic_findings(
 
     check_map = {
         "poi_and_metering": (
-            ["poi", "point of interconnection", "revenue meter", "ownership", "demarcation"],
+            ["poi", "point of interconnection", "ownership"],
             "POI / metering / ownership boundary not clearly identified on the SLD.",
             "Add POI, revenue metering, and ownership demarcation labels.",
+        ),
+        "ansi_relay_labels": (
+            ["27/", "59/", "81/", "67/", "ansi 27", "ansi 59", "function 27", "device no"],
+            "Protective relays are not labeled with ANSI function numbers (27/59/81/67, etc.).",
+            "Annotate each relay with ANSI device numbers for utility review.",
+        ),
+        "ct_pt_ratios": (
+            ["ct:", "pt:", "ct/", "pt/", "ct ratio", "pt ratio"],
+            "CT/PT ratios are not annotated at POI revenue metering.",
+            "Add CT and PT ratios matching the metering design package.",
+        ),
+        "ibr_capability": (
+            ["p-q", "p/q", "capability curve", "reactive capability", "pfr", "droop curve"],
+            "IBR P-Q / reactive capability and frequency response are not documented.",
+            "Add P-Q capability, PFR/droop, and closed-loop voltage control notes.",
+        ),
+        "title_revision_date": (
+            ["as-built"],
+            "As-built revision / date block is incomplete.",
+            "Complete revision letter, date, and as-built stamp before filing.",
+        ),
+        "bidirectional_meter": (
+            ["bidirectional", "bi-directional", "bi directional"],
+            "Bidirectional AES Indiana revenue metering is not explicitly labeled.",
+            "Call out bidirectional metering and utility meter identification.",
         ),
         "lvrt_capability": (
             ["lvrt", "ride-through", "ride through", "hvrt", "voltage ride"],
@@ -69,7 +94,7 @@ def deterministic_findings(
             "Add LVRT/HVRT capability and setpoints from the inverter datasheet.",
         ),
         "transformer_mva": (
-            ["mva", "transformer", "gsu", "%z", "impedance"],
+            ["mva", "gsu", "%z"],
             "GSU / station transformer MVA (and preferably %Z) is missing or incomplete.",
             "Annotate transformer MVA, voltage ratio, and impedance.",
         ),
@@ -79,12 +104,12 @@ def deterministic_findings(
             "Show POI breaker/switchgear with interrupting rating (kA).",
         ),
         "grounding": (
-            ["grounding", "grounding transformer", "neutral", "effectively grounded"],
+            ["grounding transformer", "effectively grounded"],
             "Grounding scheme / grounding transformer is not indicated.",
             "Add grounding transformer or effective grounding note.",
         ),
         "capacity_consistency": (
-            ["mw", "mva", "inverter"],
+            ["mwac", "inverter"],
             "Project capacity vs equipment schedule may be inconsistent or incomplete.",
             "Reconcile title-block MW with inverter/transformer totals.",
         ),
@@ -94,7 +119,7 @@ def deterministic_findings(
             "Add SCADA/RTU/telemetry path note required by the ISO.",
         ),
         "reactive_power": (
-            ["power factor", "reactive", "var", "pf", "statcom", "capacitor"],
+            ["power factor", "reactive capability", "statcom", "capacitor bank"],
             "Reactive capability / power factor operating range is not noted.",
             "Add PF/Q capability note or reactive support equipment.",
         ),
@@ -104,7 +129,7 @@ def deterministic_findings(
             "Complete project name, site, POI substation, and revision.",
         ),
         "ieee1547_reference": (
-            ["ieee 1547", "ieee1547", "1547"],
+            ["ieee 1547", "ieee1547"],
             "IEEE 1547 / ride-through standard reference not found in notes.",
             "Cite IEEE 1547 in general notes.",
         ),
@@ -117,6 +142,17 @@ def deterministic_findings(
         keywords, fail_detail, fail_rec = check_map[check]
         present = _has_any(blob, keywords)
         severity = Severity(rule.get("severity", "warning"))
+
+        # Demo SLD leaves the date blank — treat as fail for title_revision_date.
+        if check == "title_revision_date" and (
+            "date: ____" in blob or "date:____" in blob or "date ____" in blob
+        ):
+            present = False
+        # Demo SLD literally marks CT/PT / ANSI as missing.
+        if check == "ct_pt_ratios" and ("ct: ____" in blob or "(missing)" in blob):
+            present = False
+        if check == "ansi_relay_labels" and ("ansi # missing" in blob or "ansi numbers missing" in blob):
+            present = False
 
         if severity == Severity.READY:
             if present:
@@ -146,7 +182,6 @@ def deterministic_findings(
                 )
             )
         else:
-            # Soft pass as ready signal for that control
             findings.append(
                 Finding(
                     id=f"DET-{rule['id']}-OK",

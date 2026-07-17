@@ -437,7 +437,7 @@ function renderWizardStep(step, ctx, auditDetail) {
 
   if (step === 4) {
     const findings = (auditDetail?.findings || []).filter((f) => f.severity === "blocking");
-    const openBlockers = findings.filter((f) => f.triage === "open");
+    const openBlockers = findings.filter((f) => f.triage === "open" || f.triage === "acknowledged");
     const gateClear = Boolean(auditDetail?.filing_gate?.can_file);
 
     return `
@@ -459,9 +459,9 @@ function renderWizardStep(step, ctx, auditDetail) {
                 <div class="mb-2 flex flex-wrap items-center gap-2">${pill(f.triage)}<strong class="text-[14px]">${esc(f.title)}</strong></div>
                 <p class="mb-3 text-[13px] text-muted">${esc(f.detail)}</p>
                 ${
-                  f.triage === "open"
+                  f.triage === "open" || f.triage === "acknowledged"
                     ? `<button type="button" class="${button("primary", "sm")}" data-resolve="${esc(f.id)}">Mark resolved</button>`
-                    : `<span class="text-[12px] text-muted">Signed off in demo</span>`
+                    : `<button type="button" class="${button("ghost", "sm")}" data-reopen="${esc(f.id)}">Reopen</button>`
                 }
               </article>`
                   )
@@ -553,9 +553,25 @@ function bindWizard(step, ctx, auditDetail) {
     }
   });
   document.getElementById("wiz-run-audit")?.addEventListener("click", async () => {
+    const btn = document.getElementById("wiz-run-audit");
+    if (btn) btn.disabled = true;
     try {
       toast("Starting audit…");
-      const started = await api.startAudit(ctx.project_id, ctx.drawing_id);
+      // Serverless cold starts reseed SQLite — never trust stale project/drawing ids.
+      let fresh = (await refreshDemoCtx()) || ctx;
+      state.lastAuditId = null;
+      saveOnboard({ lastAuditId: null });
+      let started;
+      try {
+        started = await api.startAudit(fresh.project_id, fresh.drawing_id);
+      } catch (err) {
+        if (err.status === 404 || /not found/i.test(String(err.message || ""))) {
+          fresh = (await refreshDemoCtx()) || fresh;
+          started = await api.startAudit(fresh.project_id);
+        } else {
+          throw err;
+        }
+      }
       if (started?.id) {
         state.lastAuditId = started.id;
         saveOnboard({ lastAuditId: started.id });
@@ -563,6 +579,7 @@ function bindWizard(step, ctx, auditDetail) {
       setWizardStep(3);
       render();
     } catch (err) {
+      if (btn) btn.disabled = false;
       toast(err.message);
     }
   });
@@ -583,6 +600,29 @@ function bindWizard(step, ctx, auditDetail) {
           note: "Resolved during guided demo",
         });
         toast("Finding resolved");
+        setWizardStep(4);
+        saveOnboard({ lastAuditId: id, wizardStep: 4 });
+        render();
+      } catch (err) {
+        btn.disabled = false;
+        toast(err.message);
+      }
+    });
+  });
+  document.querySelectorAll("[data-reopen]").forEach((btn) => {
+    btn.addEventListener("click", async (ev) => {
+      ev.preventDefault();
+      ev.stopPropagation();
+      const findingId = btn.getAttribute("data-reopen");
+      const id = auditDetail?.id || ctx.latest_audit_id || state.lastAuditId;
+      if (!id || !findingId) {
+        toast("Missing audit finding — try Full triage view");
+        return;
+      }
+      try {
+        btn.disabled = true;
+        await api.triage(id, findingId, { triage: "open", note: "Reopened during guided demo" });
+        toast("Finding reopened");
         setWizardStep(4);
         saveOnboard({ lastAuditId: id, wizardStep: 4 });
         render();
@@ -1037,16 +1077,7 @@ async function renderAudit(id) {
               <h4 class="mb-1 text-[14px] tracking-tightish">${esc(f.title)}</h4>
               <p class="text-[13px] text-muted">${esc(f.detail)}</p>
               ${f.recommendation ? `<p class="mt-1 text-[13px]"><strong>Fix:</strong> ${esc(f.recommendation)}</p>` : ""}
-              ${
-                f.severity !== "ready"
-                  ? `<div class="mt-2.5 flex flex-wrap gap-1.5">
-                      <button class="${button("ghost", "sm")}" data-triage="acknowledged">Acknowledge</button>
-                      <button class="${button("primary", "sm")}" data-triage="resolved">Resolve</button>
-                      <button class="${button("ghost", "sm")}" data-triage="dismissed">Dismiss</button>
-                      <button class="${button("ghost", "sm")}" data-triage="open">Reopen</button>
-                    </div>`
-                  : ""
-              }
+              ${triageActionsHtml(f)}
             </article>`
             )
             .join("")}
@@ -1062,15 +1093,34 @@ async function renderAudit(id) {
   root.querySelectorAll("[data-triage]").forEach((btn) => {
     btn.addEventListener("click", async () => {
       const article = btn.closest("[data-id]");
+      const triage = btn.getAttribute("data-triage");
+      const findingId = article?.dataset?.id;
+      if (!findingId || !triage) return;
+      btn.disabled = true;
       try {
-        await api.triage(a.id, article.dataset.id, { triage: btn.getAttribute("data-triage") });
-        toast(`Marked ${btn.getAttribute("data-triage")}`);
-        render();
+        await api.triage(a.id, findingId, { triage });
+        toast(triage === "open" ? "Reopened" : `Marked ${triage}`);
+        await renderAudit(a.id);
       } catch (err) {
+        btn.disabled = false;
         toast(err.message);
       }
     });
   });
+}
+
+function triageActionsHtml(f) {
+  const cleared = f.triage === "resolved" || f.triage === "dismissed";
+  if (cleared) {
+    return `<div class="mt-2.5 flex flex-wrap gap-1.5">
+      <button type="button" class="${button("primary", "sm")}" data-triage="open">Reopen</button>
+    </div>`;
+  }
+  return `<div class="mt-2.5 flex flex-wrap gap-1.5">
+    <button type="button" class="${button("ghost", "sm")}" data-triage="acknowledged">Acknowledge</button>
+    <button type="button" class="${button("primary", "sm")}" data-triage="resolved">Resolve</button>
+    <button type="button" class="${button("ghost", "sm")}" data-triage="dismissed">Dismiss</button>
+  </div>`;
 }
 
 async function renderBilling() {

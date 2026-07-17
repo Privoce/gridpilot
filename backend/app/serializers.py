@@ -57,16 +57,16 @@ def finding_out(f: FindingRow) -> dict[str, Any]:
 
 
 def filing_gate(findings: list[FindingRow]) -> dict[str, Any]:
+    cleared = {FindingTriage.RESOLVED, FindingTriage.DISMISSED}
     open_blocking = [
         f
         for f in findings
-        if f.severity.value == "blocking" and f.triage == FindingTriage.OPEN
+        if f.severity.value == "blocking" and f.triage not in cleared
     ]
     open_warnings = [
         f
         for f in findings
-        if f.severity.value == "warning"
-        and f.triage in {FindingTriage.OPEN, FindingTriage.ACKNOWLEDGED}
+        if f.severity.value == "warning" and f.triage not in cleared
     ]
     ready_checks = [f for f in findings if f.severity.value == "ready"]
     can_file = len(open_blocking) == 0
