@@ -11,7 +11,7 @@ const WIZARD_META = [
   { n: 5, label: "Report" },
 ];
 
-let state = { me: null, toast: null, modal: null, demoCtx: null };
+let state = { me: null, toast: null, modal: null, demoCtx: null, lastAuditId: null };
 
 function toast(msg) {
   state.toast = msg;
@@ -283,14 +283,24 @@ async function renderOnboarding() {
   if (!me) return;
   if (!me.is_demo) return navigate("dashboard");
 
-  const ctx = (await refreshDemoCtx()) || {};
+  const ctx = (await refreshDemoCtx()) || state.demoCtx || {};
+  if (ctx.latest_audit_id) state.lastAuditId = ctx.latest_audit_id;
+  const auditId = ctx.latest_audit_id || state.lastAuditId || loadOnboard().lastAuditId || null;
+
   let step = getWizardStep();
-  if (step >= 4 && !ctx.latest_audit_id) step = 3;
+  // Only fall back to pre-file when we truly have no audit — never bounce off triage mid-resolve.
+  if (step >= 4 && !auditId) {
+    step = 3;
+  }
 
   let auditDetail = null;
-  if (ctx.latest_audit_id && step >= 3) {
+  if (auditId && step >= 3) {
     try {
-      auditDetail = await api.audit(ctx.latest_audit_id);
+      auditDetail = await api.audit(auditId);
+      if (auditDetail?.id) {
+        state.lastAuditId = auditDetail.id;
+        saveOnboard({ lastAuditId: auditDetail.id });
+      }
     } catch {
       auditDetail = null;
     }
@@ -508,7 +518,13 @@ function bindWizard(step, ctx, auditDetail) {
     render();
   });
   document.getElementById("wiz-next")?.addEventListener("click", () => {
-    setWizardStep(Math.min(6, step + 1));
+    const next = Math.min(6, step + 1);
+    if (auditDetail?.id) {
+      state.lastAuditId = auditDetail.id;
+      saveOnboard({ lastAuditId: auditDetail.id, wizardStep: next });
+    } else {
+      setWizardStep(next);
+    }
     render();
   });
   document.getElementById("wiz-full-triage")?.addEventListener("click", () => {
@@ -539,7 +555,11 @@ function bindWizard(step, ctx, auditDetail) {
   document.getElementById("wiz-run-audit")?.addEventListener("click", async () => {
     try {
       toast("Starting audit…");
-      await api.startAudit(ctx.project_id, ctx.drawing_id);
+      const started = await api.startAudit(ctx.project_id, ctx.drawing_id);
+      if (started?.id) {
+        state.lastAuditId = started.id;
+        saveOnboard({ lastAuditId: started.id });
+      }
       setWizardStep(3);
       render();
     } catch (err) {
@@ -547,22 +567,34 @@ function bindWizard(step, ctx, auditDetail) {
     }
   });
   document.querySelectorAll("[data-resolve]").forEach((btn) => {
-    btn.addEventListener("click", async () => {
+    btn.addEventListener("click", async (ev) => {
+      ev.preventDefault();
+      ev.stopPropagation();
+      const findingId = btn.getAttribute("data-resolve");
+      const id = auditDetail?.id || ctx.latest_audit_id || state.lastAuditId;
+      if (!id || !findingId) {
+        toast("Missing audit finding — try Full triage view");
+        return;
+      }
       try {
-        await api.triage(auditDetail.id, btn.getAttribute("data-resolve"), {
+        btn.disabled = true;
+        await api.triage(id, findingId, {
           triage: "resolved",
           note: "Resolved during guided demo",
         });
         toast("Finding resolved");
+        setWizardStep(4);
+        saveOnboard({ lastAuditId: id, wizardStep: 4 });
         render();
       } catch (err) {
+        btn.disabled = false;
         toast(err.message);
       }
     });
   });
   if (step === 3 && auditDetail && ["queued", "running"].includes(auditDetail.status)) {
     setTimeout(() => {
-      if (route().name === "onboarding") render();
+      if (route().name === "onboarding" && getWizardStep() === 3) render();
     }, 2500);
   }
 }
