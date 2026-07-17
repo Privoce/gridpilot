@@ -1,0 +1,65 @@
+iso: ERCOT
+name: ERCOT
+description: Electric Reliability Council of Texas interconnection (demo rule pack)
+version: "2024.1"
+references:
+  - ERCOT Nodal Protocols
+  - ERCOT Planning Guide
+  - IEEE 1547-2018
+  - PUCT interconnection rules (summarized)
+rules:
+  - id: ERCOT-SLD-001
+    severity: blocking
+    title: POI and Resource Node identification
+    check: poi_and_metering
+    description: SLD must identify POI, Resource Node / metering, and facility ownership boundary.
+    recommendation: Label POI, ERCOT Resource Node if known, and metering points.
+
+  - id: ERCOT-IBR-RIDE
+    severity: blocking
+    title: IBR ride-through parameters
+    check: lvrt_capability
+    description: Inverter-based resources must show voltage ride-through capability suitable for ERCOT.
+    recommendation: Document LVRT/HVRT setpoints on the inverter schedule.
+
+  - id: ERCOT-XFMR
+    severity: blocking
+    title: Transformer MVA and impedance
+    check: transformer_mva
+    description: Station / GSU transformer MVA and impedance are required for model quality.
+    recommendation: Annotate MVA, %Z, X/R, and voltage ratio.
+
+  - id: ERCOT-PROT
+    severity: blocking
+    title: Interconnection protection shown
+    check: protection_devices
+    description: Show primary interconnection interrupting device and protection zones.
+    recommendation: Add breaker / recloser with interrupting rating at POI.
+
+  - id: ERCOT-CURTAIL
+    severity: warning
+    title: Curtailment / dispatch interface note
+    check: telemetry
+    description: ERCOT expects clear SCADA / SETAMS telemetry path for controllable generation.
+    recommendation: Note SCADA / AGC / curtailment interface on the drawing.
+
+  - id: ERCOT-CAP
+    severity: warning
+    title: High Sustained Limit consistency
+    check: capacity_consistency
+    description: Equipment ratings should support the stated HSL / interconnection MW.
+    recommendation: Reconcile inverter AC total with stated project capacity.
+
+  - id: ERCOT-GROUND
+    severity: warning
+    title: Grounding scheme indicated
+    check: grounding
+    description: Grounding transformer or grounding notes should appear for collector systems.
+    recommendation: Add grounding transformer or effective grounding note.
+
+  - id: ERCOT-STD
+    severity: ready
+    title: Standards references present
+    check: ieee1547_reference
+    description: Citing IEEE 1547 and ERCOT Planning Guide improves completeness.
+    recommendation: Keep standards citations in general notes.

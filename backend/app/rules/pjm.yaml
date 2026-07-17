@@ -1,0 +1,64 @@
+iso: PJM
+name: PJM Interconnection
+description: PJM Open Access Transmission Tariff & Generation Interconnection procedures (demo rule pack)
+version: "2024.1"
+references:
+  - FERC Order 2023
+  - IEEE 1547-2018
+  - PJM Manual 14A / 14G (summarized for MVP)
+rules:
+  - id: PJM-SLD-001
+    severity: blocking
+    title: Single-line diagram must show POI and metering
+    check: poi_and_metering
+    description: SLD must clearly label Point of Interconnection (POI), revenue metering, and ownership demarcation.
+    recommendation: Add POI, revenue meter, and ownership boundary labels per PJM interconnection exhibits.
+
+  - id: PJM-INV-LVRT
+    severity: blocking
+    title: Inverter LVRT / ride-through capability
+    check: lvrt_capability
+    description: Inverters must support low-voltage ride-through consistent with IEEE 1547 / PJM ride-through requirements.
+    recommendation: Update inverter datasheet callouts to document LVRT/HVRT capability and setpoints.
+
+  - id: PJM-XFMR-MVA
+    severity: blocking
+    title: GSU transformer MVA rating present
+    check: transformer_mva
+    description: Generator step-up (GSU) transformer capacity (MVA) and voltage ratio must be annotated on the SLD.
+    recommendation: Annotate GSU MVA and primary/secondary kV on the transformer symbol.
+
+  - id: PJM-PROT-001
+    severity: blocking
+    title: Protective devices at interconnection
+    check: protection_devices
+    description: Circuit breakers / interrupting devices at the POI must be shown with interrupting rating.
+    recommendation: Show POI breaker and interrupting capability (kA) on the SLD.
+
+  - id: PJM-GRND-001
+    severity: warning
+    title: Grounding / grounding transformer indicated
+    check: grounding
+    description: Effective grounding scheme or grounding transformer should be indicated for inverter-based resources.
+    recommendation: Add grounding transformer or grounding note consistent with study assumptions.
+
+  - id: PJM-CAP-001
+    severity: warning
+    title: Nameplate AC capacity consistency
+    check: capacity_consistency
+    description: Aggregate inverter AC capacity should be consistent with stated project MW and interconnection request.
+    recommendation: Reconcile inverter count × unit rating with the MW stated on the title block.
+
+  - id: PJM-COMM-001
+    severity: warning
+    title: Telemetry / SCADA interface note
+    check: telemetry
+    description: PJM expects clear indication of RTU/SCADA / ICCP telemetry path for new generation.
+    recommendation: Add a telemetry/SCADA block or note referencing PJM communication requirements.
+
+  - id: PJM-STD-IEEE1547
+    severity: ready
+    title: IEEE 1547 reference present
+    check: ieee1547_reference
+    description: Drawing notes preferably cite IEEE 1547 / applicable ride-through standards.
+    recommendation: Keep IEEE 1547 reference in general notes.

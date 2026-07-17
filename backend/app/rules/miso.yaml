@@ -1,0 +1,64 @@
+iso: MISO
+name: MISO
+description: Midcontinent Independent System Operator generator interconnection (demo rule pack)
+version: "2024.1"
+references:
+  - FERC Order 2023
+  - MISO BPM-015 Generator Interconnection
+  - IEEE 1547-2018
+rules:
+  - id: MISO-SLD-001
+    severity: blocking
+    title: POI and ownership boundary labeled
+    check: poi_and_metering
+    description: MISO interconnection exhibits require POI, metering, and ownership demarcation on the SLD.
+    recommendation: Label POI, revenue meter, and ownership line clearly.
+
+  - id: MISO-INV-RIDE
+    severity: blocking
+    title: Ride-through / LVRT documentation
+    check: lvrt_capability
+    description: Inverter-based resources must document voltage/frequency ride-through capability.
+    recommendation: Call out LVRT/HVRT and frequency ride-through on the inverter schedule.
+
+  - id: MISO-XFMR-001
+    severity: blocking
+    title: Interconnecting transformer data
+    check: transformer_mva
+    description: Transformer MVA, impedance (%Z), and voltage ratios are required for study modeling.
+    recommendation: Annotate MVA, %Z, and kV ratio on each GSU / station transformer.
+
+  - id: MISO-BREAKER
+    severity: blocking
+    title: Interrupting device at POI
+    check: protection_devices
+    description: Show the interconnecting breaker / switchgear with interrupting rating.
+    recommendation: Add breaker symbol and kA rating at the POI.
+
+  - id: MISO-REACTIVE
+    severity: warning
+    title: Reactive capability / power factor
+    check: reactive_power
+    description: Reactive power capability or PF operating range should be noted for IBR plants.
+    recommendation: Add PF / Q capability note or capacitor/STATCOM equipment if applicable.
+
+  - id: MISO-CAP
+    severity: warning
+    title: Project MW vs equipment schedule
+    check: capacity_consistency
+    description: Stated project MW should match inverter/transformer equipment totals.
+    recommendation: Align title-block MW with equipment schedule totals.
+
+  - id: MISO-GIS
+    severity: warning
+    title: Site / one-line correspondence
+    check: site_reference
+    description: Drawing should reference project name, county/state, and POI substation.
+    recommendation: Complete title block with site, POI substation, and revision.
+
+  - id: MISO-IEEE
+    severity: ready
+    title: Applicable standards cited
+    check: ieee1547_reference
+    description: Notes citing IEEE 1547 / NERC PRC standards improve review readiness.
+    recommendation: Retain standards references in drawing notes.
