@@ -251,4 +251,5 @@ def start_audit(
 
     from backend.app.serializers import audit_summary
 
+    db.refresh(audit)
     return audit_summary(audit, drawing.filename)

@@ -455,7 +455,11 @@ function renderWizardStep(step, ctx, auditDetail) {
       </div>
       ${footer(
         `<button type="button" class="${button("ghost")}" id="wiz-back">Back</button>`,
-        `${auditDetail ? `<a class="${button("ghost")}" href="#/audit/${esc(auditDetail.id)}">Full triage view</a>` : ""}
+        `${
+          auditDetail?.id || ctx.latest_audit_id
+            ? `<button type="button" class="${button("ghost")}" id="wiz-full-triage">Full triage view</button>`
+            : ""
+        }
          <button type="button" class="${button("primary")}" id="wiz-next" ${!gateClear && openBlockers.length ? "disabled" : ""}>${gateClear || !openBlockers.length ? "Continue" : "Resolve blockers to continue"}</button>`
       )}`;
   }
@@ -499,6 +503,14 @@ function bindWizard(step, ctx, auditDetail) {
   document.getElementById("wiz-next")?.addEventListener("click", () => {
     setWizardStep(Math.min(6, step + 1));
     render();
+  });
+  document.getElementById("wiz-full-triage")?.addEventListener("click", () => {
+    const id = auditDetail?.id || ctx.latest_audit_id;
+    if (!id) {
+      toast("No audit available yet — run the audit first");
+      return;
+    }
+    navigate(`audit/${id}`);
   });
   document.getElementById("wiz-finish")?.addEventListener("click", () => {
     saveOnboard({ completed: true, wizardStep: 6 });
@@ -922,9 +934,15 @@ async function renderAudit(id) {
   const findings = a.findings || [];
   const equipment = a.extract?.equipment || [];
 
+  const demoBack =
+    me.is_demo && !loadOnboard().completed
+      ? `<button type="button" class="${button("ghost", "sm")}" id="back-to-demo">← Back to demo setup</button>`
+      : `<a class="${button("ghost", "sm")}" href="#/audits">All audits</a>`;
+
   root.innerHTML = shell(
     `Audit ${a.id}`,
     `
+    <div class="mb-3 flex flex-wrap items-center justify-between gap-2">${demoBack}</div>
     <div class="${panel} mb-4 flex flex-wrap items-center justify-between gap-4 p-5">
       <div>
         <h3 class="text-[17px] tracking-tightish">${gate.can_file ? "Ready to file" : "Filing blocked"}</h3>
@@ -990,6 +1008,10 @@ async function renderAudit(id) {
     </div>`
   );
   bindShell();
+  document.getElementById("back-to-demo")?.addEventListener("click", () => {
+    setWizardStep(4);
+    navigate("onboarding");
+  });
   root.querySelectorAll("[data-triage]").forEach((btn) => {
     btn.addEventListener("click", async () => {
       const article = btn.closest("[data-id]");

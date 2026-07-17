@@ -121,12 +121,28 @@ async def execute_audit_run(audit_id: str) -> None:
         _running.discard(audit_id)
 
 
-def enqueue_audit(audit_id: str) -> None:
+def _run_inline(audit_id: str) -> None:
+    """Run the audit to completion in this request (needed on serverless)."""
+    try:
+        asyncio.get_running_loop()
+    except RuntimeError:
+        asyncio.run(execute_audit_run(audit_id))
+        return
+    # Sync handlers usually have no loop; if one exists, finish in a worker thread.
+    import concurrent.futures
+
+    with concurrent.futures.ThreadPoolExecutor(max_workers=1) as pool:
+        pool.submit(asyncio.run, execute_audit_run(audit_id)).result()
+
+
+def enqueue_audit(audit_id: str, *, wait: bool | None = None) -> None:
     from backend.app.config import settings
 
-    # On Vercel the function freezes after the response — run the audit inline.
-    if settings.is_vercel:
-        asyncio.run(execute_audit_run(audit_id))
+    # On Vercel the function freezes after the response — always finish inline.
+    if wait is None:
+        wait = settings.is_vercel
+    if wait:
+        _run_inline(audit_id)
         return
     try:
         loop = asyncio.get_running_loop()
