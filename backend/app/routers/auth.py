@@ -35,6 +35,7 @@ def _set_session(response: Response, user_id: str) -> None:
         value=token,
         httponly=True,
         samesite="lax",
+        secure=settings.use_secure_cookies,
         max_age=settings.session_max_age,
         path="/",
     )
@@ -90,7 +91,13 @@ def login(payload: LoginRequest, response: Response, db: Session = Depends(get_d
 
 @router.post("/logout")
 def logout(response: Response):
-    response.delete_cookie(settings.session_cookie, path="/")
+    response.delete_cookie(
+        settings.session_cookie,
+        path="/",
+        secure=settings.use_secure_cookies,
+        httponly=True,
+        samesite="lax",
+    )
     return {"ok": True}
 
 

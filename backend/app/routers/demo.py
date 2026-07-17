@@ -166,6 +166,7 @@ def start_demo(response: Response, db: Session = Depends(get_db)):
         value=token,
         httponly=True,
         samesite="lax",
+        secure=settings.use_secure_cookies,
         max_age=settings.session_max_age,
         path="/",
     )

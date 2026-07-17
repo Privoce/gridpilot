@@ -77,8 +77,25 @@ python samples/generate_sample_sld.py
 
 Keep keys in `.env` only. Rotate any key that was pasted into chat. Drawing uploads stay on local disk under `uploads/{org}/{project}/`.
 
+## Deploy (Vercel)
+
+The FastAPI app deploys as a single Vercel Function (`backend.app.main:app`).
+
+```bash
+npm i -g vercel
+vercel link          # link to Privoce/gridpilot project
+vercel env add XAI_API_KEY
+vercel env add SECRET_KEY
+vercel --prod
+```
+
+Notes:
+- SQLite + uploads live under `/tmp/gridpilot` (ephemeral; demo reseeds on cold start)
+- Audit jobs run inline on Vercel (300s `maxDuration`) so Vision audits can finish
+- Set `CORS_ORIGINS` if you use a custom domain
+
 ## GitHub Pages
 
 Marketing site: https://privoce.github.io/gridpilot/
 
-The full app (audits, Vision, auth) runs locally via `./run.sh` — GitHub Pages hosts the static landing only.
+Prefer the Vercel deploy for the full interactive app. Pages hosts the static landing only.

@@ -122,6 +122,12 @@ async def execute_audit_run(audit_id: str) -> None:
 
 
 def enqueue_audit(audit_id: str) -> None:
+    from backend.app.config import settings
+
+    # On Vercel the function freezes after the response — run the audit inline.
+    if settings.is_vercel:
+        asyncio.run(execute_audit_run(audit_id))
+        return
     try:
         loop = asyncio.get_running_loop()
         loop.create_task(execute_audit_run(audit_id))
