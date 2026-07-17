@@ -53,7 +53,7 @@ def init_db() -> None:
 def seed_demo(db: Session) -> None:
     existing = db.query(User).filter(User.email == DEMO_EMAIL).first()
     if existing:
-        # Keep drawing present even if user already exists
+        # Keep drawing + scenario present even if user already exists
         membership = db.query(Membership).filter(Membership.user_id == existing.id).first()
         if membership:
             project = (
@@ -64,19 +64,29 @@ def seed_demo(db: Session) -> None:
                 )
                 .first()
             )
-            if project:
-                # Keep demo project on AES Indiana / MISO scenario
+            if not project:
+                project = Project(
+                    org_id=membership.org_id,
+                    name="Cedar Ridge Solar + Storage",
+                    iso="MISO",
+                    capacity_mw=120.0,
+                    state="IN",
+                    poi_substation="AES Indiana — Cedar Ridge 138 kV",
+                )
+                db.add(project)
+                db.flush()
+            else:
                 project.iso = "MISO"
                 project.state = "IN"
                 project.poi_substation = "AES Indiana — Cedar Ridge 138 kV"
                 project.capacity_mw = 120.0
-                has_drawing = (
-                    db.query(Drawing)
-                    .filter(Drawing.project_id == project.id, Drawing.is_latest.is_(True))
-                    .first()
-                )
-                if not has_drawing:
-                    _attach_sample(db, project, existing.id)
+            has_drawing = (
+                db.query(Drawing)
+                .filter(Drawing.project_id == project.id, Drawing.is_latest.is_(True))
+                .first()
+            )
+            if not has_drawing:
+                _attach_sample(db, project, existing.id)
         return
 
     user = User(

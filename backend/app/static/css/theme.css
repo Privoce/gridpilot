@@ -74,3 +74,21 @@ html, body {
 .gp-spin {
   animation: gp-spin 0.8s linear infinite;
 }
+
+@keyframes gp-progress {
+  from { width: 8%; }
+  to { width: 92%; }
+}
+.gp-audit-progress {
+  height: 3px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--focus, #3b82f6) 18%, transparent);
+}
+.gp-audit-progress > span {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: var(--focus, #3b82f6);
+  animation: gp-progress 3s ease-in-out forwards;
+}

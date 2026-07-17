@@ -11,7 +11,23 @@ const WIZARD_META = [
   { n: 5, label: "Report" },
 ];
 
-let state = { me: null, toast: null, modal: null, demoCtx: null, lastAuditId: null };
+let state = {
+  me: null,
+  toast: null,
+  modal: null,
+  demoCtx: null,
+  lastAuditId: null,
+  /** Client-side audit progress UI (demo finishes inline — still show a run sequence). */
+  auditRunUi: null,
+};
+
+const AUDIT_RUN_STAGES = [
+  { at: 0, label: "Loading drawing pages…" },
+  { at: 650, label: "Reading equipment & annotations…" },
+  { at: 1400, label: "Checking AES Indiana / MISO rules…" },
+  { at: 2200, label: "Scoring readiness & filing gate…" },
+];
+const AUDIT_RUN_MIN_MS = 3000;
 
 function toast(msg) {
   state.toast = msg;
@@ -93,17 +109,48 @@ async function ensureAuth(required = true) {
   }
 }
 
+const DEMO_SCENARIO_FALLBACK = {
+  project: "Cedar Ridge Solar + Storage",
+  capacity_mw: 120,
+  iso: "MISO",
+  utility: "AES Indiana",
+  poi: "AES Indiana — Cedar Ridge 138 kV",
+  state: "IN",
+};
+
+function demoScenario(ctx = state.demoCtx) {
+  const s = { ...DEMO_SCENARIO_FALLBACK, ...(ctx?.scenario || {}) };
+  for (const key of Object.keys(DEMO_SCENARIO_FALLBACK)) {
+    if (s[key] == null || String(s[key]).trim() === "") {
+      s[key] = DEMO_SCENARIO_FALLBACK[key];
+    }
+  }
+  return s;
+}
+
 async function refreshDemoCtx() {
   if (!state.me?.is_demo) {
     state.demoCtx = null;
     return null;
   }
   try {
-    state.demoCtx = await api.demoContext();
+    const next = await api.demoContext();
+    const sessionAudit = state.lastAuditId || loadOnboard().lastAuditId || null;
+    // Keep last-good scenario fields across toast re-renders / transient API blips.
+    // Do not let a prior account audit leak into the wizard until this session runs one.
+    state.demoCtx = {
+      ...(state.demoCtx || {}),
+      ...next,
+      scenario: demoScenario(next),
+      latest_audit_id: sessionAudit || null,
+      latest_audit_status: sessionAudit ? next.latest_audit_status : null,
+      readiness_score: sessionAudit ? next.readiness_score : null,
+      open_blocking: sessionAudit ? next.open_blocking : null,
+      can_file: sessionAudit ? next.can_file : false,
+    };
     return state.demoCtx;
   } catch {
-    state.demoCtx = null;
-    return null;
+    return state.demoCtx;
   }
 }
 
@@ -222,7 +269,7 @@ async function renderDemo() {
     root.innerHTML = `<div class="grid min-h-screen place-items-center p-6"><div class="${panel} max-w-md p-6"><h1 class="mb-2 text-xl">Demo unavailable</h1><p class="text-danger">${esc(err.message)}</p></div></div>`;
     return;
   }
-  const s = info.scenario;
+  const s = demoScenario({ scenario: info.scenario });
   root.innerHTML = `
   <div class="grid min-h-screen place-items-center bg-canvas p-6">
     <div class="${panel} w-full max-w-lg p-8">
@@ -236,7 +283,7 @@ async function renderDemo() {
       <div class="mb-4 overflow-hidden rounded-card border border-line">
         <div class="flex justify-between gap-3 border-b border-line px-3 py-2.5 text-[13px]"><span class="text-muted">Your role</span><strong>Developer interconnection manager</strong></div>
         <div class="flex justify-between gap-3 border-b border-line px-3 py-2.5 text-[13px]"><span class="text-muted">Project</span><strong>${esc(s.project)}</strong></div>
-        <div class="flex justify-between gap-3 border-b border-line px-3 py-2.5 text-[13px]"><span class="text-muted">File to</span><strong class="text-right">${esc(s.utility || "AES Indiana")} (TO) · ${esc(s.iso)} DPP · ${esc(s.capacity_mw)} MW</strong></div>
+        <div class="flex justify-between gap-3 border-b border-line px-3 py-2.5 text-[13px]"><span class="text-muted">File to</span><strong class="text-right">${esc(s.utility)} (TO) · ${esc(s.iso)} DPP · ${esc(s.capacity_mw)} MW</strong></div>
         <div class="flex justify-between gap-3 border-b border-line px-3 py-2.5 text-[13px]"><span class="text-muted">POI</span><strong class="text-right">${esc(s.poi)}</strong></div>
         <div class="flex justify-between gap-3 px-3 py-2.5 text-[13px]"><span class="text-muted">Sample SLD</span><strong class="font-mono text-[12px]">${esc(info.sample_drawing)}</strong></div>
       </div>
@@ -266,10 +313,26 @@ async function renderDemo() {
     try {
       const res = await api.startDemo();
       state.me = { user: res.user, org: res.org, is_demo: true };
+      state.lastAuditId = null;
+      state.auditRunUi = null;
+      // Seed wizard context from start payload so step 1 never paints empty
+      // while /demo/context catches up (common on Vercel cold starts).
+      // Ignore any prior audits on the shared demo account — step 3 must start as Ready to run.
+      state.demoCtx = {
+        is_demo: true,
+        ...res,
+        scenario: demoScenario(res),
+        latest_audit_id: null,
+        latest_audit_status: null,
+        readiness_score: null,
+        open_blocking: null,
+        can_file: false,
+      };
       clearOnboard();
       setWizardStep(1);
-      await refreshDemoCtx();
       navigate("onboarding");
+      // Refresh in background; do not block first paint on it.
+      refreshDemoCtx().catch(() => {});
     } catch (err) {
       status.textContent = err.message;
       btn.disabled = false;
@@ -278,34 +341,7 @@ async function renderDemo() {
 }
 
 /* ---------- Wizard ---------- */
-async function renderOnboarding() {
-  const me = await ensureAuth();
-  if (!me) return;
-  if (!me.is_demo) return navigate("dashboard");
-
-  const ctx = (await refreshDemoCtx()) || state.demoCtx || {};
-  if (ctx.latest_audit_id) state.lastAuditId = ctx.latest_audit_id;
-  const auditId = ctx.latest_audit_id || state.lastAuditId || loadOnboard().lastAuditId || null;
-
-  let step = getWizardStep();
-  // Only fall back to pre-file when we truly have no audit — never bounce off triage mid-resolve.
-  if (step >= 4 && !auditId) {
-    step = 3;
-  }
-
-  let auditDetail = null;
-  if (auditId && step >= 3) {
-    try {
-      auditDetail = await api.audit(auditId);
-      if (auditDetail?.id) {
-        state.lastAuditId = auditDetail.id;
-        saveOnboard({ lastAuditId: auditDetail.id });
-      }
-    } catch {
-      auditDetail = null;
-    }
-  }
-
+function paintOnboarding(step, ctx, auditDetail) {
   root.innerHTML = shell(
     "Demo setup",
     `<div class="mx-auto max-w-3xl">
@@ -318,6 +354,72 @@ async function renderOnboarding() {
   );
   bindShell();
   bindWizard(step, ctx, auditDetail);
+}
+
+/** Sync paint for the audit-run animation — never await network first. */
+function paintAuditRunningNow() {
+  const ctx = { ...(state.demoCtx || {}), scenario: demoScenario(state.demoCtx) };
+  setWizardStep(3);
+  paintOnboarding(3, ctx, null);
+}
+
+async function renderOnboarding() {
+  const me = await ensureAuth();
+  if (!me) return;
+  if (!me.is_demo) return navigate("dashboard");
+
+  let step = getWizardStep();
+
+  // While the run animation is active, paint immediately from cached ctx.
+  // Awaiting /context or /audits here is why the first Run click skipped the animation.
+  if (state.auditRunUi?.running) {
+    paintAuditRunningNow();
+    return;
+  }
+
+  // Prefer start-seeded context so step 1 never waits on a cold /context call.
+  let ctx = state.demoCtx;
+  const missingBasics = !ctx?.scenario?.poi || !ctx?.project_id;
+  if (missingBasics || step >= 3) {
+    ctx = (await refreshDemoCtx()) || state.demoCtx || { scenario: demoScenario() };
+  } else {
+    refreshDemoCtx().catch(() => {});
+  }
+  // Bail if a run started while we were fetching.
+  if (state.auditRunUi?.running) {
+    paintAuditRunningNow();
+    return;
+  }
+  ctx = { ...(ctx || {}), scenario: demoScenario(ctx) };
+  state.demoCtx = ctx;
+
+  // Only audits started in THIS wizard session. Do not auto-load ctx.latest_audit_id —
+  // the shared demo account usually already has a completed run, which skipped "Ready to run".
+  const auditId = state.lastAuditId || loadOnboard().lastAuditId || null;
+
+  // Only fall back to pre-file when we truly have no audit — never bounce off triage mid-resolve.
+  if (step >= 4 && !auditId) {
+    step = 3;
+  }
+
+  let auditDetail = null;
+  if (auditId && step >= 3) {
+    try {
+      auditDetail = await api.audit(auditId);
+      if (state.auditRunUi?.running) {
+        paintAuditRunningNow();
+        return;
+      }
+      if (auditDetail?.id) {
+        state.lastAuditId = auditDetail.id;
+        saveOnboard({ lastAuditId: auditDetail.id });
+      }
+    } catch {
+      auditDetail = null;
+    }
+  }
+
+  paintOnboarding(step, ctx, auditDetail);
 }
 
 function renderWizardStep(step, ctx, auditDetail) {
@@ -346,24 +448,25 @@ function renderWizardStep(step, ctx, auditDetail) {
   }
 
   if (step === 1) {
+    const s = demoScenario(ctx);
     return `
       <div class="flex-1 p-7">
         <p class="mb-2 font-mono text-[12px] uppercase tracking-[0.12em] text-muted">Step 1 of 5</p>
         <h2 class="mb-3 text-2xl tracking-tightish">You are the developer</h2>
         <p class="mb-4 max-w-xl text-[15px] leading-relaxed text-muted">
           At <strong class="text-ink">Northwind Renewables</strong> you build plants — you are not AES Indiana and not MISO.
-          <strong class="text-ink">${esc(ctx.scenario?.project)}</strong> is ${esc(ctx.scenario?.capacity_mw)} MW, so the primary queue is
-          <strong class="text-ink">${esc(ctx.scenario?.iso)} DPP</strong>, with
-          <strong class="text-ink">${esc(ctx.scenario?.utility || "AES Indiana")}</strong> as transmission owner reviewing Facilities Connection Requirements.
+          <strong class="text-ink">${esc(s.project)}</strong> is ${esc(s.capacity_mw)} MW, so the primary queue is
+          <strong class="text-ink">${esc(s.iso)} DPP</strong>, with
+          <strong class="text-ink">${esc(s.utility)}</strong> as transmission owner reviewing Facilities Connection Requirements.
         </p>
         <p class="mb-5 max-w-xl text-[14px] leading-relaxed text-muted">
-          ${esc(ctx.scenario?.why_this_demo || "Run the public-rules checklist before another consultant cycle or queue RFI.")}
+          ${esc(s.why_this_demo || "Run the public-rules checklist before another consultant cycle or queue RFI.")}
         </p>
         <div class="mb-5 grid gap-3 sm:grid-cols-2">
-          <div class="rounded-card border border-line bg-soft p-4"><span class="font-mono text-[11px] uppercase tracking-[0.08em] text-muted">Capacity</span><strong class="mt-1 block">${esc(ctx.scenario?.capacity_mw)} MW</strong></div>
-          <div class="rounded-card border border-line bg-soft p-4"><span class="font-mono text-[11px] uppercase tracking-[0.08em] text-muted">POI</span><strong class="mt-1 block">${esc(ctx.scenario?.poi)}</strong></div>
-          <div class="rounded-card border border-line bg-soft p-4"><span class="font-mono text-[11px] uppercase tracking-[0.08em] text-muted">Utility (TO)</span><strong class="mt-1 block">${esc(ctx.scenario?.utility || "AES Indiana")}</strong></div>
-          <div class="rounded-card border border-line bg-soft p-4"><span class="font-mono text-[11px] uppercase tracking-[0.08em] text-muted">ISO queue</span><strong class="mt-1 block">${esc(ctx.scenario?.iso)} DPP</strong></div>
+          <div class="rounded-card border border-line bg-soft p-4"><span class="font-mono text-[11px] uppercase tracking-[0.08em] text-muted">Capacity</span><strong class="mt-1 block">${esc(s.capacity_mw)} MW</strong></div>
+          <div class="rounded-card border border-line bg-soft p-4"><span class="font-mono text-[11px] uppercase tracking-[0.08em] text-muted">POI</span><strong class="mt-1 block">${esc(s.poi)}</strong></div>
+          <div class="rounded-card border border-line bg-soft p-4"><span class="font-mono text-[11px] uppercase tracking-[0.08em] text-muted">Utility (TO)</span><strong class="mt-1 block">${esc(s.utility)}</strong></div>
+          <div class="rounded-card border border-line bg-soft p-4"><span class="font-mono text-[11px] uppercase tracking-[0.08em] text-muted">ISO queue</span><strong class="mt-1 block">${esc(s.iso)} DPP</strong></div>
         </div>
         <div class="mb-3 flex flex-wrap gap-x-4 gap-y-1 text-[12px]">
           <a class="text-ink underline-offset-2 hover:underline" href="${esc(ctx.links?.aes_indiana_interconnections || "https://www.aesindiana.com/interconnections")}" target="_blank" rel="noopener">AES Indiana interconnections →</a>
@@ -389,12 +492,11 @@ function renderWizardStep(step, ctx, auditDetail) {
           <img
             class="max-h-[420px] w-full object-contain object-top bg-white"
             alt="Sample AES Indiana interconnection SLD"
-            src="${esc(ctx.drawing_preview_url || ctx.sample_preview_url || "/assets/img/cedar_ridge_sld_demo.png")}"
+            src="${esc(ctx.sample_preview_url || "/assets/img/cedar_ridge_sld_demo.png")}"
           />
         </div>
-        <p class="mt-2 font-mono text-[12px] text-muted">${esc(ctx.drawing_filename)} ·
-          <a class="text-ink hover:underline" href="${esc(ctx.drawing_url || ctx.sample_pdf_url)}" target="_blank" rel="noopener">Open PDF</a>
-          · <a class="text-ink hover:underline" href="${esc(ctx.sample_pdf_url)}" target="_blank" rel="noopener">Sample PDF</a>
+        <p class="mt-2 font-mono text-[12px] text-muted">${esc(ctx.drawing_filename || "cedar_ridge_sld_demo.pdf")} ·
+          <a class="text-ink hover:underline" href="${esc(ctx.sample_pdf_url || "/api/demo/sample.pdf")}" target="_blank" rel="noopener">Open PDF</a>
         </p>
       </div>
       ${footer(
@@ -405,32 +507,62 @@ function renderWizardStep(step, ctx, auditDetail) {
 
   if (step === 3) {
     const status = auditDetail?.status;
-    const running = status === "queued" || status === "running";
-    const done = status === "completed";
-    const failed = status === "failed";
+    const uiRun = state.auditRunUi;
+    const running = Boolean(uiRun?.running) || status === "queued" || status === "running";
+    const done = !running && status === "completed";
+    const failed = !running && status === "failed";
+    const isDemoMode = done && (auditDetail?.mode === "demo" || auditDetail?.model === "demo-rules-engine");
+    const blockersFound = (auditDetail?.findings || []).filter((f) => f.severity === "blocking").length;
+    const warningsFound = (auditDetail?.findings || []).filter((f) => f.severity === "warning").length;
+    const stageIdx = uiRun?.stage ?? 0;
+    const stageLabel = AUDIT_RUN_STAGES[Math.min(stageIdx, AUDIT_RUN_STAGES.length - 1)].label;
+
     const statusBox = running
-      ? `<div class="mb-4 flex gap-3 rounded-card border border-focus/20 bg-info-soft p-4"><div class="gp-spin mt-0.5 h-4 w-4 rounded-full border-2 border-focus/30 border-t-focus"></div><div><strong class="block text-ink">Audit in progress</strong><p class="text-[13px] text-muted">Usually 20–60 seconds.</p></div></div>`
+      ? `<div class="mb-4 rounded-card border border-focus/20 bg-info-soft p-4">
+          <div class="mb-3 flex gap-3">
+            <div class="gp-spin mt-0.5 h-4 w-4 shrink-0 rounded-full border-2 border-focus/30 border-t-focus"></div>
+            <div>
+              <strong class="block text-ink">Running pre-filing audit</strong>
+              <p class="mt-1 font-mono text-[12px] text-muted">${esc(stageLabel)}</p>
+            </div>
+          </div>
+          <div class="gp-audit-progress" aria-hidden="true"><span></span></div>
+          <ol class="mt-3 space-y-1.5 font-mono text-[11px] uppercase tracking-[0.08em]">
+            ${AUDIT_RUN_STAGES.map((s, i) => {
+              const active = i === stageIdx;
+              const doneStep = i < stageIdx;
+              return `<li class="${doneStep ? "text-ok" : active ? "text-ink" : "text-muted"}">${doneStep ? "✓" : active ? "●" : "○"} ${esc(s.label)}</li>`;
+            }).join("")}
+          </ol>
+        </div>`
       : done
-        ? `<div class="mb-4 rounded-card border border-ok/30 bg-ok-soft p-4"><strong class="block text-ok">Audit complete</strong><p class="text-[13px] text-muted">Score <strong class="text-ink">${esc(auditDetail.readiness_score)}</strong> · ${esc(auditDetail.blocking_open)} blocker(s) · ${esc(auditDetail.warning_open)} warning(s).</p></div>`
+        ? `<div class="mb-4 rounded-card border border-ok/30 bg-ok-soft p-4"><strong class="block text-ok">Audit complete</strong><p class="text-[13px] text-muted">Score <strong class="text-ink">${esc(auditDetail.readiness_score)}</strong> · ${esc(blockersFound || auditDetail.blocking_open)} blocker(s) · ${esc(warningsFound || auditDetail.warning_open)} warning(s)${
+            auditDetail.blocking_open != null && blockersFound > auditDetail.blocking_open
+              ? ` · <span class="text-ink">${esc(auditDetail.blocking_open)} still open</span>`
+              : ""
+          }.${
+            isDemoMode
+              ? ` Guided demo finding set (AES Indiana gaps) — production can run live Vision on your drawings.`
+              : ` Mode: live Vision (${esc(auditDetail.model || "xAI")}).`
+          }</p></div>`
         : failed
           ? `<div class="mb-4 rounded-card border border-danger/30 bg-danger-soft p-4"><strong class="block text-danger">Audit failed</strong><p class="text-[13px]">${esc(auditDetail.error || "Please try again.")}</p></div>`
-          : `<div class="mb-4 rounded-card border border-line bg-soft p-4"><strong class="block">Ready to run</strong><p class="text-[13px] text-muted">Audit <span class="font-mono">${esc(ctx.drawing_filename)}</span> against ${esc(ctx.scenario?.iso)}.</p></div>`;
+          : `<div class="mb-4 rounded-card border border-line bg-soft p-4"><strong class="block">Ready to run</strong><p class="text-[13px] text-muted">Click <strong class="text-ink">Run audit</strong> to score the sample SLD against the AES Indiana / MISO pack.</p></div>`;
 
     return `
       <div class="flex-1 p-7">
         <p class="mb-2 font-mono text-[12px] uppercase tracking-[0.12em] text-muted">Step 3 of 5</p>
         <h2 class="mb-3 text-2xl tracking-tightish">Pre-filing audit (before you submit)</h2>
         <p class="mb-5 max-w-xl text-[15px] leading-relaxed text-muted">
-          GridPilot reads the SLD with a vision model and scores it against published
-          AES Indiana Facilities Connection Requirements (${esc(ctx.scenario?.iso || "MISO")} pack).
-          This is the developer-side check — utilities/ISOs may use other tools after you file.
+          Score the sample SLD against published AES Indiana Facilities Connection Requirements
+          (${esc(ctx.scenario?.iso || "MISO")} pack). Watch the run steps, then continue to triage the blockers.
         </p>
         ${statusBox}
       </div>
       ${footer(
         `<button type="button" class="${button("ghost")}" id="wiz-back" ${running ? "disabled" : ""}>Back</button>`,
         done
-          ? `<button type="button" class="${button("primary")}" id="wiz-next">Continue to triage</button>`
+          ? `<button type="button" class="${button("ghost")}" id="wiz-run-audit">Run again</button><button type="button" class="${button("primary")}" id="wiz-next">Continue to triage</button>`
           : `<button type="button" class="${button("primary")}" id="wiz-run-audit" ${running ? "disabled" : ""}>${failed ? "Retry audit" : running ? "Running…" : "Run audit"}</button>`
       )}`;
   }
@@ -553,34 +685,68 @@ function bindWizard(step, ctx, auditDetail) {
     }
   });
   document.getElementById("wiz-run-audit")?.addEventListener("click", async () => {
-    const btn = document.getElementById("wiz-run-audit");
-    if (btn) btn.disabled = true;
-    try {
-      toast("Starting audit…");
-      // Serverless cold starts reseed SQLite — never trust stale project/drawing ids.
-      let fresh = (await refreshDemoCtx()) || ctx;
-      state.lastAuditId = null;
-      saveOnboard({ lastAuditId: null });
-      let started;
-      try {
-        started = await api.startAudit(fresh.project_id, fresh.drawing_id);
-      } catch (err) {
-        if (err.status === 404 || /not found/i.test(String(err.message || ""))) {
-          fresh = (await refreshDemoCtx()) || fresh;
-          started = await api.startAudit(fresh.project_id);
-        } else {
-          throw err;
+    if (state.auditRunUi?.running) return;
+
+    state.auditRunUi = { running: true, stage: 0, startedAt: Date.now() };
+    state.lastAuditId = null;
+    saveOnboard({ lastAuditId: null });
+    // Paint the animation in this same turn — before any network await.
+    paintAuditRunningNow();
+
+    const tick = window.setInterval(() => {
+      const ui = state.auditRunUi;
+      if (!ui?.running) {
+        window.clearInterval(tick);
+        return;
+      }
+      const elapsed = Date.now() - ui.startedAt;
+      let stage = 0;
+      for (let i = 0; i < AUDIT_RUN_STAGES.length; i++) {
+        if (elapsed >= AUDIT_RUN_STAGES[i].at) stage = i;
+      }
+      if (stage !== ui.stage) {
+        ui.stage = stage;
+        if (route().name === "onboarding" && getWizardStep() === 3) {
+          paintAuditRunningNow();
         }
       }
+    }, 180);
+
+    try {
+      let fresh = (await refreshDemoCtx()) || ctx;
+      const apiCall = (async () => {
+        try {
+          return await api.startAudit(fresh.project_id, fresh.drawing_id);
+        } catch (err) {
+          if (err.status === 404 || /not found/i.test(String(err.message || ""))) {
+            fresh = (await refreshDemoCtx()) || fresh;
+            return await api.startAudit(fresh.project_id);
+          }
+          throw err;
+        }
+      })();
+
+      const waitMin = new Promise((r) => setTimeout(r, AUDIT_RUN_MIN_MS));
+      const [started] = await Promise.all([apiCall, waitMin]);
+      window.clearInterval(tick);
+      state.auditRunUi = null;
+
       if (started?.id) {
         state.lastAuditId = started.id;
         saveOnboard({ lastAuditId: started.id });
       }
+      if (started?.status === "completed") {
+        toast(`Audit complete — ${started.blocking_open ?? 0} blocker(s)`);
+      } else if (started?.status === "failed") {
+        toast(started.error || "Audit failed");
+      }
       setWizardStep(3);
-      render();
+      await renderOnboarding();
     } catch (err) {
-      if (btn) btn.disabled = false;
+      window.clearInterval(tick);
+      state.auditRunUi = null;
       toast(err.message);
+      await renderOnboarding();
     }
   });
   document.querySelectorAll("[data-resolve]").forEach((btn) => {
@@ -881,7 +1047,7 @@ async function renderProject(id) {
         ? `<div class="${panel} mb-4 overflow-hidden">
             <div class="flex items-center justify-between border-b border-line px-4 py-3"><h3 class="text-[14px]">Latest drawing</h3><span class="font-mono text-[11px] text-muted">${esc(data.drawings[0].filename)}</span></div>
             <a href="/api/projects/${esc(p.id)}/drawings/${esc(data.drawings[0].id)}/file" target="_blank" rel="noopener" class="block bg-soft">
-              <img class="max-h-[480px] w-full object-contain object-top bg-white" alt="SLD preview" src="/api/projects/${esc(p.id)}/drawings/${esc(data.drawings[0].id)}/preview.png" />
+              <img class="max-h-[480px] w-full object-contain object-top bg-white" alt="SLD preview" src="/api/projects/${esc(p.id)}/drawings/${esc(data.drawings[0].id)}/preview.png" onerror="this.onerror=null;this.src='/assets/img/cedar_ridge_sld_demo.png'" />
             </a>
           </div>`
         : ""
@@ -1043,9 +1209,9 @@ async function renderAudit(id) {
           ${
             a.project_id && a.drawing_id
               ? `<a href="/api/projects/${esc(a.project_id)}/drawings/${esc(a.drawing_id)}/file" target="_blank" rel="noopener" class="block bg-soft">
-                   <img class="max-h-[480px] w-full object-contain object-top bg-white" alt="SLD preview" src="/api/projects/${esc(a.project_id)}/drawings/${esc(a.drawing_id)}/preview.png" />
+                   <img class="max-h-[480px] w-full object-contain object-top bg-white" alt="SLD preview" src="/api/projects/${esc(a.project_id)}/drawings/${esc(a.drawing_id)}/preview.png" onerror="this.onerror=null;this.src='/assets/img/cedar_ridge_sld_demo.png'" />
                  </a>`
-              : ""
+              : `<img class="max-h-[480px] w-full object-contain object-top bg-white" alt="SLD preview" src="/assets/img/cedar_ridge_sld_demo.png" />`
           }
         </div>
         <div class="${panel} p-4">
@@ -1066,22 +1232,9 @@ async function renderAudit(id) {
       <div class="${panel} p-4">
         <div class="mb-3 flex items-center justify-between border-b border-line pb-2">
           <h3 class="text-[14px]">Findings triage</h3>
-          <span class="text-[12px] text-muted">${findings.length} items</span>
+          <span class="text-[12px] text-muted">${findings.filter((f) => f.severity === "blocking").length} blockers · ${findings.filter((f) => f.severity === "warning").length} warnings</span>
         </div>
-        <div class="space-y-2.5">
-          ${findings
-            .map(
-              (f) => `
-            <article class="rounded-card border border-line p-3.5" data-id="${esc(f.id)}">
-              <div class="mb-1 font-mono text-[10px] uppercase tracking-[0.08em] text-muted">${esc(f.severity)} · ${esc(f.rule_id || "custom")} · ${pill(f.triage)}</div>
-              <h4 class="mb-1 text-[14px] tracking-tightish">${esc(f.title)}</h4>
-              <p class="text-[13px] text-muted">${esc(f.detail)}</p>
-              ${f.recommendation ? `<p class="mt-1 text-[13px]"><strong>Fix:</strong> ${esc(f.recommendation)}</p>` : ""}
-              ${triageActionsHtml(f)}
-            </article>`
-            )
-            .join("")}
-        </div>
+        ${findingsTriageSectionsHtml(findings)}
       </div>
     </div>`
   );
@@ -1109,11 +1262,18 @@ async function renderAudit(id) {
   });
 }
 
-function triageActionsHtml(f) {
+function triageActionsHtml(f, { required = true } = {}) {
   const cleared = f.triage === "resolved" || f.triage === "dismissed";
   if (cleared) {
     return `<div class="mt-2.5 flex flex-wrap gap-1.5">
       <button type="button" class="${button("primary", "sm")}" data-triage="open">Reopen</button>
+    </div>`;
+  }
+  if (!required) {
+    // Warnings / ready — same list as the report, but not the guided-demo resolve loop.
+    return `<div class="mt-2.5 flex flex-wrap gap-1.5">
+      <button type="button" class="${button("ghost", "sm")}" data-triage="dismissed">Dismiss</button>
+      <button type="button" class="${button("ghost", "sm")}" data-triage="acknowledged">Acknowledge</button>
     </div>`;
   }
   return `<div class="mt-2.5 flex flex-wrap gap-1.5">
@@ -1121,6 +1281,38 @@ function triageActionsHtml(f) {
     <button type="button" class="${button("primary", "sm")}" data-triage="resolved">Resolve</button>
     <button type="button" class="${button("ghost", "sm")}" data-triage="dismissed">Dismiss</button>
   </div>`;
+}
+
+function findingCardHtml(f, { required = true } = {}) {
+  return `
+    <article class="rounded-card border border-line p-3.5" data-id="${esc(f.id)}">
+      <div class="mb-1 font-mono text-[10px] uppercase tracking-[0.08em] text-muted">${esc(f.severity)} · ${esc(f.rule_id || "custom")} · ${pill(f.triage)}</div>
+      <h4 class="mb-1 text-[14px] tracking-tightish">${esc(f.title)}</h4>
+      <p class="text-[13px] text-muted">${esc(f.detail)}</p>
+      ${f.recommendation ? `<p class="mt-1 text-[13px]"><strong>Fix:</strong> ${esc(f.recommendation)}</p>` : ""}
+      ${triageActionsHtml(f, { required })}
+    </article>`;
+}
+
+function findingsTriageSectionsHtml(findings) {
+  const blockers = findings.filter((f) => f.severity === "blocking");
+  const warnings = findings.filter((f) => f.severity === "warning");
+  const ready = findings.filter((f) => f.severity === "ready");
+  const section = (title, hint, items, required) => {
+    if (!items.length) return "";
+    return `
+      <div class="mb-4 last:mb-0">
+        <div class="mb-2">
+          <h4 class="text-[13px] tracking-tightish">${esc(title)}</h4>
+          <p class="text-[12px] text-muted">${esc(hint)}</p>
+        </div>
+        <div class="space-y-2.5">${items.map((f) => findingCardHtml(f, { required })).join("")}</div>
+      </div>`;
+  };
+  return `
+    ${section("Blockers — clear these to file", "Same list as guided-demo step 4. Filing stays blocked until these are resolved or dismissed.", blockers, true)}
+    ${section("Warnings — do not block filing", "Shown in the full report; optional to triage. Not part of the guided resolve loop.", warnings, false)}
+    ${section("Ready checks", "Requirements that already look satisfied on the drawing.", ready, false)}`;
 }
 
 async function renderBilling() {

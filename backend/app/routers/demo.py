@@ -215,7 +215,30 @@ def start_demo(response: Response, db: Session = Depends(get_db)):
         "is_demo": True,
         "project_id": project.id,
         "drawing_id": drawing.id,
+        "drawing_filename": drawing.filename,
+        "drawing_url": f"/api/projects/{project.id}/drawings/{drawing.id}/file",
+        "drawing_preview_url": f"/api/projects/{project.id}/drawings/{drawing.id}/preview.png",
+        "sample_pdf_url": "/api/demo/sample.pdf",
+        "sample_preview_url": "/assets/img/cedar_ridge_sld_demo.png",
         "latest_audit_id": latest_audit.id if latest_audit else None,
+        "latest_audit_status": latest_audit.status.value if latest_audit else None,
+        "readiness_score": latest_audit.readiness_score if latest_audit else None,
+        "open_blocking": latest_audit.blocking_open if latest_audit else 0,
+        "can_file": False,
+        # Always include scenario in start — first paint must not wait on /context.
+        "scenario": {
+            **SCENARIO,
+            "project": project.name or SCENARIO["project"],
+            "capacity_mw": project.capacity_mw or SCENARIO["capacity_mw"],
+            "iso": project.iso or SCENARIO["iso"],
+            "poi": (project.poi_substation or "").strip() or SCENARIO["poi"],
+            "state": project.state or SCENARIO["state"],
+        },
+        "intentional_defects": INTENTIONAL_DEFECTS,
+        "links": {
+            "aes_indiana_interconnections": SCENARIO["portal"],
+            "powerclerk": SCENARIO["powerclerk"],
+        },
         "onboarding_path": "onboarding",
     }
 
@@ -242,11 +265,12 @@ def demo_context(auth: AuthContext = Depends(get_auth), db: Session = Depends(ge
         "is_demo": True,
         "scenario": {
             **SCENARIO,
-            "project": project.name,
-            "capacity_mw": project.capacity_mw,
-            "iso": project.iso,
-            "poi": project.poi_substation,
-            "state": project.state,
+            "project": project.name or SCENARIO["project"],
+            "capacity_mw": project.capacity_mw or SCENARIO["capacity_mw"],
+            "iso": project.iso or SCENARIO["iso"],
+            # Never blank the POI card — stale/partial projects used to overwrite SCENARIO["poi"] with null.
+            "poi": (project.poi_substation or "").strip() or SCENARIO["poi"],
+            "state": project.state or SCENARIO["state"],
         },
         "project_id": project.id,
         "drawing_id": drawing.id,
