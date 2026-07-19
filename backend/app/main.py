@@ -8,7 +8,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import HTMLResponse
 from fastapi.staticfiles import StaticFiles
 
-from backend.app.routers import audits, auth, dashboard, demo, projects
+from backend.app.routers import audits, auth, caiso, dashboard, demo, projects
 from backend.app.seed import init_db
 from backend.app.services.rules_engine import list_isos
 
@@ -41,6 +41,7 @@ app.add_middleware(
 )
 
 app.include_router(auth.router)
+app.include_router(caiso.router)
 app.include_router(demo.router)
 app.include_router(projects.router)
 app.include_router(audits.router)

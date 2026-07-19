@@ -3,7 +3,8 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>GridPilot | Pre-filing interconnection QA for developers</title>
+  <title>GridPilot | Interconnection applications without the consulting firm</title>
+  <link rel="icon" href="/assets/img/logo.svg" type="image/svg+xml" />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
@@ -15,7 +16,7 @@
   <header class="sticky top-0 z-20 border-b border-line bg-canvas/90 backdrop-blur">
     <div class="mx-auto flex max-w-gp items-center justify-between gap-6 px-6 py-4">
       <a href="/" class="flex items-center gap-2.5 text-ink no-underline">
-        <span class="inline-flex h-7 w-7 items-center justify-center rounded-full border border-line text-[11px] font-mono tracking-widest">GP</span>
+        <img src="/assets/img/logo.svg" alt="" class="h-7 w-7" />
         <span class="text-[15px] tracking-tightish">GridPilot</span>
       </a>
       <nav class="hidden items-center gap-7 text-[14px] text-muted md:flex">
@@ -38,11 +39,12 @@
           GridPilot
         </h1>
         <p class="mb-3 text-xl tracking-tightish text-ink md:text-2xl">
-          Catch interconnection gaps <span class="text-muted">before</span> you file to a utility or ISO.
+          Your interconnection application, <span class="text-muted">without</span> the consulting firm.
         </p>
         <p class="mb-8 max-w-md text-[16px] leading-relaxed text-muted">
-          Developers today pay consultants for months to assemble applications — with no guarantee they pass.
-          GridPilot audits your SLD against published utility and ISO rules so you submit fewer RFIs and burn fewer quarters.
+          Developers pay consultants ~$10k per project and wait 2–4 weeks for the models, drawings, and forms a
+          CAISO interconnection request needs. GridPilot takes the same kickoff inputs and generates the full
+          submission packet — validated for the consistency errors that trigger deficiency review.
         </p>
         <div class="flex flex-wrap gap-3">
           <a href="/app#/demo" class="rounded-pill bg-primary px-5 py-2.5 text-[13px] font-mono uppercase tracking-[0.08em] text-primary-fg">Try Demo</a>
@@ -64,15 +66,15 @@
             </div>
             <div class="flex justify-between gap-4 border-t border-line pt-3">
               <dt class="text-muted">Job to be done</dt>
-              <dd class="text-right text-ink">Pre-filing package QA</dd>
+              <dd class="text-right text-ink">Interconnection request assembly</dd>
             </div>
             <div class="flex justify-between gap-4 border-t border-line pt-3">
               <dt class="text-muted">Primary artifact</dt>
-              <dd class="text-right text-ink">Single-line diagram (SLD)</dd>
+              <dd class="text-right text-ink">Full submission packet (15 docs)</dd>
             </div>
             <div class="flex justify-between gap-4 border-t border-line pt-3">
               <dt class="text-muted">Demo market</dt>
-              <dd class="text-right text-ink">AES Indiana · MISO</dd>
+              <dd class="text-right text-ink">CAISO · Independent Study Process</dd>
             </div>
           </dl>
         </div>
@@ -115,16 +117,17 @@
           <div class="rounded-card border border-line bg-soft p-6">
             <h3 class="mb-2 text-[16px] tracking-tightish">The expensive loop today</h3>
             <p class="text-[14px] leading-relaxed text-muted">
-              Developer → consultant (3–6 months) → file → utility/ISO review (another 3–6 months) → RFI → revise → pay again.
-              Consultants do not guarantee acceptance. Every preventable SLD gap costs a queue cycle.
+              Developer gathers inputs (2–4 weeks) → consulting firm builds models, drawings, and forms
+              (2–4 weeks, ~$10k) → QC and sign-off → submit → deficiency review → revise → pay again.
+              6–10 weeks from kickoff to submission, and inconsistent MW values are still the most common rejection.
             </p>
           </div>
           <div class="rounded-card border border-line bg-soft p-6">
-            <h3 class="mb-2 text-[16px] tracking-tightish">Where AI already shows up — and where it doesn’t</h3>
+            <h3 class="mb-2 text-[16px] tracking-tightish">What GridPilot replaces</h3>
             <p class="text-[14px] leading-relaxed text-muted">
-              Tools are emerging to help <em>utilities and ISOs</em> review inbound filings faster.
-              Almost nothing helps the <strong class="text-ink">developer</strong> run the same checklist
-              <em>before</em> submission. That is GridPilot.
+              The consulting workstream: load-flow and dynamic models, reactive capability curves, single-line
+              diagrams, site drawings, KMZ boundaries, Appendix 1 and Attachment A — generated from
+              <strong class="text-ink">one intake</strong>, so every document carries identical values.
             </p>
           </div>
         </div>
@@ -134,36 +137,37 @@
     <section id="product" class="border-t border-line bg-soft">
       <div class="mx-auto max-w-gp px-6 py-16 md:py-20">
         <p class="mb-3 font-mono text-[12px] uppercase tracking-[0.12em] text-muted">Product</p>
-        <h2 class="mb-3 text-3xl tracking-tightish text-ink">Pre-filing co-pilot for the application packet</h2>
+        <h2 class="mb-3 text-3xl tracking-tightish text-ink">Inputs in, submission packet out</h2>
         <p class="mb-10 max-w-2xl text-[15px] leading-relaxed text-muted">
-          Start with the single-line diagram — the drawing reviewers fail first.
-          Encode public utility and ISO requirements into rule packs, score the drawing, and clear blockers before PowerClerk or the ISO queue.
+          You provide the same kickoff inputs a consulting firm would collect. GridPilot validates them,
+          runs the engineering workstream, and hands back a packet mapped to the CAISO minimum-requirements checklist.
         </p>
         <ol class="grid gap-3 md:grid-cols-4">
           <li class="rounded-card border border-line bg-surface p-5">
             <span class="font-mono text-[12px] text-muted">01</span>
-            <strong class="mt-2 block text-[15px]">Pick utility + ISO path</strong>
-            <p class="mt-1 text-[13px] text-muted">Distribution-scale → utility. Transmission-scale → ISO queue with the TO in the loop.</p>
+            <strong class="mt-2 block text-[15px]">Developer intake</strong>
+            <p class="mt-1 text-[13px] text-muted">Legal entity, site control, POI, MW chain, equipment and vendor status — one structured form.</p>
           </li>
           <li class="rounded-card border border-line bg-surface p-5">
             <span class="font-mono text-[12px] text-muted">02</span>
-            <strong class="mt-2 block text-[15px]">Upload the SLD</strong>
-            <p class="mt-1 text-[13px] text-muted">Version CAD-exported PDFs the way your filing package will be reviewed.</p>
+            <strong class="mt-2 block text-[15px]">Kickoff validation</strong>
+            <p class="mt-1 text-[13px] text-muted">MW chain reconciliation, track eligibility, site-exclusivity rules, COD limits — caught before generation.</p>
           </li>
           <li class="rounded-card border border-line bg-surface p-5">
             <span class="font-mono text-[12px] text-muted">03</span>
-            <strong class="mt-2 block text-[15px]">Audit vs public rules</strong>
-            <p class="mt-1 text-[13px] text-muted">Vision + rule packs from published interconnection requirements — not secret data.</p>
+            <strong class="mt-2 block text-[15px]">Generate the packet</strong>
+            <p class="mt-1 text-[13px] text-muted">.epc / .dyd models, P-Q curve, simulation plots, SLD, site drawing, KMZ, Appendix 1, Attachment A.</p>
           </li>
           <li class="rounded-card border border-line bg-surface p-5">
             <span class="font-mono text-[12px] text-muted">04</span>
-            <strong class="mt-2 block text-[15px]">Gate, then file</strong>
-            <p class="mt-1 text-[13px] text-muted">Triage blockers, export a readiness report, then submit to utility or ISO.</p>
+            <strong class="mt-2 block text-[15px]">Review & submit</strong>
+            <p class="mt-1 text-[13px] text-muted">Consistency QC across every document, a developer action list, then e-sign and upload in RIMS5.</p>
           </li>
         </ol>
         <p class="mt-8 max-w-2xl text-[13px] text-muted">
-          Requirements differ by ISO, utility, and even county. GridPilot is built to ingest those public specs
-          (Facilities Connection Requirements, tariff exhibits, portal checklists) into auditable rule packs.
+          Some things stay with you by law or by physics: official state certificates, executed land agreements,
+          vendor dynamic-model files, the study deposit, and final PSLF validation against the ISO base case.
+          GridPilot drafts everything else and tells you exactly what is left.
         </p>
       </div>
     </section>
@@ -190,7 +194,7 @@
             <ul class="mt-6 flex-1 space-y-2.5 text-[14px] text-ink">
               <li class="flex gap-2"><span class="text-muted">—</span> 25 pre-filing audits / 30 days</li>
               <li class="flex gap-2"><span class="text-muted">—</span> 5 active projects</li>
-              <li class="flex gap-2"><span class="text-muted">—</span> Utility + ISO rule packs (demo: AES Indiana / MISO)</li>
+              <li class="flex gap-2"><span class="text-muted">—</span> CAISO packet generation (ISP / Fast Track)</li>
               <li class="flex gap-2"><span class="text-muted">—</span> Filing readiness gate</li>
               <li class="flex gap-2"><span class="text-muted">—</span> HTML and JSON report export</li>
             </ul>
@@ -237,9 +241,9 @@
 
         <div class="mt-10 border-t border-line pt-8">
           <p class="max-w-2xl text-[14px] leading-relaxed text-muted">
-            GridPilot is an engineering co-pilot for developers. It does not replace a PE stamp, consultant studies,
-            or formal utility / ISO review — it reduces avoidable defects in the packet you send them.
-            <a href="/app#/demo" class="text-ink underline-offset-2 hover:underline">Run the AES Indiana guided demo</a>.
+            GridPilot replaces the consulting firm's application workstream — not the PE stamp, the ISO study,
+            or your legal obligations. Final models should be validated in GE PSLF against the ISO base case before submission.
+            <a href="/app#/demo" class="text-ink underline-offset-2 hover:underline">Run the CAISO guided demo</a>.
           </p>
         </div>
       </div>

@@ -59,4 +59,9 @@ export const api = {
   audit: (id) => request(`/api/audits/${id}`),
   triage: (auditId, findingId, body) =>
     request(`/api/audits/${auditId}/findings/${findingId}`, { method: "PATCH", body }),
+  caisoIntake: () => request("/api/caiso/intake"),
+  caisoExtract: (files) => request("/api/caiso/extract", { method: "POST", body: { files } }),
+  caisoValidate: (intake) => request("/api/caiso/validate", { method: "POST", body: intake }),
+  caisoGenerate: (intake) => request("/api/caiso/generate", { method: "POST", body: intake }),
+  caisoPacket: (id) => request(`/api/caiso/packets/${id}`),
 };

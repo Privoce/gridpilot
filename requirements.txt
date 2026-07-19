@@ -14,3 +14,4 @@ sqlalchemy>=2.0.36
 bcrypt>=4.2.0
 itsdangerous>=2.2.0
 eval_type_backport>=0.2.0
+openpyxl>=3.1.0

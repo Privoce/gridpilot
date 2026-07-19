@@ -92,3 +92,24 @@ html, body {
   background: var(--focus, #3b82f6);
   animation: gp-progress 3s ease-in-out forwards;
 }
+
+@keyframes gp-drawer-in {
+  from { transform: translateX(100%); }
+  to { transform: translateX(0); }
+}
+@keyframes gp-fade-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+.gp-drawer-panel {
+  animation: gp-drawer-in 0.28s cubic-bezier(0.32, 0.72, 0.24, 1) both;
+}
+.gp-drawer-backdrop {
+  animation: gp-fade-in 0.2s ease-out both;
+}
+.gp-drawer-panel.closing {
+  animation: gp-drawer-in 0.2s cubic-bezier(0.32, 0.72, 0.24, 1) reverse both;
+}
+.gp-drawer-backdrop.closing {
+  animation: gp-fade-in 0.2s ease-out reverse both;
+}
