@@ -1,9 +1,11 @@
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Response
 from sqlalchemy.orm import Session
 
+from backend.app.auth import create_session_token
 from backend.app.billing import audit_limit_for, maybe_roll_period, plan_features, project_limit_for
+from backend.app.config import settings
 from backend.app.db import get_db
 from backend.app.db_models import AuditRun, AuditStatus, Project
 from backend.app.deps import AuthContext, get_auth
@@ -87,10 +89,34 @@ def billing(auth: AuthContext = Depends(get_auth), db: Session = Depends(get_db)
 
 
 @router.post("/billing/upgrade")
-def upgrade(auth: AuthContext = Depends(get_auth), db: Session = Depends(get_db)):
+def upgrade(
+    response: Response,
+    auth: AuthContext = Depends(get_auth),
+    db: Session = Depends(get_db),
+):
     """Demo upgrade path — flips org to Pro without Stripe."""
     from backend.app.db_models import Plan
 
     auth.org.plan = Plan.PRO
     db.commit()
+    # Refresh the session claims so the upgraded plan survives serverless
+    # instance rotation (accounts are restored from the token on new instances).
+    response.set_cookie(
+        key=settings.session_cookie,
+        value=create_session_token(
+            auth.user.id,
+            email=auth.user.email,
+            name=auth.user.name,
+            org_id=auth.org.id,
+            org_name=auth.org.name,
+            org_slug=auth.org.slug,
+            plan=auth.org.plan.value,
+            role=auth.membership.role.value,
+        ),
+        httponly=True,
+        samesite="lax",
+        secure=settings.use_secure_cookies,
+        max_age=settings.session_max_age,
+        path="/",
+    )
     return {"ok": True, "plan": "pro", "message": "Upgraded to Pro (demo billing)."}

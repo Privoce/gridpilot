@@ -63,6 +63,27 @@ def read_session_token(token: str) -> str | None:
     return str(claims["uid"]) if claims else None
 
 
+def _account_serializer() -> URLSafeTimedSerializer:
+    return URLSafeTimedSerializer(settings.secret_key, salt="gridpilot-account")
+
+
+def create_account_token(claims: dict) -> str:
+    """Signed account snapshot (includes the bcrypt hash, never the password).
+
+    Survives logout in the browser so password sign-in still works when the
+    serverless instance that stored the account has been recycled.
+    """
+    return _account_serializer().dumps(claims)
+
+
+def read_account_token(token: str) -> dict | None:
+    try:
+        data = _account_serializer().loads(token, max_age=60 * 60 * 24 * 30)
+    except (BadSignature, SignatureExpired):
+        return None
+    return data if isinstance(data, dict) and data.get("em") else None
+
+
 def _project_serializer() -> URLSafeTimedSerializer:
     return URLSafeTimedSerializer(settings.secret_key, salt="gridpilot-projects")
 

@@ -2248,7 +2248,13 @@ function bindRequest(projectId, step, intake) {
       inp.addEventListener("change", () => {
         const f = inp.files?.[0];
         if (!f) return;
-        reqFiles[inp.getAttribute("data-req-input")] = f;
+        const key = inp.getAttribute("data-req-input");
+        reqFiles[key] = f;
+        // Record the attachment in the intake immediately so validation sees the
+        // file even on the manual (no-extraction) path.
+        const next = { ...intake, [key]: { name: f.name, size: f.size } };
+        saveReq(projectId, { intake: next });
+        intake[key] = next[key];
         repaint();
       });
     });
