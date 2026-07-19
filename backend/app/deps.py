@@ -5,11 +5,13 @@ from dataclasses import dataclass
 from fastapi import Depends, HTTPException, Request
 from sqlalchemy.orm import Session
 
-from backend.app.auth import read_session_claims
+from backend.app.auth import read_projects_token, read_session_claims
 from backend.app.billing import audit_limit_for, project_limit_for
 from backend.app.config import settings
 from backend.app.db import get_db
-from backend.app.db_models import MemberRole, Membership, Organization, Plan, User
+from backend.app.db_models import MemberRole, Membership, Organization, Plan, Project, User
+
+PROJECTS_COOKIE = "gp_projects"
 
 
 @dataclass
@@ -84,7 +86,42 @@ def get_current_user(
     return user
 
 
+def _restore_projects_from_cookie(request: Request, db: Session, org_id: str) -> None:
+    """Recreate project rows this instance has never seen.
+
+    Pairs with the gp_projects cookie set on project create/update: serverless
+    instances keep separate SQLite files, so a project created on one instance
+    must be restorable on any other.
+    """
+    token = request.cookies.get(PROJECTS_COOKIE)
+    if not token:
+        return
+    data = read_projects_token(token)
+    if not data or data.get("org") != org_id:
+        return
+    restored = False
+    for entry in data.get("projects") or []:
+        pid = entry.get("id")
+        if not pid or db.get(Project, pid):
+            continue
+        db.add(
+            Project(
+                id=pid,
+                org_id=org_id,
+                name=entry.get("n") or "Project",
+                iso=entry.get("i") or "CAISO",
+                capacity_mw=entry.get("c"),
+                state=entry.get("s"),
+                poi_substation=entry.get("poi"),
+            )
+        )
+        restored = True
+    if restored:
+        db.commit()
+
+
 def get_auth(
+    request: Request,
     db: Session = Depends(get_db),
     user: User = Depends(get_current_user),
 ) -> AuthContext:
@@ -99,6 +136,7 @@ def get_auth(
     org = db.get(Organization, membership.org_id)
     if not org:
         raise HTTPException(status_code=403, detail="Organization missing")
+    _restore_projects_from_cookie(request, db, org.id)
     return AuthContext(user=user, org=org, membership=membership)
 
 

@@ -6,15 +6,16 @@ from pathlib import Path
 from typing import Optional
 
 import fitz
-from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
+from fastapi import APIRouter, Depends, File, Form, HTTPException, Response, UploadFile
 from fastapi.responses import FileResponse
 from sqlalchemy.orm import Session
 
+from backend.app.auth import create_projects_token
 from backend.app.billing import assert_can_create_project, assert_can_run_audit
 from backend.app.config import settings
 from backend.app.db import get_db
 from backend.app.db_models import AuditRun, AuditStatus, Drawing, Project
-from backend.app.deps import AuthContext, get_auth
+from backend.app.deps import PROJECTS_COOKIE, AuthContext, get_auth
 from backend.app.schemas import ProjectCreate, ProjectUpdate
 from backend.app.serializers import drawing_out, project_out
 from backend.app.services.jobs import enqueue_audit
@@ -48,6 +49,32 @@ def _latest_audit(db: Session, project_id: str) -> AuditRun | None:
     )
 
 
+def _refresh_projects_cookie(response: Response, db: Session, org_id: str) -> None:
+    """Snapshot the org's projects into a signed cookie so any serverless
+    instance can restore them (see deps._restore_projects_from_cookie)."""
+    projects = (
+        db.query(Project)
+        .filter(Project.org_id == org_id, Project.status == "active")
+        .order_by(Project.updated_at.desc())
+        .limit(10)
+        .all()
+    )
+    payload = [
+        {"id": p.id, "n": p.name, "i": p.iso, "c": p.capacity_mw, "s": p.state,
+         "poi": p.poi_substation}
+        for p in projects
+    ]
+    response.set_cookie(
+        key=PROJECTS_COOKIE,
+        value=create_projects_token(org_id, payload),
+        httponly=True,
+        samesite="lax",
+        secure=settings.use_secure_cookies,
+        max_age=settings.session_max_age,
+        path="/",
+    )
+
+
 @router.get("")
 def list_projects(auth: AuthContext = Depends(get_auth), db: Session = Depends(get_db)):
     projects = (
@@ -66,6 +93,7 @@ def list_projects(auth: AuthContext = Depends(get_auth), db: Session = Depends(g
 @router.post("")
 def create_project(
     payload: ProjectCreate,
+    response: Response,
     auth: AuthContext = Depends(get_auth),
     db: Session = Depends(get_db),
 ):
@@ -81,6 +109,7 @@ def create_project(
     db.add(project)
     db.commit()
     db.refresh(project)
+    _refresh_projects_cookie(response, db, auth.org.id)
     return project_out(project)
 
 
@@ -120,6 +149,7 @@ def get_project(
 def update_project(
     project_id: str,
     payload: ProjectUpdate,
+    response: Response,
     auth: AuthContext = Depends(get_auth),
     db: Session = Depends(get_db),
 ):
@@ -129,6 +159,7 @@ def update_project(
         setattr(project, key, value)
     db.commit()
     db.refresh(project)
+    _refresh_projects_cookie(response, db, auth.org.id)
     return project_out(project, _latest_drawing(db, project.id), _latest_audit(db, project.id))
 
 

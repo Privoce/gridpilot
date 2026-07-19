@@ -5,7 +5,7 @@
 import { chromium } from "playwright-core";
 import { mkdirSync, writeFileSync } from "fs";
 
-const BASE = "http://127.0.0.1:8000";
+const BASE = process.argv[2] || "http://127.0.0.1:8000";
 const shots = "/tmp/gp_extract";
 mkdirSync(shots, { recursive: true });
 const fixedWb = "/tmp/Ravenwood_TechnicalData_Workbook_v2.xlsx";
