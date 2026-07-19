@@ -1699,33 +1699,33 @@ async function openProjectModal() {
       </div>
     </form>
   </div>`;
-  // render() is async — wait for the modal to be in the DOM before binding.
   await render();
-  document.getElementById("modal-cancel")?.addEventListener("click", () => {
+}
+
+// Modal events are delegated at the document level: re-renders replace the DOM
+// nodes, so per-render listeners can be lost when a repaint races the binding.
+document.addEventListener("click", (e) => {
+  const t = e.target;
+  if (t?.id === "modal-cancel" || t?.id === "modal") {
     state.modal = null;
     render();
-  });
-  document.getElementById("modal")?.addEventListener("click", (e) => {
-    if (e.target === e.currentTarget) {
-      state.modal = null;
-      render();
-    }
-  });
-  document.getElementById("project-form")?.addEventListener("submit", async (e) => {
-    e.preventDefault();
-    const body = Object.fromEntries(new FormData(e.target).entries());
-    if (body.capacity_mw) body.capacity_mw = Number(body.capacity_mw);
-    else delete body.capacity_mw;
-    try {
-      const p = await api.createProject(body);
-      state.modal = null;
-      toast("Project created");
-      navigate(`project/${p.id}`);
-    } catch (err) {
-      toast(err.message);
-    }
-  });
-}
+  }
+});
+document.addEventListener("submit", async (e) => {
+  if (e.target?.id !== "project-form") return;
+  e.preventDefault();
+  const body = Object.fromEntries(new FormData(e.target).entries());
+  if (body.capacity_mw) body.capacity_mw = Number(body.capacity_mw);
+  else delete body.capacity_mw;
+  try {
+    const p = await api.createProject(body);
+    state.modal = null;
+    toast("Project created");
+    navigate(`project/${p.id}`);
+  } catch (err) {
+    toast(err.message);
+  }
+});
 
 async function renderDashboard() {
   const me = await ensureAuth();
