@@ -112,10 +112,22 @@ def _set_session(response: Response, user: User, org: Organization, role: str) -
 
 
 @router.post("/signup", response_model=MeResponse)
-def signup(payload: SignupRequest, response: Response, db: Session = Depends(get_db)):
+def signup(
+    payload: SignupRequest,
+    request: Request,
+    response: Response,
+    db: Session = Depends(get_db),
+):
     email = payload.email.lower().strip()
     if db.query(User).filter(User.email == email).first():
         raise HTTPException(status_code=409, detail="Email already registered")
+    # This instance's DB may not have the account, but the browser's signed
+    # account cookie proves it exists (serverless instances don't share SQLite).
+    cookie_token = request.cookies.get(ACCOUNT_COOKIE)
+    if cookie_token:
+        known = read_account_token(cookie_token)
+        if known and known.get("em") == email:
+            raise HTTPException(status_code=409, detail="Email already registered")
 
     base_slug = slugify(payload.org_name)
     slug = base_slug
