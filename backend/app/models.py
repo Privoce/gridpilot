@@ -7,6 +7,7 @@ from pydantic import BaseModel, Field
 
 
 class ISORegion(str, Enum):
+    CAISO = "CAISO"
     MISO = "MISO"
     PJM = "PJM"
     ERCOT = "ERCOT"

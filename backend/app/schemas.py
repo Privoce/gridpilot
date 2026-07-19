@@ -44,7 +44,7 @@ class MeResponse(BaseModel):
 
 class ProjectCreate(BaseModel):
     name: str = Field(min_length=1, max_length=200)
-    iso: Literal["PJM", "MISO", "ERCOT"] = "PJM"
+    iso: Literal["CAISO", "PJM", "MISO", "ERCOT"] = "PJM"
     capacity_mw: Optional[float] = None
     state: Optional[str] = None
     poi_substation: Optional[str] = None
@@ -52,7 +52,7 @@ class ProjectCreate(BaseModel):
 
 class ProjectUpdate(BaseModel):
     name: Optional[str] = None
-    iso: Optional[Literal["PJM", "MISO", "ERCOT"]] = None
+    iso: Optional[Literal["CAISO", "PJM", "MISO", "ERCOT"]] = None
     capacity_mw: Optional[float] = None
     state: Optional[str] = None
     poi_substation: Optional[str] = None

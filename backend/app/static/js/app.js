@@ -35,6 +35,10 @@ let state = {
   fixUi: null,
   /** Simulated upload progress per file slot: {key: {name, size, startedAt}}. */
   uploadUi: {},
+  /** Real-app request wizard: busy overlay, validation result, packet manifest. */
+  reqBusy: null,
+  reqValidation: null,
+  reqPacket: null,
 };
 
 // Simulated upload duration for file widgets.
@@ -552,7 +556,7 @@ async function renderOnboarding() {
     const pid = loadOnboard().packetId;
     if (pid) {
       try {
-        state.packet = await api.caisoPacket(pid);
+        state.packet = await api.caisoPacket(pid, loadOnboard().packetD);
       } catch {
         state.packet = null;
       }
@@ -794,7 +798,29 @@ const PACKET_CATEGORIES = [
   ["reference", "Reference"],
 ];
 
-function packetDocRowHtml(pid, doc) {
+/** base64url-encode the intake so packet URLs are self-contained.
+ *  Serverless instances don't share storage; the server regenerates the packet
+ *  from this parameter when it doesn't have the files locally. */
+function encodeIntakeParam(intake) {
+  try {
+    const json = JSON.stringify(intake);
+    const bytes = new TextEncoder().encode(json);
+    let bin = "";
+    bytes.forEach((b) => { bin += String.fromCharCode(b); });
+    return btoa(bin).replaceAll("+", "-").replaceAll("/", "_").replace(/=+$/, "");
+  } catch {
+    return "";
+  }
+}
+
+/** Query string carrying the intake behind the current packet (may be empty). */
+function packetQS() {
+  const d = loadOnboard().packetD;
+  return d ? `?d=${d}` : "";
+}
+
+function packetDocRowHtml(pid, doc, qs = null) {
+  const q = qs == null ? packetQS() : qs;
   const ok = doc.status === "generated";
   const chip = ok
     ? `<span class="rounded-pill border border-ok/30 bg-ok-soft px-2 py-0.5 font-mono text-[10px] uppercase tracking-[0.06em] text-ok">${esc(doc.status_label)}</span>`
@@ -810,8 +836,8 @@ function packetDocRowHtml(pid, doc) {
         ${doc.note ? `<p class="mt-1 text-[12px] text-muted">${esc(doc.note)}</p>` : ""}
       </div>
       <button type="button" class="${button("ghost", "sm")}"
-        data-drawer-url="/api/caiso/packets/${esc(pid)}/preview/${encodeURIComponent(doc.file)}"
-        data-drawer-download="/api/caiso/packets/${esc(pid)}/files/${encodeURIComponent(doc.file)}"
+        data-drawer-url="/api/caiso/packets/${esc(pid)}/preview/${encodeURIComponent(doc.file)}${q}"
+        data-drawer-download="/api/caiso/packets/${esc(pid)}/files/${encodeURIComponent(doc.file)}${q}"
         data-drawer-title="${esc(doc.title)}" data-drawer-file="${esc(doc.file)}">Preview</button>
     </article>`;
 }
@@ -842,7 +868,7 @@ function renderWizardStep(step) {
       </div>
       ${footer(
         `<button type="button" class="${button("ghost", "sm")}" id="wiz-reset">Restart demo</button>`,
-        `${p ? `<a class="${button("ghost")}" href="/api/caiso/packets/${esc(p.id)}/files/${encodeURIComponent(p.zip_file)}">Download packet (.zip)</a>` : ""}
+        `${p ? `<a class="${button("ghost")}" href="/api/caiso/packets/${esc(p.id)}/files/${encodeURIComponent(p.zip_file)}${packetQS()}">Download packet (.zip)</a>` : ""}
          <a class="${button("primary")}" href="#/dashboard">Open workspace</a>`
       )}`;
   }
@@ -1220,7 +1246,7 @@ function renderWizardStep(step) {
         `<button type="button" class="${button("primary")}" id="wiz-generate">Regenerate packet</button>`
       )}`;
   }
-  const zipUrl = `/api/caiso/packets/${esc(p.id)}/files/${encodeURIComponent(p.zip_file)}`;
+  const zipUrl = `/api/caiso/packets/${esc(p.id)}/files/${encodeURIComponent(p.zip_file)}${packetQS()}`;
   return `
     <div class="flex-1 p-7">
       <p class="mb-2 font-mono text-[12px] uppercase tracking-[0.12em] text-muted">Step 6 of ${WIZARD_LAST}</p>
@@ -1329,7 +1355,7 @@ async function startWizardGeneration() {
       return;
     }
     state.packet = res.packet;
-    saveOnboard({ packetId: res.packet.id });
+    saveOnboard({ packetId: res.packet.id, packetD: encodeIntakeParam(intake) });
     setWizardStep(6);
     toast(`Packet ready — ${res.packet.documents.length} documents`);
     paintOnboarding(6);
@@ -1663,7 +1689,7 @@ async function openProjectModal() {
     <form class="${panel} w-full max-w-md p-6" id="project-form">
       <h3 class="mb-4 text-lg tracking-tightish">Add project</h3>
       <div class="mb-3"><label class="${label}">Project name</label><input class="${field}" name="name" required /></div>
-      <div class="mb-3"><label class="${label}">ISO / RTO</label><select class="${field}" name="iso"><option>PJM</option><option>MISO</option><option>ERCOT</option></select></div>
+      <div class="mb-3"><label class="${label}">ISO / RTO</label><select class="${field}" name="iso"><option>CAISO</option><option>PJM</option><option>MISO</option><option>ERCOT</option></select></div>
       <div class="mb-3"><label class="${label}">Capacity (MW)</label><input class="${field}" name="capacity_mw" type="number" step="0.1" /></div>
       <div class="mb-3"><label class="${label}">State</label><input class="${field}" name="state" placeholder="IN" /></div>
       <div class="mb-5"><label class="${label}">POI substation</label><input class="${field}" name="poi_substation" /></div>
@@ -1817,6 +1843,484 @@ async function renderProjects() {
   document.getElementById("new-project-btn")?.addEventListener("click", () => openProjectModal());
 }
 
+/* ---------- Real-app CAISO request wizard (per project, real AI extraction) ----------
+ * User flow: project → upload kickoff documents → AI extraction (Grok reads the
+ * actual files) → editable intake → validation against CAISO rules → packet
+ * generation → download. Same engine as the guided demo, but with the user's
+ * own documents and a real model call.
+ */
+const REQ_META = [
+  { n: 1, label: "Documents" },
+  { n: 2, label: "Intake" },
+  { n: 3, label: "Validate" },
+  { n: 4, label: "Packet" },
+];
+const reqFiles = {}; // slot -> File (bytes live only in this browser session)
+
+function reqStorageKey(pid) {
+  return `gp_request_${pid}`;
+}
+
+function loadReq(pid) {
+  try {
+    return JSON.parse(localStorage.getItem(reqStorageKey(pid)) || "{}");
+  } catch {
+    return {};
+  }
+}
+
+function saveReq(pid, patch) {
+  const next = { ...loadReq(pid), ...patch, updatedAt: Date.now() };
+  localStorage.setItem(reqStorageKey(pid), JSON.stringify(next));
+  return next;
+}
+
+/** Blank intake for real projects — no demo defaults, selects on first option. */
+function blankIntake(project) {
+  const intake = {};
+  for (const section of state.caisoSchema?.sections || []) {
+    for (const f of section.fields) {
+      if (f.type === "file") continue;
+      intake[f.key] = f.type === "select" ? (f.options?.[0] ?? "") : "";
+      // "Received from vendor" requires the file — pending is the honest blank state.
+      if (f.key === "dyd_status" && f.options?.includes("Requested — pending")) {
+        intake[f.key] = "Requested — pending";
+      }
+    }
+  }
+  if (project) {
+    intake.project_name = project.name || "";
+    if (project.capacity_mw) intake.net_mw_poi = project.capacity_mw;
+    if (project.poi_substation) intake.poi_name = project.poi_substation;
+  }
+  return intake;
+}
+
+function reqStepperHtml(active) {
+  return `
+  <ol class="mb-6 flex items-start justify-between gap-1">
+    ${REQ_META.map((s, idx) => {
+      const done = active > s.n;
+      const current = active === s.n;
+      return `
+      <li class="flex min-w-0 flex-1 items-start">
+        <div class="w-full text-center">
+          <span class="mx-auto mb-1.5 flex h-7 w-7 items-center justify-center rounded-full border text-[11px] font-mono ${
+            current ? "border-ink bg-ink text-primary-fg" : done ? "border-ok/40 bg-ok-soft text-ok" : "border-line bg-surface text-muted"
+          }">${done ? "✓" : s.n}</span>
+          <span class="hidden text-[11px] font-mono uppercase tracking-[0.08em] sm:block ${current ? "text-ink" : "text-muted"}">${esc(s.label)}</span>
+        </div>
+        ${idx < REQ_META.length - 1 ? `<span class="mt-3.5 h-px min-w-[8px] flex-1 bg-line"></span>` : ""}
+      </li>`;
+    }).join("")}
+  </ol>`;
+}
+
+function reqFileSlotHtml(f, meta) {
+  const picked = reqFiles[f.key] || null;
+  const has = picked || (meta && meta.name);
+  const name = picked?.name || meta?.name || "";
+  const size = picked?.size ?? meta?.size ?? 0;
+  const stale = !picked && meta?.name; // metadata from a previous session; bytes gone
+  return `
+    <div>
+      <label class="${label}">${esc(f.label)} ${f.required ? '<span class="text-danger">*</span>' : ""}</label>
+      <div class="flex items-center gap-3 rounded-card border border-dashed px-3 py-2.5 ${has ? "border-line bg-soft" : f.required ? "border-danger/40 bg-danger-soft/40" : "border-line bg-soft"}">
+        ${
+          has
+            ? `<div class="min-w-0 flex-1">
+                 <p class="truncate text-[13px] text-ink" title="${esc(name)}">${esc(name)}</p>
+                 <p class="font-mono text-[11px] text-muted">${esc(fmtBytes(size))}${stale ? " · re-attach to extract again" : ""}</p>
+               </div>
+               <button type="button" class="${button("ghost", "sm")}" data-req-attach="${esc(f.key)}">Replace</button>
+               <button type="button" class="${button("ghost", "sm")}" data-req-remove="${esc(f.key)}">Remove</button>`
+            : `<span class="flex-1 text-[13px] text-muted">No file attached</span>
+               <button type="button" class="${button("ghost", "sm")}" data-req-attach="${esc(f.key)}">Choose file</button>`
+        }
+        <input type="file" class="hidden" data-req-input="${esc(f.key)}" ${f.accept ? `accept="${esc(f.accept)}"` : ""} />
+      </div>
+      ${f.hint ? `<p class="mt-1 text-[11px] leading-snug text-muted">${esc(f.hint)}</p>` : ""}
+    </div>`;
+}
+
+async function renderRequest(projectId) {
+  const me = await ensureAuth();
+  if (!me) return;
+  await ensureCaisoSchema();
+
+  let project = null;
+  try {
+    project = (await api.project(projectId)).project;
+  } catch (err) {
+    toast(err.message);
+    return navigate("projects");
+  }
+
+  const req = loadReq(projectId);
+  const step = Math.min(4, Math.max(1, Number(req.step || 1)));
+  const intake = { ...blankIntake(project), ...(req.intake || {}) };
+  const prov = req.prov || {};
+  // Arriving at Validate without a result (e.g. after a refresh) — validate now.
+  if (step === 3 && !state.reqValidation && !state.reqBusy) {
+    try {
+      state.reqValidation = await api.caisoValidate(intake);
+    } catch {
+      state.reqValidation = null;
+    }
+  }
+  const docSection = (state.caisoSchema?.sections || []).find((s) => s.id === "documents");
+
+  const footer = (left, right) => `
+    <div class="flex items-center justify-between gap-3 border-t border-line bg-soft px-6 py-3.5">
+      <div class="flex flex-wrap gap-2">${left || ""}</div>
+      <div class="flex flex-wrap justify-end gap-2">${right || ""}</div>
+    </div>`;
+
+  let body = "";
+
+  if (state.reqBusy) {
+    body = `
+      <div class="flex-1 p-7">
+        <p class="mb-2 font-mono text-[12px] uppercase tracking-[0.12em] text-muted">${esc(state.reqBusy.title)}</p>
+        <h2 class="mb-3 text-2xl tracking-tightish">${esc(state.reqBusy.heading)}</h2>
+        <div class="rounded-card border border-focus/20 bg-info-soft p-4">
+          <div class="flex gap-3">
+            <div class="gp-spin mt-0.5 h-4 w-4 shrink-0 rounded-full border-2 border-focus/30 border-t-focus"></div>
+            <p class="text-[14px] text-ink">${esc(state.reqBusy.detail)}</p>
+          </div>
+          <div class="gp-audit-progress mt-4"><span></span></div>
+        </div>
+      </div>`;
+  } else if (step === 1) {
+    const files = (docSection?.fields || []).map((f) => reqFileSlotHtml(f, intake[f.key])).join("");
+    const attached = Object.keys(reqFiles).length;
+    body = `
+      <div class="flex-1 p-7">
+        <p class="mb-2 font-mono text-[12px] uppercase tracking-[0.12em] text-muted">Step 1 of 4</p>
+        <h2 class="mb-3 text-2xl tracking-tightish">Kickoff documents</h2>
+        <p class="mb-5 max-w-2xl text-[15px] leading-relaxed text-muted">
+          Attach the documents you already have — executed site agreement, technical workbook,
+          storage specification, signatory proof, vendor models, parcel boundary. GridPilot reads
+          them and populates the intake form; every value remains editable.
+        </p>
+        <div class="grid gap-x-4 gap-y-3">${files}</div>
+      </div>
+      ${footer(
+        `<a class="${button("ghost")}" href="#/project/${esc(projectId)}">Back to project</a>`,
+        `<button type="button" class="${button("ghost")}" id="req-skip">Enter data manually</button>
+         <button type="button" class="${button("primary")}" id="req-extract" ${attached ? "" : "disabled"}>Extract data with AI</button>`
+      )}`;
+  } else if (step === 2) {
+    const sections = (state.caisoSchema?.sections || []).filter((s) => s.id !== "documents");
+    const v = state.reqValidation;
+    const errs = {};
+    for (const e of v?.errors || []) if (e.field) errs[e.field] = e.title;
+    body = `
+      <div class="flex-1 p-7">
+        <p class="mb-2 font-mono text-[12px] uppercase tracking-[0.12em] text-muted">Step 2 of 4</p>
+        <h2 class="mb-3 text-2xl tracking-tightish">Intake</h2>
+        <p class="mb-5 max-w-2xl text-[15px] leading-relaxed text-muted">
+          Fields marked <span class="rounded-pill border border-focus/30 bg-info-soft px-1.5 font-mono text-[10px] uppercase tracking-[0.06em] text-focus">AI</span>
+          were extracted from your documents — review them before validating.
+        </p>
+        <form id="req-intake-form" class="space-y-6">
+          ${sections
+            .map(
+              (sec) => `
+            <fieldset>
+              <legend class="mb-3 border-b border-line pb-1.5 font-mono text-[11px] uppercase tracking-[0.1em] text-muted">${esc(sec.title)}</legend>
+              <div class="grid gap-x-4 gap-y-3 sm:grid-cols-2">
+                ${sec.fields.map((f) => intakeFieldHtml(f, intake, prov, errs)).join("")}
+              </div>
+            </fieldset>`
+            )
+            .join("")}
+        </form>
+      </div>
+      ${footer(
+        `<button type="button" class="${button("ghost")}" id="req-back-1">Back to documents</button>`,
+        `<button type="button" class="${button("primary")}" id="req-validate">Validate inputs</button>`
+      )}`;
+  } else if (step === 3) {
+    const v = state.reqValidation;
+    const checks = v?.checks || [];
+    const errCount = (v?.errors || []).length;
+    const cards = checks
+      .map((it) => {
+        const kind = it.status === "error" ? "error" : it.status === "warn" ? "warn" : "ok";
+        const [tone, itone, icon] =
+          kind === "error"
+            ? ["border-danger/25 bg-danger-soft", "text-danger", "✕"]
+            : kind === "warn"
+              ? ["border-warn/30 bg-warn-soft", "text-ink", "!"]
+              : ["border-ok/20 bg-ok-soft", "text-ok", "✓"];
+        const reqBtn = it.rule
+          ? `<button type="button" class="${button("ghost", "sm")}"
+               data-drawer-url="/api/caiso/requirements/${esc(it.rule.id)}/preview"
+               data-drawer-title="ISO requirement — ${esc(it.rule.title)}"
+               data-drawer-file="${esc(it.rule.source)}">Requirement</button>`
+          : "";
+        return `
+        <article class="rounded-card border ${tone} p-3.5">
+          <div class="flex gap-2.5">
+            <span class="mt-0.5 font-mono text-[13px] ${itone}">${icon}</span>
+            <div class="min-w-0 flex-1">
+              <div class="flex flex-wrap items-center gap-2">
+                <strong class="text-[13.5px] tracking-tightish">${esc(it.title)}</strong>
+                <span class="rounded-pill border px-1.5 font-mono text-[9px] uppercase tracking-[0.07em] ${kind === "error" ? "border-danger/30 text-danger" : kind === "warn" ? "border-warn/40 text-ink" : "border-ok/30 text-ok"}">${kind === "error" ? "Blocking" : kind === "warn" ? "Advisory" : "Passed"}</span>
+              </div>
+              <p class="mt-0.5 text-[12.5px] leading-snug text-muted">${esc(it.detail)}</p>
+              ${reqBtn ? `<div class="mt-2">${reqBtn}</div>` : ""}
+            </div>
+          </div>
+        </article>`;
+      })
+      .join("");
+    body = `
+      <div class="flex-1 p-7">
+        <p class="mb-2 font-mono text-[12px] uppercase tracking-[0.12em] text-muted">Step 3 of 4</p>
+        <h2 class="mb-3 text-2xl tracking-tightish">Validation</h2>
+        ${
+          errCount
+            ? `<div class="mb-4 rounded-card border border-danger/25 bg-danger-soft p-4"><strong class="text-danger">Blocking issues found</strong><p class="mt-0.5 text-[13px] text-muted">${errCount} blocking issue(s) — edit the intake or re-attach corrected documents, then revalidate.</p></div>`
+            : `<div class="mb-4 rounded-card border border-ok/25 bg-ok-soft p-4"><strong class="text-ok">Intake is clean</strong><p class="mt-0.5 text-[13px] text-muted">All blocking checks passed — the packet can be generated.</p></div>`
+        }
+        <div class="space-y-2">${cards}</div>
+      </div>
+      ${footer(
+        `<button type="button" class="${button("ghost")}" id="req-back-2">Edit intake</button>
+         <button type="button" class="${button("ghost")}" id="req-back-1">Documents</button>`,
+        errCount
+          ? `<button type="button" class="${button("primary")}" id="req-back-2b">Fix intake</button>`
+          : `<button type="button" class="${button("primary")}" id="req-generate">Generate packet</button>`
+      )}`;
+  } else {
+    // Step 4 — packet
+    let p = state.reqPacket;
+    if (!p && req.packetId) {
+      try {
+        p = state.reqPacket = await api.caisoPacket(req.packetId, req.packetD);
+      } catch {
+        p = null;
+      }
+    }
+    if (!p) {
+      body = `
+        <div class="flex-1 p-7">
+          <h2 class="mb-3 text-2xl tracking-tightish">Packet unavailable</h2>
+          <p class="mb-5 max-w-xl text-[15px] text-muted">Regenerate the packet from the saved intake.</p>
+        </div>
+        ${footer(
+          `<button type="button" class="${button("ghost")}" id="req-back-3">Back</button>`,
+          `<button type="button" class="${button("primary")}" id="req-generate">Regenerate packet</button>`
+        )}`;
+    } else {
+      const qs = req.packetD ? `?d=${req.packetD}` : "";
+      const zipUrl = `/api/caiso/packets/${esc(p.id)}/files/${encodeURIComponent(p.zip_file)}${qs}`;
+      body = `
+        <div class="flex-1 p-7">
+          <p class="mb-2 font-mono text-[12px] uppercase tracking-[0.12em] text-muted">Step 4 of 4</p>
+          <h2 class="mb-3 text-2xl tracking-tightish">CAISO submission packet — ${esc(p.project_name)}</h2>
+          <div class="mb-5 grid gap-3 sm:grid-cols-4">
+            <div class="rounded-card border border-line bg-soft p-4"><span class="font-mono text-[11px] uppercase tracking-[0.08em] text-muted">Net at POI</span><strong class="mt-1 block">${esc(p.net_mw)} MW</strong></div>
+            <div class="rounded-card border border-line bg-soft p-4"><span class="font-mono text-[11px] uppercase tracking-[0.08em] text-muted">POI</span><strong class="mt-1 block text-[13px]">${esc(p.poi)}</strong></div>
+            <div class="rounded-card border border-line bg-soft p-4"><span class="font-mono text-[11px] uppercase tracking-[0.08em] text-muted">Track</span><strong class="mt-1 block text-[13px]">${esc(p.track)}</strong></div>
+            <div class="rounded-card border border-line bg-soft p-4"><span class="font-mono text-[11px] uppercase tracking-[0.08em] text-muted">Deposit</span><strong class="mt-1 block text-[13px]">${esc(p.deposit)}</strong></div>
+          </div>
+          ${PACKET_CATEGORIES.map(([key, title]) => {
+            const docs = p.documents.filter((doc) => doc.category === key);
+            if (!docs.length) return "";
+            return `
+              <div class="mb-4">
+                <h3 class="mb-2 font-mono text-[11px] uppercase tracking-[0.08em] text-muted">${esc(title)}</h3>
+                <div class="space-y-2">${docs.map((doc) => packetDocRowHtml(p.id, doc, qs)).join("")}</div>
+              </div>`;
+          }).join("")}
+          <div class="rounded-card border border-warn/30 bg-warn-soft p-4">
+            <strong class="mb-2 block">Remaining developer actions</strong>
+            <ol class="list-decimal space-y-1.5 pl-5 text-[13px] text-muted">
+              ${p.actions.map((a) => `<li><strong class="text-ink">${esc(a.title)}.</strong> ${esc(a.detail)}</li>`).join("")}
+            </ol>
+          </div>
+        </div>
+        ${footer(
+          `<button type="button" class="${button("ghost")}" id="req-back-2">Edit intake</button>
+           <button type="button" class="${button("ghost")}" id="req-generate">Regenerate</button>`,
+          `<a class="${button("ghost")}" href="${zipUrl}">Download packet (.zip)</a>
+           <a class="${button("primary")}" href="#/project/${esc(projectId)}">Done</a>`
+        )}`;
+    }
+  }
+
+  root.innerHTML = shell(
+    `Interconnection request — ${project.name}`,
+    `<div class="mx-auto max-w-4xl">
+      ${reqStepperHtml(step)}
+      <div class="${panel} flex min-h-[420px] flex-col overflow-hidden">${body}</div>
+    </div>`,
+    { showChip: false }
+  );
+  bindShell();
+  bindRequest(projectId, step, intake);
+}
+
+function reqRepaint(projectId) {
+  const y = window.scrollY;
+  renderRequest(projectId).then(() => window.scrollTo(0, y));
+}
+
+async function reqRunExtraction(projectId, intake) {
+  const fd = new FormData();
+  for (const [slot, file] of Object.entries(reqFiles)) fd.append(slot, file, file.name);
+  state.reqBusy = {
+    title: "AI extraction",
+    heading: "Reading your documents",
+    detail: "Grok is reading the attached documents and mapping their contents onto the intake form…",
+  };
+  reqRepaint(projectId);
+  try {
+    const res = await api.caisoExtractFiles(fd);
+    const merged = { ...intake, ...(res.fields || {}) };
+    for (const [slot, file] of Object.entries(reqFiles)) {
+      merged[slot] = { name: file.name, size: file.size };
+    }
+    saveReq(projectId, { intake: merged, prov: res.provenance || {}, step: 2 });
+    state.reqBusy = null;
+    toast(res.summary || "Extraction complete");
+  } catch (err) {
+    state.reqBusy = null;
+    toast(`Extraction failed: ${err.message}`);
+  }
+  reqRepaint(projectId);
+}
+
+async function reqRunGeneration(projectId, intake) {
+  state.reqBusy = {
+    title: "Packet generation",
+    heading: "Generating the submission packet",
+    detail: "All fifteen packet documents are generated from the validated intake…",
+  };
+  reqRepaint(projectId);
+  try {
+    const res = await api.caisoGenerate(intake);
+    if (!res?.ok) {
+      state.reqBusy = null;
+      state.reqValidation = res?.validation || null;
+      saveReq(projectId, { step: 3 });
+      toast("Intake has blocking issues — fix and retry");
+    } else {
+      state.reqBusy = null;
+      state.reqPacket = res.packet;
+      saveReq(projectId, {
+        step: 4,
+        packetId: res.packet.id,
+        packetD: encodeIntakeParam(intake),
+      });
+      toast(`Packet ready — ${res.packet.documents.length} documents`);
+    }
+  } catch (err) {
+    state.reqBusy = null;
+    toast(err.message);
+  }
+  reqRepaint(projectId);
+}
+
+function collectReqIntake(projectId, intake) {
+  const values = { ...intake };
+  document.querySelectorAll("[data-intake]").forEach((el) => {
+    const key = el.getAttribute("data-intake");
+    values[key] = el.type === "number" ? (el.value === "" ? "" : Number(el.value)) : el.value;
+  });
+  saveReq(projectId, { intake: values });
+  return values;
+}
+
+function bindRequest(projectId, step, intake) {
+  const repaint = () => reqRepaint(projectId);
+
+  if (step === 1) {
+    document.querySelectorAll("[data-req-attach]").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        document.querySelector(`[data-req-input="${btn.getAttribute("data-req-attach")}"]`)?.click();
+      });
+    });
+    document.querySelectorAll("[data-req-input]").forEach((inp) => {
+      inp.addEventListener("change", () => {
+        const f = inp.files?.[0];
+        if (!f) return;
+        reqFiles[inp.getAttribute("data-req-input")] = f;
+        repaint();
+      });
+    });
+    document.querySelectorAll("[data-req-remove]").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        const key = btn.getAttribute("data-req-remove");
+        delete reqFiles[key];
+        const next = { ...intake };
+        delete next[key];
+        saveReq(projectId, { intake: next });
+        repaint();
+      });
+    });
+    document.getElementById("req-extract")?.addEventListener("click", () => {
+      reqRunExtraction(projectId, intake);
+    });
+    document.getElementById("req-skip")?.addEventListener("click", () => {
+      saveReq(projectId, { step: 2 });
+      repaint();
+    });
+  }
+
+  if (step === 2) {
+    document.getElementById("req-back-1")?.addEventListener("click", () => {
+      collectReqIntake(projectId, intake);
+      saveReq(projectId, { step: 1 });
+      repaint();
+    });
+    document.getElementById("req-validate")?.addEventListener("click", async () => {
+      const values = collectReqIntake(projectId, intake);
+      try {
+        state.reqValidation = await api.caisoValidate(values);
+        saveReq(projectId, { step: 3 });
+      } catch (err) {
+        toast(err.message);
+      }
+      repaint();
+    });
+  }
+
+  if (step === 3) {
+    const goto2 = () => {
+      saveReq(projectId, { step: 2 });
+      repaint();
+    };
+    document.getElementById("req-back-2")?.addEventListener("click", goto2);
+    document.getElementById("req-back-2b")?.addEventListener("click", goto2);
+    document.getElementById("req-back-1")?.addEventListener("click", () => {
+      saveReq(projectId, { step: 1 });
+      repaint();
+    });
+    document.getElementById("req-generate")?.addEventListener("click", () => {
+      reqRunGeneration(projectId, intake);
+    });
+  }
+
+  if (step === 4) {
+    document.getElementById("req-back-2")?.addEventListener("click", () => {
+      saveReq(projectId, { step: 2 });
+      repaint();
+    });
+    document.getElementById("req-back-3")?.addEventListener("click", () => {
+      saveReq(projectId, { step: 3 });
+      repaint();
+    });
+    document.getElementById("req-generate")?.addEventListener("click", () => {
+      state.reqPacket = null;
+      reqRunGeneration(projectId, intake);
+    });
+  }
+}
+
 async function renderProject(id) {
   const me = await ensureAuth();
   if (!me) return;
@@ -1833,8 +2337,9 @@ async function renderProject(id) {
           <div class="mt-1 font-mono text-[12px] text-muted">${esc(p.iso)} · ${p.capacity_mw != null ? esc(p.capacity_mw) + " MW" : "—"} · ${esc(p.poi_substation || p.state || "")}</div>
         </div>
         <div class="flex flex-wrap gap-2">
+          <a class="${button("primary", "sm")}" href="#/request/${esc(p.id)}">Interconnection request</a>
           <label class="${button("ghost", "sm")} cursor-pointer">Upload SLD<input id="draw-file" type="file" accept=".pdf,image/png,image/jpeg" hidden /></label>
-          <button class="${button("primary", "sm")}" id="run-audit" ${data.drawings.length ? "" : "disabled"}>Run audit</button>
+          <button class="${button("ghost", "sm")}" id="run-audit" ${data.drawings.length ? "" : "disabled"}>Run SLD audit</button>
         </div>
       </div>
     </div>
@@ -2150,6 +2655,7 @@ async function render() {
     if (r.name === "onboarding") return renderOnboarding();
     if (r.name === "projects") return renderProjects();
     if (r.name === "project" && r.id) return renderProject(r.id);
+    if (r.name === "request" && r.id) return renderRequest(r.id);
     if (r.name === "audits") return renderAudits();
     if (r.name === "audit" && r.id) return renderAudit(r.id);
     if (r.name === "billing") return renderBilling();

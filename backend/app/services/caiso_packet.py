@@ -7,11 +7,11 @@ plots, and legal drafts — as a downloadable submission packet.
 
 from __future__ import annotations
 
+import hashlib
 import json
 import math
 import re
 import shutil
-import uuid
 import zipfile
 from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
@@ -1539,13 +1539,24 @@ def _gen_readme(intake: dict, d: dict, docs: list[dict], path: Path) -> None:
 # Packet assembly
 # ---------------------------------------------------------------------------
 
+def packet_id_for(intake: dict[str, Any], org_id: str) -> str:
+    """Deterministic packet id — the same intake always maps to the same id.
+
+    Serverless instances don't share /tmp, so a packet generated on one instance
+    may be requested from another. A content-derived id lets any instance
+    regenerate the identical packet on demand (see routers/caiso.py).
+    """
+    canonical = json.dumps({"org": org_id, "intake": intake}, sort_keys=True, default=str)
+    return hashlib.sha256(canonical.encode("utf-8")).hexdigest()[:12]
+
+
 def generate_packet(intake: dict[str, Any], org_id: str) -> dict[str, Any]:
     validation = validate_intake(intake)
     if not validation["ok"]:
         raise ValueError("Intake has blocking issues; resolve them before generating the packet.")
 
     d = _derived(intake)
-    pid = uuid.uuid4().hex[:12]
+    pid = packet_id_for(intake, org_id)
     pdir = PACKETS_DIR / pid
     pdir.mkdir(parents=True, exist_ok=True)
     slug = _slug(str(intake.get("project_name")))

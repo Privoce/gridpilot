@@ -1,0 +1,65 @@
+iso: CAISO
+name: CAISO generator interconnection (GIDAP)
+description: >
+  California ISO generator interconnection under the Generator Interconnection and
+  Deliverability Allocation Procedures (Tariff Appendix DD), including the SLD and
+  technical-data expectations behind the Interconnection Request checklist.
+version: "2026.1-gidap"
+references:
+  - CAISO Tariff Appendix DD (GIDAP)
+  - CAISO Interconnection Request technical data forms (Appendix 1 / Attachment A)
+  - FERC Order 2023
+  - FERC Order 842 (primary frequency response)
+  - NERC VAR-002
+  - WECC dynamic model requirements (MOD-026 / MOD-027)
+rules:
+  - id: C-POI-01
+    severity: blocking
+    title: POI voltage and ownership demarcation labeled
+    check: poi_and_metering
+    description: The SLD must label the POI voltage, revenue metering, and the ownership/operational demarcation.
+    recommendation: Label POI kV, revenue meter, and change-of-ownership line clearly.
+
+  - id: C-PROTECT-01
+    severity: blocking
+    title: Protective relays with ANSI function numbers
+    check: ansi_relay_labels
+    description: All protective relays must be labeled with ANSI device numbers (27/59/81/67, etc.).
+    recommendation: Annotate each relay with its ANSI function numbers.
+
+  - id: C-METER-01
+    severity: blocking
+    title: CT/PT ratios at POI metering
+    check: ct_pt_ratios
+    description: CT and PT ratios must be shown for interconnection revenue metering.
+    recommendation: Add CT/PT ratios matching the metering design package.
+
+  - id: C-IBR-01
+    severity: blocking
+    title: IBR reactive capability documented
+    check: ibr_capability
+    description: >
+      Inverter-based resources must document reactive capability (±0.95 PF at the POI),
+      primary frequency response (FERC 842), and voltage control mode.
+    recommendation: Attach P-Q capability, PFR/droop, and voltage-control notes from inverter data.
+
+  - id: C-XFMR-01
+    severity: warning
+    title: GSU / station transformer data
+    check: transformer_mva
+    description: Transformer MVA, impedance (%Z), and voltage ratios support CAISO study modeling.
+    recommendation: Annotate MVA, %Z, and kV ratio on each GSU / station transformer.
+
+  - id: C-TITLE-01
+    severity: warning
+    title: Revision block complete
+    check: title_revision_date
+    description: Drawings should carry a revision letter and date consistent with the submission.
+    recommendation: Complete revision letter and date in the title block.
+
+  - id: C-CAP-01
+    severity: warning
+    title: Project MW vs equipment schedule
+    check: capacity_consistency
+    description: Stated project MW should match inverter/transformer equipment totals and the MW chain in Attachment A.
+    recommendation: Align title-block MW with equipment schedule totals and the intake MW chain.

@@ -63,5 +63,7 @@ export const api = {
   caisoExtract: (files) => request("/api/caiso/extract", { method: "POST", body: { files } }),
   caisoValidate: (intake) => request("/api/caiso/validate", { method: "POST", body: intake }),
   caisoGenerate: (intake) => request("/api/caiso/generate", { method: "POST", body: intake }),
-  caisoPacket: (id) => request(`/api/caiso/packets/${id}`),
+  caisoPacket: (id, d) => request(`/api/caiso/packets/${id}${d ? `?d=${d}` : ""}`),
+  caisoExtractFiles: (formData) =>
+    request("/api/caiso/extract-files", { method: "POST", body: formData }),
 };

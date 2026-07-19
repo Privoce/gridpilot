@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import base64
+import json
 from typing import Any
 
 from fastapi import APIRouter, Body, Depends, HTTPException, Request
@@ -27,6 +29,39 @@ from backend.app.services.packet_preview import (
 
 router = APIRouter(prefix="/api/caiso", tags=["caiso"])
 
+
+def _decode_intake_param(d: str | None) -> dict[str, Any] | None:
+    """Decode the base64url intake JSON clients attach to packet URLs."""
+    if not d:
+        return None
+    try:
+        raw = base64.urlsafe_b64decode(d + "=" * (-len(d) % 4))
+        intake = json.loads(raw.decode("utf-8"))
+        return intake if isinstance(intake, dict) else None
+    except Exception:
+        return None
+
+
+def _resolve_manifest(packet_id: str, request: Request, auth: AuthContext) -> dict[str, Any]:
+    """Load a packet manifest, regenerating it if this instance doesn't have it.
+
+    Serverless instances don't share /tmp. Packet URLs carry the validated intake
+    (`?d=`); the id is content-derived, so any instance can rebuild the identical
+    packet on demand.
+    """
+    manifest = load_manifest(packet_id)
+    if manifest and manifest.get("org_id") == auth.org.id:
+        return manifest
+    intake = _decode_intake_param(request.query_params.get("d"))
+    if intake:
+        try:
+            manifest = generate_packet(intake, auth.org.id)
+        except ValueError:
+            manifest = None
+        if manifest:
+            return manifest
+    raise HTTPException(status_code=404, detail="Packet not found")
+
 MEDIA_TYPES = {
     ".pdf": "application/pdf",
     ".xlsx": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
@@ -48,8 +83,39 @@ def post_extract(
     body: dict[str, Any] = Body(...),
     auth: AuthContext = Depends(get_auth),
 ):
-    """AI extraction of intake fields from the uploaded kickoff documents."""
+    """Extraction over document *metadata* — used by the guided demo's example files."""
     return extract_from_documents(body.get("files") or {})
+
+
+@router.post("/extract-files")
+async def post_extract_files(request: Request, auth: AuthContext = Depends(get_auth)):
+    """Real AI extraction from uploaded document bytes (multipart form).
+
+    Each form part is named after its upload slot (file_site_control,
+    file_technical, …). Grok reads the parsed document text and returns
+    intake fields with per-field provenance.
+    """
+    from backend.app.services.caiso_extract_ai import (
+        SLOT_LABELS,
+        ExtractionError,
+        extract_intake_from_uploads,
+    )
+
+    form = await request.form()
+    docs: dict[str, tuple[str, bytes]] = {}
+    for slot in SLOT_LABELS:
+        part = form.get(slot)
+        if part is None or isinstance(part, str):
+            continue
+        data = await part.read()
+        if data:
+            docs[slot] = (part.filename or slot, data)
+    if not docs:
+        raise HTTPException(status_code=400, detail="Attach at least one document")
+    try:
+        return await extract_intake_from_uploads(docs)
+    except ExtractionError as exc:
+        raise HTTPException(status_code=502, detail=str(exc))
 
 
 @router.post("/validate")
@@ -111,19 +177,16 @@ def preview_requirement(rule_id: str, auth: AuthContext = Depends(get_auth)):
 
 
 @router.get("/packets/{packet_id}")
-def get_packet(packet_id: str, auth: AuthContext = Depends(get_auth)):
-    manifest = load_manifest(packet_id)
-    if not manifest or manifest.get("org_id") != auth.org.id:
-        raise HTTPException(status_code=404, detail="Packet not found")
-    return manifest
+def get_packet(packet_id: str, request: Request, auth: AuthContext = Depends(get_auth)):
+    return _resolve_manifest(packet_id, request, auth)
 
 
 @router.get("/packets/{packet_id}/files/{filename}")
-def get_packet_file(packet_id: str, filename: str, auth: AuthContext = Depends(get_auth)):
-    manifest = load_manifest(packet_id)
-    if not manifest or manifest.get("org_id") != auth.org.id:
-        raise HTTPException(status_code=404, detail="Packet not found")
-    path = packet_file(packet_id, filename)
+def get_packet_file(
+    packet_id: str, filename: str, request: Request, auth: AuthContext = Depends(get_auth)
+):
+    manifest = _resolve_manifest(packet_id, request, auth)
+    path = packet_file(manifest["id"], filename)
     if not path:
         raise HTTPException(status_code=404, detail="File not found")
     suffix = path.suffix.lower()
@@ -134,16 +197,19 @@ def get_packet_file(packet_id: str, filename: str, auth: AuthContext = Depends(g
 
 
 @router.get("/packets/{packet_id}/preview/{filename}", response_class=HTMLResponse)
-def preview_packet_file(packet_id: str, filename: str, auth: AuthContext = Depends(get_auth)):
+def preview_packet_file(
+    packet_id: str, filename: str, request: Request, auth: AuthContext = Depends(get_auth)
+):
     """Styled in-browser preview for any packet document (xlsx, kmz, epc/dyd, md, pdf)."""
-    manifest = load_manifest(packet_id)
-    if not manifest or manifest.get("org_id") != auth.org.id:
-        raise HTTPException(status_code=404, detail="Packet not found")
-    path = packet_file(packet_id, filename)
+    manifest = _resolve_manifest(packet_id, request, auth)
+    path = packet_file(manifest["id"], filename)
     if not path:
         raise HTTPException(status_code=404, detail="File not found")
     doc = next((d for d in manifest["documents"] if d["file"] == filename), {"file": filename})
-    download_url = f"/api/caiso/packets/{packet_id}/files/{filename}"
+    d_param = request.query_params.get("d")
+    download_url = f"/api/caiso/packets/{manifest['id']}/files/{filename}" + (
+        f"?d={d_param}" if d_param else ""
+    )
     try:
         return HTMLResponse(render_preview(manifest, doc, path, download_url))
     except Exception:

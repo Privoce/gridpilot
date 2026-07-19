@@ -188,7 +188,16 @@ def start_demo(response: Response, db: Session = Depends(get_db)):
     drawing = _ensure_drawing(db, project, user.id)
     db.commit()
 
-    token = create_session_token(user.id)
+    token = create_session_token(
+        user.id,
+        email=user.email,
+        name=user.name,
+        org_id=org.id,
+        org_name=org.name,
+        org_slug=org.slug,
+        plan=org.plan.value,
+        role=membership.role.value,
+    )
     response.set_cookie(
         key=settings.session_cookie,
         value=token,

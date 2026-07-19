@@ -28,8 +28,17 @@ def _me_payload(user: User, org: Organization, role: str, project_count: int) ->
     }
 
 
-def _set_session(response: Response, user_id: str) -> None:
-    token = create_session_token(user_id)
+def _set_session(response: Response, user: User, org: Organization, role: str) -> None:
+    token = create_session_token(
+        user.id,
+        email=user.email,
+        name=user.name,
+        org_id=org.id,
+        org_name=org.name,
+        org_slug=org.slug,
+        plan=org.plan.value,
+        role=role,
+    )
     response.set_cookie(
         key=settings.session_cookie,
         value=token,
@@ -64,7 +73,7 @@ def signup(payload: SignupRequest, response: Response, db: Session = Depends(get
     db.refresh(user)
     db.refresh(org)
 
-    _set_session(response, user.id)
+    _set_session(response, user, org, MemberRole.OWNER.value)
     return _me_payload(user, org, MemberRole.OWNER.value, 0)
 
 
@@ -85,7 +94,7 @@ def login(payload: LoginRequest, response: Response, db: Session = Depends(get_d
     project_count = (
         db.query(Project).filter(Project.org_id == org.id, Project.status == "active").count()
     )
-    _set_session(response, user.id)
+    _set_session(response, user, org, membership.role.value)
     return _me_payload(user, org, membership.role.value, project_count)
 
 

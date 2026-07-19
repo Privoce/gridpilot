@@ -26,6 +26,13 @@ DEMO_EMAIL = "demo@gridpilot.dev"
 DEMO_PASSWORD = "gridpilot"
 SAMPLE_NAME = "cedar_ridge_sld_demo.pdf"
 
+# Fixed IDs so every serverless instance seeds identical rows — a demo session
+# minted on one instance must resolve on any other.
+DEMO_USER_ID = "demouser0001"
+DEMO_ORG_ID = "demoorg00001"
+DEMO_PROJECT_ID = "demoproj0001"
+DEMO_DRAWING_ID = "demodraw0001"
+
 
 def ensure_sample_pdf() -> Path:
     out = ROOT / "samples" / SAMPLE_NAME
@@ -90,11 +97,13 @@ def seed_demo(db: Session) -> None:
         return
 
     user = User(
+        id=DEMO_USER_ID,
         email=DEMO_EMAIL,
         name="Alex Rivera",
         password_hash=hash_password(DEMO_PASSWORD),
     )
     org = Organization(
+        id=DEMO_ORG_ID,
         name="Northwind Renewables",
         slug=slugify("Northwind Renewables"),
         plan=Plan.PRO,
@@ -111,6 +120,7 @@ def seed_demo(db: Session) -> None:
     )
 
     project = Project(
+        id=DEMO_PROJECT_ID,
         org_id=org.id,
         name="Cedar Ridge Solar + Storage",
         iso="MISO",
@@ -134,6 +144,7 @@ def _attach_sample(db: Session, project: Project, user_id: str) -> None:
     shutil.copy2(sample, dest)
     db.add(
         Drawing(
+            id=DEMO_DRAWING_ID,
             project_id=project.id,
             filename=sample.name,
             stored_path=str(dest),

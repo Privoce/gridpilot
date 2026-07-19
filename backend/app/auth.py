@@ -23,17 +23,44 @@ def _serializer() -> URLSafeTimedSerializer:
     return URLSafeTimedSerializer(settings.secret_key, salt="gridpilot-session")
 
 
-def create_session_token(user_id: str) -> str:
-    return _serializer().dumps({"uid": user_id})
+def create_session_token(
+    user_id: str,
+    *,
+    email: str | None = None,
+    name: str | None = None,
+    org_id: str | None = None,
+    org_name: str | None = None,
+    org_slug: str | None = None,
+    plan: str | None = None,
+    role: str | None = None,
+) -> str:
+    """Signed session token carrying identity claims.
+
+    The claims let any server instance reconstruct the account when its local
+    database doesn't have it — required on serverless hosts where each instance
+    keeps its own ephemeral SQLite file.
+    """
+    payload: dict = {"uid": user_id}
+    if email:
+        payload.update({
+            "em": email, "nm": name or email,
+            "oid": org_id, "on": org_name, "os": org_slug,
+            "pl": plan, "rl": role,
+        })
+    return _serializer().dumps(payload)
 
 
-def read_session_token(token: str) -> str | None:
+def read_session_claims(token: str) -> dict | None:
     try:
         data = _serializer().loads(token, max_age=settings.session_max_age)
     except (BadSignature, SignatureExpired):
         return None
-    uid = data.get("uid")
-    return str(uid) if uid else None
+    return data if isinstance(data, dict) and data.get("uid") else None
+
+
+def read_session_token(token: str) -> str | None:
+    claims = read_session_claims(token)
+    return str(claims["uid"]) if claims else None
 
 
 def slugify(value: str) -> str:

@@ -3,24 +3,61 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>GridPilot | Interconnection applications without the consulting firm</title>
+  <title>GridPilot | Interconnection requests without the consulting firm</title>
+  <meta name="description" content="GridPilot turns the documents renewable developers already have into a complete, validated CAISO interconnection request — models, drawings, and forms, generated in minutes." />
+  <link rel="icon" href="assets/img/logo.svg" type="image/svg+xml" />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
-  <link rel="icon" href="assets/img/logo.svg" type="image/svg+xml" />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
   <link rel="stylesheet" href="assets/css/theme.css" />
   <script src="https://cdn.tailwindcss.com"></script>
   <script src="assets/js/theme-config.js"></script>
+  <style>
+    :root {
+      --gu-navy: #081c33;
+      --gu-navy-2: #0b2a4d;
+      --gu-sky: #7fb4ee;
+      --gu-line: rgba(255, 255, 255, 0.14);
+    }
+    .gu-dark {
+      background:
+        radial-gradient(110% 90% at 85% -10%, rgba(47, 111, 237, 0.28), transparent 55%),
+        radial-gradient(80% 70% at 0% 100%, rgba(19, 78, 148, 0.35), transparent 60%),
+        linear-gradient(180deg, var(--gu-navy) 0%, var(--gu-navy-2) 100%);
+      color: #fff;
+    }
+    .gu-eyebrow { color: var(--gu-sky); }
+    .gu-hero-art { position: absolute; inset: 0; pointer-events: none; overflow: hidden; }
+    .gu-hero-art svg { position: absolute; right: -4%; bottom: 0; height: 100%; min-width: 900px; opacity: 0.5; }
+    .gu-stat { border-left: 2px solid rgba(127, 180, 238, 0.55); }
+    .gu-kicker {
+      font-family: var(--gp-font-mono);
+      font-size: 12px;
+      letter-spacing: 0.14em;
+      text-transform: uppercase;
+    }
+    .gu-btn-light {
+      background: #fff; color: var(--gu-navy);
+      transition: opacity 0.15s ease;
+    }
+    .gu-btn-light:hover { opacity: 0.88; }
+    .gu-btn-ghost {
+      border: 1px solid rgba(255, 255, 255, 0.35); color: #fff;
+      transition: border-color 0.15s ease, background 0.15s ease;
+    }
+    .gu-btn-ghost:hover { border-color: rgba(255, 255, 255, 0.7); background: rgba(255, 255, 255, 0.06); }
+  </style>
 </head>
 <body class="bg-canvas text-ink antialiased">
   <header class="sticky top-0 z-20 border-b border-line bg-canvas/90 backdrop-blur">
     <div class="mx-auto flex max-w-gp items-center justify-between gap-6 px-6 py-4">
       <a href="./" class="flex items-center gap-2.5 text-ink no-underline">
         <img src="assets/img/logo.svg" alt="" class="h-7 w-7" />
-        <span class="text-[15px] tracking-tightish">GridPilot</span>
+        <span class="text-[15px] font-semibold tracking-tightish">GridPilot</span>
       </a>
       <nav class="hidden items-center gap-7 text-[14px] text-muted md:flex">
-        <a href="#problem" class="hover:text-ink">Why now</a>
+        <a href="#problem" class="hover:text-ink">The problem</a>
+        <a href="#why" class="hover:text-ink">Why GridPilot</a>
         <a href="#product" class="hover:text-ink">Product</a>
         <a href="#pricing" class="hover:text-ink">Pricing</a>
       </nav>
@@ -32,151 +69,255 @@
   </header>
 
   <main>
-    <section class="mx-auto grid max-w-gp gap-12 px-6 py-16 md:grid-cols-2 md:py-24">
-      <div>
-        <p class="mb-4 font-mono text-[12px] uppercase tracking-[0.12em] text-muted">For renewable developers</p>
-        <h1 class="mb-5 text-4xl font-normal tracking-tightish text-ink md:text-5xl md:leading-[1.1]">
-          GridPilot
+    <!-- Hero -->
+    <section class="gu-dark relative">
+      <div class="gu-hero-art" aria-hidden="true">
+        <svg viewBox="0 0 900 560" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <!-- transmission pylons -->
+          <g stroke="rgba(255,255,255,0.55)" stroke-width="1.5">
+            <path d="M640 560 L680 300 L720 560 M655 470 H705 M648 520 H713 M663 400 H697 M670 345 H690" />
+            <path d="M630 330 H730 M645 300 H715" />
+            <path d="M636 330 L610 302 M724 330 L750 302 M648 300 L632 278 M712 300 L728 278" />
+          </g>
+          <g stroke="rgba(255,255,255,0.4)" stroke-width="1.2">
+            <path d="M310 560 L340 360 L370 560 M322 490 H358 M316 530 H364 M328 430 H352" />
+            <path d="M302 385 H378 M312 360 H368" />
+            <path d="M307 385 L288 364 M373 385 L392 364" />
+          </g>
+          <!-- catenary conductors -->
+          <g stroke="rgba(127,180,238,0.55)" stroke-width="1.2">
+            <path d="M-40 320 Q140 388 288 364 Q460 340 610 302 Q760 268 940 296" />
+            <path d="M-40 348 Q140 416 302 385 Q470 356 630 330 Q780 306 940 330" />
+            <path d="M-40 300 Q150 356 312 360 Q480 360 648 300 Q790 252 940 268" />
+          </g>
+          <!-- node grid -->
+          <g fill="rgba(127,180,238,0.5)">
+            <circle cx="288" cy="364" r="3" /><circle cx="392" cy="364" r="3" />
+            <circle cx="610" cy="302" r="3" /><circle cx="750" cy="302" r="3" />
+            <circle cx="632" cy="278" r="3" /><circle cx="728" cy="278" r="3" />
+          </g>
+          <!-- horizon field -->
+          <g stroke="rgba(255,255,255,0.10)" stroke-width="1">
+            <path d="M0 560 H900 M0 520 H900 M0 484 H900 M0 452 H900" />
+            <path d="M120 560 L200 440 M300 560 L350 440 M480 560 L500 440 M660 560 L650 440 M840 560 L800 440" />
+          </g>
+        </svg>
+      </div>
+      <div class="relative mx-auto max-w-gp px-6 pb-16 pt-20 md:pb-24 md:pt-28">
+        <p class="gu-eyebrow gu-kicker mb-5">For renewable &amp; storage developers</p>
+        <h1 class="mb-6 max-w-3xl text-4xl font-semibold leading-[1.08] tracking-tightish md:text-[56px]">
+          Interconnection requests,<br class="hidden md:block" />
+          without the consulting firm.
         </h1>
-        <p class="mb-3 text-xl tracking-tightish text-ink md:text-2xl">
-          Your interconnection application, <span class="text-muted">without</span> the consulting firm.
+        <p class="mb-9 max-w-xl text-[17px] leading-relaxed text-white/75">
+          GridPilot turns the documents your team already has into a complete, validated CAISO
+          submission packet — the power system models, drawings, and forms a consulting engagement
+          delivers in six weeks, generated in minutes.
         </p>
-        <p class="mb-8 max-w-md text-[16px] leading-relaxed text-muted">
-          Developers pay consultants ~$10k per project and wait 2–4 weeks for the models, drawings, and forms a
-          CAISO interconnection request needs. GridPilot takes the same kickoff inputs and generates the full
-          submission packet — validated for the consistency errors that trigger deficiency review.
-        </p>
-        <div class="flex flex-wrap gap-3">
-          <a href="https://gridpilot-three.vercel.app/app#/demo" class="rounded-pill bg-primary px-5 py-2.5 text-[13px] font-mono uppercase tracking-[0.08em] text-primary-fg">Try Demo</a>
-          <a href="https://gridpilot-three.vercel.app/app#/login" class="rounded-pill border border-line bg-surface px-5 py-2.5 text-[13px] font-mono uppercase tracking-[0.08em] text-ink">Sign in</a>
+        <div class="mb-16 flex flex-wrap gap-3 md:mb-20">
+          <a href="https://gridpilot-three.vercel.app/app#/demo" class="gu-btn-light rounded-pill px-6 py-3 text-[13px] font-mono uppercase tracking-[0.08em]">Try Demo</a>
+          <a href="#product" class="gu-btn-ghost rounded-pill px-6 py-3 text-[13px] font-mono uppercase tracking-[0.08em]">See how it works</a>
+        </div>
+        <div class="grid max-w-2xl gap-6 sm:grid-cols-3">
+          <div class="gu-stat pl-4">
+            <p class="text-3xl font-semibold tabular-nums tracking-tightish">15</p>
+            <p class="mt-1 text-[13px] leading-snug text-white/65">documents in every submission packet, generated from one intake</p>
+          </div>
+          <div class="gu-stat pl-4">
+            <p class="text-3xl font-semibold tabular-nums tracking-tightish">6–10 wks</p>
+            <p class="mt-1 text-[13px] leading-snug text-white/65">of consulting turnaround replaced by a same-day workflow</p>
+          </div>
+          <div class="gu-stat pl-4">
+            <p class="text-3xl font-semibold tabular-nums tracking-tightish">~$10k</p>
+            <p class="mt-1 text-[13px] leading-snug text-white/65">in consulting fees avoided on every filing</p>
+          </div>
         </div>
       </div>
-
-      <aside class="gp-accent-panel relative overflow-hidden rounded-card p-5 md:p-6">
-        <div class="absolute left-3 top-3 h-2 w-2 border border-white/70"></div>
-        <div class="absolute right-3 top-3 h-2 w-2 border border-white/70"></div>
-        <div class="absolute bottom-3 left-3 h-2 w-2 border border-white/70"></div>
-        <div class="absolute bottom-3 right-3 h-2 w-2 border border-white/70"></div>
-        <div class="rounded-card border border-line bg-surface p-5 shadow-sm">
-          <p class="mb-4 font-mono text-[11px] uppercase tracking-[0.12em] text-muted">Who we serve</p>
-          <dl class="space-y-3 text-[14px]">
-            <div class="flex justify-between gap-4 border-t border-line pt-3 first:border-0 first:pt-0">
-              <dt class="text-muted">Buyer</dt>
-              <dd class="text-right text-ink">Developer / IPP teams</dd>
-            </div>
-            <div class="flex justify-between gap-4 border-t border-line pt-3">
-              <dt class="text-muted">Job to be done</dt>
-              <dd class="text-right text-ink">Interconnection request assembly</dd>
-            </div>
-            <div class="flex justify-between gap-4 border-t border-line pt-3">
-              <dt class="text-muted">Primary artifact</dt>
-              <dd class="text-right text-ink">Full submission packet (15 docs)</dd>
-            </div>
-            <div class="flex justify-between gap-4 border-t border-line pt-3">
-              <dt class="text-muted">Demo market</dt>
-              <dd class="text-right text-ink">CAISO · Independent Study Process</dd>
-            </div>
-          </dl>
-        </div>
-      </aside>
     </section>
 
-    <section id="problem" class="border-t border-line">
-      <div class="mx-auto max-w-gp px-6 py-16 md:py-20">
-        <p class="mb-3 font-mono text-[12px] uppercase tracking-[0.12em] text-muted">US interconnection map</p>
-        <h2 class="mb-3 text-3xl tracking-tightish text-ink">Three roles. One filing bottleneck.</h2>
-        <p class="mb-10 max-w-2xl text-[15px] leading-relaxed text-muted">
-          There is no national grid company in the US — generation and wires are private.
-          Policy and markets are shaped by FERC and regional ISOs. Developers still assemble the application.
+    <!-- Standards strip -->
+    <section class="border-b border-line bg-soft">
+      <div class="mx-auto flex max-w-gp flex-wrap items-center justify-between gap-x-8 gap-y-2 px-6 py-4">
+        <span class="gu-kicker text-faint">Built on the ISO's own requirements</span>
+        <div class="flex flex-wrap items-center gap-x-7 gap-y-1 font-mono text-[12px] uppercase tracking-[0.1em] text-muted">
+          <span>CAISO GIDAP</span><span>ISP / Fast Track</span><span>Appendix 1</span><span>Attachment A</span><span>GE PSLF</span><span>RIMS5</span>
+        </div>
+      </div>
+    </section>
+
+    <!-- The problem -->
+    <section id="problem" class="scroll-mt-20">
+      <div class="mx-auto max-w-gp px-6 py-16 md:py-24">
+        <p class="gu-kicker mb-3 text-muted">The problem</p>
+        <h2 class="mb-4 max-w-2xl text-3xl font-semibold tracking-tightish text-ink md:text-4xl">
+          The queue is growing. The filing process isn't keeping up.
+        </h2>
+        <p class="mb-12 max-w-2xl text-[16px] leading-relaxed text-muted">
+          Over two terawatts of generation and storage are waiting in US interconnection queues.
+          Before a project can even enter one, its developer assembles a thick application — and today
+          that means paying a consulting firm to build models, drawings, and forms by hand, then waiting
+          weeks for a packet that may still bounce on a deficiency review.
         </p>
         <div class="grid gap-4 md:grid-cols-3">
           <article class="rounded-card border border-line bg-surface p-6">
-            <p class="font-mono text-[11px] uppercase tracking-[0.1em] text-muted">01 · Utility</p>
-            <h3 class="mt-2 mb-2 text-[17px] tracking-tightish">The wire + retail operator</h3>
+            <p class="gu-kicker text-muted">Cost</p>
+            <h3 class="mb-2 mt-3 text-[17px] font-semibold tracking-tightish">~$10k per filing, every filing</h3>
             <p class="text-[14px] leading-relaxed text-muted">
-              Who you pay for electricity. For smaller projects (often under a local MW threshold), the utility is the primary application counterparty — via portals like PowerClerk.
-            </p>
-          </article>
-          <article class="rounded-card border border-ink bg-surface p-6">
-            <p class="font-mono text-[11px] uppercase tracking-[0.1em] text-muted">02 · Developer · our user</p>
-            <h3 class="mt-2 mb-2 text-[17px] tracking-tightish">Builds the plant</h3>
-            <p class="text-[14px] leading-relaxed text-muted">
-              Sites the project, runs studies, and files a thick interconnection application so the plant can connect — whether the offtake is the utility, a market, or behind-the-meter use.
+              Each interconnection request is a bespoke consulting engagement. Revisions after a
+              deficiency letter mean paying again — and portfolio developers file dozens of these.
             </p>
           </article>
           <article class="rounded-card border border-line bg-surface p-6">
-            <p class="font-mono text-[11px] uppercase tracking-[0.1em] text-muted">03 · ISO / FERC</p>
-            <h3 class="mt-2 mb-2 text-[17px] tracking-tightish">Market operator + regulator</h3>
+            <p class="gu-kicker text-muted">Time</p>
+            <h3 class="mb-2 mt-3 text-[17px] font-semibold tracking-tightish">6–10 weeks from kickoff to submission</h3>
             <p class="text-[14px] leading-relaxed text-muted">
-              ISOs (PJM, MISO, ERCOT, …) run the wholesale market and interconnection queues.
-              Large / transmission-connected projects file into the ISO process; FERC sets the federal frame.
+              Gathering inputs, consulting turnaround, QC, and sign-off — while cluster windows are
+              fixed. Missing a window costs a project a full year.
+            </p>
+          </article>
+          <article class="rounded-card border border-line bg-surface p-6">
+            <p class="gu-kicker text-muted">Risk</p>
+            <h3 class="mb-2 mt-3 text-[17px] font-semibold tracking-tightish">Inconsistency is the top rejection cause</h3>
+            <p class="text-[14px] leading-relaxed text-muted">
+              A MW value that doesn't reconcile across Appendix 1, Attachment A, and the models is the
+              most common trigger for CAISO deficiency review. Hand-assembled packets invite it.
             </p>
           </article>
         </div>
-        <div class="mt-8 grid gap-4 md:grid-cols-2">
-          <div class="rounded-card border border-line bg-soft p-6">
-            <h3 class="mb-2 text-[16px] tracking-tightish">The expensive loop today</h3>
+      </div>
+    </section>
+
+    <!-- Why GridPilot -->
+    <section id="why" class="scroll-mt-20 border-t border-line bg-soft">
+      <div class="mx-auto max-w-gp px-6 py-16 md:py-24">
+        <p class="gu-kicker mb-3 text-muted">Why GridPilot</p>
+        <h2 class="mb-4 max-w-2xl text-3xl font-semibold tracking-tightish text-ink md:text-4xl">
+          The consulting workstream, as software
+        </h2>
+        <p class="mb-12 max-w-2xl text-[16px] leading-relaxed text-muted">
+          GridPilot performs the application workstream a consulting firm sells — from kickoff data
+          validation to the finished packet — so your team keeps control of timing, revisions, and cost.
+        </p>
+        <div class="grid gap-10 md:grid-cols-3">
+          <div>
+            <div class="mb-4 h-px w-10 bg-ink"></div>
+            <h3 class="mb-2 text-[17px] font-semibold tracking-tightish">Documents in, packet out</h3>
             <p class="text-[14px] leading-relaxed text-muted">
-              Developer gathers inputs (2–4 weeks) → consulting firm builds models, drawings, and forms
-              (2–4 weeks, ~$10k) → QC and sign-off → submit → deficiency review → revise → pay again.
-              6–10 weeks from kickoff to submission, and inconsistent MW values are still the most common rejection.
+              Upload the kickoff documents you already have — the executed lease, technical workbook,
+              vendor specifications, parcel boundary. GridPilot extracts every field a consultant would
+              pull out by hand and populates the intake, with each value traced to its source document.
             </p>
           </div>
-          <div class="rounded-card border border-line bg-soft p-6">
-            <h3 class="mb-2 text-[16px] tracking-tightish">What GridPilot replaces</h3>
+          <div>
+            <div class="mb-4 h-px w-10 bg-ink"></div>
+            <h3 class="mb-2 text-[17px] font-semibold tracking-tightish">Validated before the ISO sees it</h3>
             <p class="text-[14px] leading-relaxed text-muted">
-              The consulting workstream: load-flow and dynamic models, reactive capability curves, single-line
-              diagrams, site drawings, KMZ boundaries, Appendix 1 and Attachment A — generated from
-              <strong class="text-ink">one intake</strong>, so every document carries identical values.
+              The intake is checked against the consistency rules that most commonly trigger deficiency
+              review — MW chain reconciliation, site exclusivity, track eligibility, COD limits. Every
+              finding cites the tariff requirement it enforces and the document it examined.
+            </p>
+          </div>
+          <div>
+            <div class="mb-4 h-px w-10 bg-ink"></div>
+            <h3 class="mb-2 text-[17px] font-semibold tracking-tightish">One source of truth</h3>
+            <p class="text-[14px] leading-relaxed text-muted">
+              All fifteen packet documents are generated from a single validated intake, so the same MW
+              chain, legal name, and coordinates appear in Appendix 1, Attachment A, the PSLF models,
+              and every drawing — the consistency QC a firm bills days for, guaranteed by construction.
             </p>
           </div>
         </div>
       </div>
     </section>
 
-    <section id="product" class="border-t border-line bg-soft">
-      <div class="mx-auto max-w-gp px-6 py-16 md:py-20">
-        <p class="mb-3 font-mono text-[12px] uppercase tracking-[0.12em] text-muted">Product</p>
-        <h2 class="mb-3 text-3xl tracking-tightish text-ink">Inputs in, submission packet out</h2>
-        <p class="mb-10 max-w-2xl text-[15px] leading-relaxed text-muted">
-          You provide the same kickoff inputs a consulting firm would collect. GridPilot validates them,
-          runs the engineering workstream, and hands back a packet mapped to the CAISO minimum-requirements checklist.
+    <!-- How it works -->
+    <section id="product" class="scroll-mt-20 border-t border-line">
+      <div class="mx-auto max-w-gp px-6 py-16 md:py-24">
+        <p class="gu-kicker mb-3 text-muted">Product</p>
+        <h2 class="mb-4 max-w-2xl text-3xl font-semibold tracking-tightish text-ink md:text-4xl">
+          From kickoff documents to a filed request
+        </h2>
+        <p class="mb-12 max-w-2xl text-[16px] leading-relaxed text-muted">
+          The same four phases as a consulting engagement — compressed from weeks to a single session.
         </p>
-        <ol class="grid gap-3 md:grid-cols-4">
-          <li class="rounded-card border border-line bg-surface p-5">
-            <span class="font-mono text-[12px] text-muted">01</span>
-            <strong class="mt-2 block text-[15px]">Developer intake</strong>
-            <p class="mt-1 text-[13px] text-muted">Legal entity, site control, POI, MW chain, equipment and vendor status — one structured form.</p>
+        <ol class="grid gap-4 md:grid-cols-4">
+          <li class="rounded-card border border-line bg-surface p-6">
+            <span class="font-mono text-[12px] text-faint">01</span>
+            <strong class="mt-3 block text-[15px] font-semibold tracking-tightish">Upload kickoff documents</strong>
+            <p class="mt-2 text-[13.5px] leading-relaxed text-muted">Site exclusivity agreement, technical workbook, vendor specifications, signatory proof, parcel boundary.</p>
           </li>
-          <li class="rounded-card border border-line bg-surface p-5">
-            <span class="font-mono text-[12px] text-muted">02</span>
-            <strong class="mt-2 block text-[15px]">Kickoff validation</strong>
-            <p class="mt-1 text-[13px] text-muted">MW chain reconciliation, track eligibility, site-exclusivity rules, COD limits — caught before generation.</p>
+          <li class="rounded-card border border-line bg-surface p-6">
+            <span class="font-mono text-[12px] text-faint">02</span>
+            <strong class="mt-3 block text-[15px] font-semibold tracking-tightish">AI populates the intake</strong>
+            <p class="mt-2 text-[13.5px] leading-relaxed text-muted">Every extracted value carries provenance back to its source document, and every field stays editable.</p>
           </li>
-          <li class="rounded-card border border-line bg-surface p-5">
-            <span class="font-mono text-[12px] text-muted">03</span>
-            <strong class="mt-2 block text-[15px]">Generate the packet</strong>
-            <p class="mt-1 text-[13px] text-muted">.epc / .dyd models, P-Q curve, simulation plots, SLD, site drawing, KMZ, Appendix 1, Attachment A.</p>
+          <li class="rounded-card border border-line bg-surface p-6">
+            <span class="font-mono text-[12px] text-faint">03</span>
+            <strong class="mt-3 block text-[15px] font-semibold tracking-tightish">Validate against ISO rules</strong>
+            <p class="mt-2 text-[13.5px] leading-relaxed text-muted">Blocking findings cite the requirement and highlight the examined document. Upload a corrected file and revalidate in place.</p>
           </li>
-          <li class="rounded-card border border-line bg-surface p-5">
-            <span class="font-mono text-[12px] text-muted">04</span>
-            <strong class="mt-2 block text-[15px]">Review & submit</strong>
-            <p class="mt-1 text-[13px] text-muted">Consistency QC across every document, a developer action list, then e-sign and upload in RIMS5.</p>
+          <li class="rounded-card border border-line bg-surface p-6">
+            <span class="font-mono text-[12px] text-faint">04</span>
+            <strong class="mt-3 block text-[15px] font-semibold tracking-tightish">Generate the packet</strong>
+            <p class="mt-2 text-[13.5px] leading-relaxed text-muted">Fifteen documents mapped to the CAISO minimum-requirements checklist, ready for e-signature and RIMS5 upload.</p>
           </li>
         </ol>
-        <p class="mt-8 max-w-2xl text-[13px] text-muted">
-          Some things stay with you by law or by physics: official state certificates, executed land agreements,
-          vendor dynamic-model files, the study deposit, and final PSLF validation against the ISO base case.
-          GridPilot drafts everything else and tells you exactly what is left.
-        </p>
+
+        <div class="mt-12 grid gap-4 lg:grid-cols-2">
+          <div class="rounded-card border border-line bg-soft p-6 md:p-7">
+            <p class="gu-kicker mb-4 text-muted">What GridPilot generates</p>
+            <ul class="grid gap-x-6 gap-y-2 text-[14px] text-ink sm:grid-cols-2">
+              <li class="border-b border-line pb-2">Appendix 1 — Interconnection Request</li>
+              <li class="border-b border-line pb-2">Attachment A — technical data</li>
+              <li class="border-b border-line pb-2">PSLF load flow model (.epc)</li>
+              <li class="border-b border-line pb-2">PSLF dynamic models (.dyd)</li>
+              <li class="border-b border-line pb-2">Reactive capability (P–Q) curves</li>
+              <li class="border-b border-line pb-2">Flat-run &amp; bump test plots</li>
+              <li class="border-b border-line pb-2">Single-line diagram</li>
+              <li class="border-b border-line pb-2">Scaled site drawing</li>
+              <li class="border-b border-line pb-2">Project boundary KMZ</li>
+              <li class="border-b border-line pb-2">Site exclusivity demonstration</li>
+              <li class="border-b border-line pb-2">ISP eligibility demonstration</li>
+              <li class="border-b border-line pb-2">Submission README &amp; action list</li>
+            </ul>
+          </div>
+          <div class="rounded-card border border-line bg-soft p-6 md:p-7">
+            <p class="gu-kicker mb-4 text-muted">What stays with you</p>
+            <p class="text-[14px] leading-relaxed text-muted">
+              Some obligations remain yours by law or by physics: official state certificates, executed
+              land agreements, vendor dynamic-model files, the study deposit, and final PSLF validation
+              against the ISO base case. GridPilot drafts everything else and hands you an explicit list
+              of what's left — no ambiguity about what "done" means.
+            </p>
+            <p class="mt-4 text-[14px] leading-relaxed text-muted">
+              GridPilot replaces the consulting firm's application workstream — not the PE stamp, the ISO
+              study, or your legal obligations.
+            </p>
+          </div>
+        </div>
       </div>
     </section>
 
-    <section id="pricing" class="border-t border-line">
-      <div class="mx-auto max-w-gp px-6 py-16 md:py-20">
+    <!-- CTA band -->
+    <section class="gu-dark">
+      <div class="mx-auto flex max-w-gp flex-col items-start justify-between gap-6 px-6 py-14 md:flex-row md:items-center md:py-16">
+        <div>
+          <h2 class="mb-2 text-2xl font-semibold tracking-tightish md:text-3xl">See a CAISO interconnection request built end to end.</h2>
+          <p class="max-w-xl text-[15px] text-white/70">
+            The guided demo walks a 125 MW solar-plus-storage project from kickoff documents to a
+            complete submission packet — including catching and fixing two real intake defects.
+          </p>
+        </div>
+        <a href="https://gridpilot-three.vercel.app/app#/demo" class="gu-btn-light shrink-0 rounded-pill px-6 py-3 text-[13px] font-mono uppercase tracking-[0.08em]">Try Demo</a>
+      </div>
+    </section>
+
+    <!-- Pricing -->
+    <section id="pricing" class="scroll-mt-20 border-t border-line">
+      <div class="mx-auto max-w-gp px-6 py-16 md:py-24">
         <div class="mb-12 max-w-2xl">
-          <p class="mb-3 font-mono text-[12px] uppercase tracking-[0.12em] text-muted">Pricing</p>
-          <h2 class="mb-3 text-3xl tracking-tightish text-ink md:text-4xl">Priced for developer teams, not retail SaaS</h2>
+          <p class="gu-kicker mb-3 text-muted">Pricing</p>
+          <h2 class="mb-3 text-3xl font-semibold tracking-tightish text-ink md:text-4xl">Priced for developer teams, not retail SaaS</h2>
           <p class="text-[16px] leading-relaxed text-muted">
             One avoided requeue or consultant re-cycle typically pays for a year of Professional.
           </p>
@@ -184,18 +325,18 @@
 
         <div class="grid gap-4 lg:grid-cols-3">
           <article class="flex flex-col rounded-card border border-line bg-surface p-6 md:p-7">
-            <p class="font-mono text-[12px] uppercase tracking-[0.12em] text-muted">Starter</p>
-            <h3 class="mt-2 text-[20px] tracking-tightish">Prove it on one project</h3>
+            <p class="gu-kicker text-muted">Starter</p>
+            <h3 class="mt-2 text-[20px] font-semibold tracking-tightish">Prove it on one project</h3>
             <div class="mt-5 flex items-baseline gap-1">
-              <span class="text-4xl tracking-tightish tabular-nums">$0</span>
+              <span class="text-4xl font-semibold tracking-tightish tabular-nums">$0</span>
               <span class="text-[14px] text-muted">/ month</span>
             </div>
-            <p class="mt-2 text-[13px] text-muted">For an interconnection engineer evaluating GridPilot before a live filing.</p>
+            <p class="mt-2 text-[13px] text-muted">For an interconnection lead evaluating GridPilot before a live filing.</p>
             <ul class="mt-6 flex-1 space-y-2.5 text-[14px] text-ink">
-              <li class="flex gap-2"><span class="text-muted">—</span> 25 pre-filing audits / 30 days</li>
               <li class="flex gap-2"><span class="text-muted">—</span> 5 active projects</li>
               <li class="flex gap-2"><span class="text-muted">—</span> CAISO packet generation (ISP / Fast Track)</li>
-              <li class="flex gap-2"><span class="text-muted">—</span> Filing readiness gate</li>
+              <li class="flex gap-2"><span class="text-muted">—</span> Document extraction &amp; kickoff validation</li>
+              <li class="flex gap-2"><span class="text-muted">—</span> In-browser preview of every document</li>
               <li class="flex gap-2"><span class="text-muted">—</span> HTML and JSON report export</li>
             </ul>
             <a href="https://gridpilot-three.vercel.app/app#/signup" class="mt-8 block rounded-pill border border-line bg-surface px-5 py-2.5 text-center text-[13px] font-mono uppercase tracking-[0.08em] text-ink hover:border-line-strong">Start free</a>
@@ -203,57 +344,86 @@
 
           <article class="relative flex flex-col rounded-card border border-ink bg-surface p-6 md:p-7">
             <span class="absolute -top-3 left-6 rounded-pill bg-ink px-3 py-1 font-mono text-[10px] uppercase tracking-[0.1em] text-primary-fg">Recommended</span>
-            <p class="font-mono text-[12px] uppercase tracking-[0.12em] text-muted">Professional</p>
-            <h3 class="mt-2 text-[20px] tracking-tightish">Development portfolio teams</h3>
+            <p class="gu-kicker text-muted">Professional</p>
+            <h3 class="mt-2 text-[20px] font-semibold tracking-tightish">Development portfolio teams</h3>
             <div class="mt-5 flex items-baseline gap-1">
-              <span class="text-4xl tracking-tightish tabular-nums">$1,800</span>
+              <span class="text-4xl font-semibold tracking-tightish tabular-nums">$1,800</span>
               <span class="text-[14px] text-muted">/ month</span>
             </div>
             <p class="mt-2 text-[13px] text-muted">Billed annually ($21,600). Monthly at $2,200.</p>
             <ul class="mt-6 flex-1 space-y-2.5 text-[14px] text-ink">
-              <li class="flex gap-2"><span class="text-muted">—</span> 500 pre-filing audits / 30 days</li>
               <li class="flex gap-2"><span class="text-muted">—</span> Up to 250 active projects</li>
-              <li class="flex gap-2"><span class="text-muted">—</span> Priority vision processing</li>
-              <li class="flex gap-2"><span class="text-muted">—</span> Drawing version history</li>
+              <li class="flex gap-2"><span class="text-muted">—</span> Unlimited validation runs &amp; regenerations</li>
+              <li class="flex gap-2"><span class="text-muted">—</span> Packet version history</li>
               <li class="flex gap-2"><span class="text-muted">—</span> Shared developer workspace</li>
+              <li class="flex gap-2"><span class="text-muted">—</span> Priority document processing</li>
               <li class="flex gap-2"><span class="text-muted">—</span> Business-day email support</li>
             </ul>
             <a href="https://gridpilot-three.vercel.app/app#/signup" class="mt-8 block rounded-pill bg-primary px-5 py-2.5 text-center text-[13px] font-mono uppercase tracking-[0.08em] text-primary-fg hover:opacity-90">Request Professional</a>
           </article>
 
           <article class="flex flex-col rounded-card border border-line bg-surface p-6 md:p-7">
-            <p class="font-mono text-[12px] uppercase tracking-[0.12em] text-muted">Enterprise</p>
-            <h3 class="mt-2 text-[20px] tracking-tightish">Multi-ISO IPP / EPC</h3>
+            <p class="gu-kicker text-muted">Enterprise</p>
+            <h3 class="mt-2 text-[20px] font-semibold tracking-tightish">Multi-ISO IPP / EPC</h3>
             <div class="mt-5 flex items-baseline gap-1">
-              <span class="text-4xl tracking-tightish">Custom</span>
+              <span class="text-4xl font-semibold tracking-tightish">Custom</span>
             </div>
-            <p class="mt-2 text-[13px] text-muted">Custom utility rule packs, SSO, and controlled deployment.</p>
+            <p class="mt-2 text-[13px] text-muted">Custom ISO rule packs, SSO, and controlled deployment.</p>
             <ul class="mt-6 flex-1 space-y-2.5 text-[14px] text-ink">
-              <li class="flex gap-2"><span class="text-muted">—</span> Unlimited audits and projects</li>
+              <li class="flex gap-2"><span class="text-muted">—</span> Unlimited projects and packets</li>
               <li class="flex gap-2"><span class="text-muted">—</span> SSO, audit logging, VPC / on-prem</li>
-              <li class="flex gap-2"><span class="text-muted">—</span> Custom utility + ISO rule packs</li>
+              <li class="flex gap-2"><span class="text-muted">—</span> Custom ISO + utility rule packs</li>
               <li class="flex gap-2"><span class="text-muted">—</span> Dedicated success engineer</li>
               <li class="flex gap-2"><span class="text-muted">—</span> MSA / DPA and invoice billing</li>
             </ul>
             <a href="mailto:sales@nerviom.com?subject=GridPilot%20Enterprise" class="mt-8 block rounded-pill border border-line bg-surface px-5 py-2.5 text-center text-[13px] font-mono uppercase tracking-[0.08em] text-ink hover:border-line-strong">Contact sales</a>
           </article>
         </div>
-
-        <div class="mt-10 border-t border-line pt-8">
-          <p class="max-w-2xl text-[14px] leading-relaxed text-muted">
-            GridPilot replaces the consulting firm's application workstream — not the PE stamp, the ISO study,
-            or your legal obligations. Final models should be validated in GE PSLF against the ISO base case before submission.
-            <a href="https://gridpilot-three.vercel.app/app#/demo" class="text-ink underline-offset-2 hover:underline">Run the CAISO guided demo</a>.
-          </p>
-        </div>
       </div>
     </section>
   </main>
 
-  <footer class="border-t border-line">
-    <div class="mx-auto flex max-w-gp flex-wrap items-center justify-between gap-3 px-6 py-6 text-[12px] text-muted">
-      <div>© GridPilot · Nerviom. Developer-side pre-filing QA — not a substitute for utility or ISO approval.</div>
-      <a href="https://gridpilot-three.vercel.app/app#/login" class="text-ink hover:underline">Sign in</a>
+  <!-- Footer -->
+  <footer class="gu-dark">
+    <div class="mx-auto max-w-gp px-6 py-12 md:py-14">
+      <div class="grid gap-10 md:grid-cols-[1.4fr_1fr_1fr_1fr]">
+        <div>
+          <div class="mb-3 flex items-center gap-2.5">
+            <img src="assets/img/logo.svg" alt="" class="h-7 w-7 brightness-0 invert" />
+            <span class="text-[15px] font-semibold tracking-tightish">GridPilot</span>
+          </div>
+          <p class="max-w-xs text-[13px] leading-relaxed text-white/60">
+            Interconnection requests for renewable and storage developers — generated, validated, and
+            ready to file.
+          </p>
+        </div>
+        <div>
+          <p class="gu-kicker mb-3 text-white/45">Product</p>
+          <ul class="space-y-2 text-[13.5px] text-white/75">
+            <li><a href="https://gridpilot-three.vercel.app/app#/demo" class="hover:text-white">Guided demo</a></li>
+            <li><a href="https://gridpilot-three.vercel.app/app#/login" class="hover:text-white">Sign in</a></li>
+            <li><a href="#pricing" class="hover:text-white">Pricing</a></li>
+          </ul>
+        </div>
+        <div>
+          <p class="gu-kicker mb-3 text-white/45">Standards</p>
+          <ul class="space-y-2 text-[13.5px] text-white/75">
+            <li>CAISO GIDAP · Appendix DD</li>
+            <li>ISP / Fast Track checklist</li>
+            <li>GE PSLF model formats</li>
+          </ul>
+        </div>
+        <div>
+          <p class="gu-kicker mb-3 text-white/45">Contact</p>
+          <ul class="space-y-2 text-[13.5px] text-white/75">
+            <li><a href="mailto:sales@nerviom.com" class="hover:text-white">sales@nerviom.com</a></li>
+          </ul>
+        </div>
+      </div>
+      <div class="mt-10 flex flex-wrap items-center justify-between gap-3 border-t border-white/10 pt-6 text-[12px] text-white/50">
+        <span>© 2026 GridPilot · Nerviom. Developer-side filing preparation — not a substitute for utility or ISO approval.</span>
+        <a href="https://gridpilot-three.vercel.app/app#/login" class="text-white/75 hover:text-white">Sign in</a>
+      </div>
     </div>
   </footer>
 </body>
