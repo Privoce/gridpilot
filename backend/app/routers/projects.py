@@ -18,8 +18,20 @@ from backend.app.db_models import AuditRun, AuditStatus, Drawing, Project
 from backend.app.deps import PROJECTS_COOKIE, AuthContext, get_auth
 from backend.app.schemas import ProjectCreate, ProjectUpdate
 from backend.app.serializers import drawing_out, project_out
+from backend.app.services.durable import (
+    ensure_drawing_file,
+    persist_drawing,
+    restore_audits_for_org,
+    restore_drawings,
+)
 from backend.app.services.jobs import enqueue_audit
 from backend.app.services.pdf_extract import render_pdf
+from backend.app.seed import DEMO_ORG_ID
+
+
+def _durable_org(org_id: str) -> bool:
+    """Demo data is seeded on every instance — no need to persist it."""
+    return org_id != DEMO_ORG_ID
 
 router = APIRouter(prefix="/api/projects", tags=["projects"])
 
@@ -120,6 +132,9 @@ def get_project(
     db: Session = Depends(get_db),
 ):
     project = _get_project(db, auth, project_id)
+    if _durable_org(auth.org.id):
+        restore_drawings(db, auth.org.id, project.id)
+        restore_audits_for_org(db, auth.org.id)
     drawings = (
         db.query(Drawing)
         .filter(Drawing.project_id == project.id)
@@ -220,6 +235,8 @@ async def upload_drawing(
     db.add(drawing)
     db.commit()
     db.refresh(drawing)
+    if _durable_org(auth.org.id):
+        persist_drawing(drawing, auth.org.id, dest.read_bytes())
     return drawing_out(drawing)
 
 
@@ -233,9 +250,12 @@ def download_drawing(
     project = _get_project(db, auth, project_id)
     drawing = db.get(Drawing, drawing_id)
     if not drawing or drawing.project_id != project.id:
+        restore_drawings(db, auth.org.id, project.id)
+        drawing = db.get(Drawing, drawing_id)
+    if not drawing or drawing.project_id != project.id:
         raise HTTPException(status_code=404, detail="Drawing not found")
-    path = Path(drawing.stored_path)
-    if not path.exists():
+    path = ensure_drawing_file(drawing, auth.org.id)
+    if not path:
         raise HTTPException(status_code=404, detail="File missing")
     return FileResponse(
         path,
@@ -261,10 +281,13 @@ def preview_drawing(
     project = _get_project(db, auth, project_id)
     drawing = db.get(Drawing, drawing_id)
     if not drawing or drawing.project_id != project.id:
+        restore_drawings(db, auth.org.id, project.id)
+        drawing = db.get(Drawing, drawing_id)
+    if not drawing or drawing.project_id != project.id:
         raise HTTPException(status_code=404, detail="Drawing not found")
 
     static_preview = ROOT / "backend" / "app" / "static" / "img" / "cedar_ridge_sld_demo.png"
-    path = Path(drawing.stored_path)
+    path = ensure_drawing_file(drawing, auth.org.id) or Path(drawing.stored_path)
     if not path.exists():
         if static_preview.exists() and "cedar_ridge" in (drawing.filename or "").lower():
             return FileResponse(static_preview, media_type="image/png")
@@ -303,6 +326,12 @@ def start_audit(
     if not drawing:
         # Stale client drawing ids are common on serverless cold starts — use latest.
         drawing = _latest_drawing(db, project.id)
+    if not drawing:
+        # The upload may have landed on a different serverless instance.
+        restore_drawings(db, auth.org.id, project.id)
+        drawing = (db.get(Drawing, drawing_id) if drawing_id else None) or _latest_drawing(
+            db, project.id
+        )
     if not drawing:
         raise HTTPException(status_code=400, detail="Upload a drawing before running an audit")
 

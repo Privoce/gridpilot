@@ -11,14 +11,19 @@ from backend.app.db_models import AuditRun, FindingRow, FindingTriage
 from backend.app.deps import AuthContext, get_auth
 from backend.app.schemas import FindingTriageRequest
 from backend.app.serializers import audit_detail, audit_summary, finding_out
+from backend.app.services.durable import persist_audit, restore_audit, restore_audits_for_org
 from backend.app.services.jobs import _recompute_open_counts
 from backend.app.services.report import REPORT_TEMPLATE
+from backend.app.seed import DEMO_ORG_ID
 
 router = APIRouter(prefix="/api/audits", tags=["audits"])
 
 
 def _get_audit(db: Session, auth: AuthContext, audit_id: str) -> AuditRun:
     audit = db.get(AuditRun, audit_id)
+    if not audit and auth.org.id != DEMO_ORG_ID:
+        # The audit may have completed on a different serverless instance.
+        audit = restore_audit(db, auth.org.id, audit_id)
     if not audit or audit.org_id != auth.org.id:
         raise HTTPException(status_code=404, detail="Audit not found")
     return audit
@@ -26,6 +31,8 @@ def _get_audit(db: Session, auth: AuthContext, audit_id: str) -> AuditRun:
 
 @router.get("")
 def list_audits(auth: AuthContext = Depends(get_auth), db: Session = Depends(get_db)):
+    if auth.org.id != DEMO_ORG_ID:
+        restore_audits_for_org(db, auth.org.id)
     audits = (
         db.query(AuditRun)
         .filter(AuditRun.org_id == auth.org.id)
@@ -142,6 +149,8 @@ def triage_finding(
     db.commit()
     db.refresh(finding)
     db.refresh(audit)
+    if auth.org.id != DEMO_ORG_ID:
+        persist_audit(audit)
     return {
         "finding": finding_out(finding),
         "audit": audit_summary(audit, audit.drawing.filename if audit.drawing else None),

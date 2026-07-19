@@ -55,8 +55,12 @@ async def execute_audit_run(audit_id: str) -> None:
 
         from backend.app.db_models import User
         from backend.app.seed import DEMO_EMAIL
+        from backend.app.services.durable import ensure_drawing_file
 
-        drawing_path = Path(audit.drawing.stored_path)
+        drawing_path = (
+            ensure_drawing_file(audit.drawing, audit.org_id)
+            or Path(audit.drawing.stored_path)
+        )
         project_name = audit.project.name if audit.project else ""
         iso = audit.iso
         creator = db.get(User, audit.created_by) if audit.created_by else None
@@ -116,6 +120,11 @@ async def execute_audit_run(audit_id: str) -> None:
         audit.completed_at = datetime.now(timezone.utc)
         _recompute_open_counts(db, audit)
         db.commit()
+        from backend.app.seed import DEMO_ORG_ID
+        from backend.app.services.durable import persist_audit
+
+        if audit.org_id != DEMO_ORG_ID:
+            persist_audit(audit)
         logger.info("Audit %s completed score=%s", audit_id, report.readiness_score)
     except Exception as exc:  # noqa: BLE001
         logger.exception("Audit %s failed", audit_id)

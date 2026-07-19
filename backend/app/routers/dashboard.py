@@ -18,6 +18,11 @@ router = APIRouter(prefix="/api", tags=["dashboard"])
 def dashboard(auth: AuthContext = Depends(get_auth), db: Session = Depends(get_db)):
     maybe_roll_period(auth.org)
     db.commit()
+    from backend.app.seed import DEMO_ORG_ID
+    from backend.app.services.durable import restore_audits_for_org
+
+    if auth.org.id != DEMO_ORG_ID:
+        restore_audits_for_org(db, auth.org.id)
 
     projects = (
         db.query(Project)
