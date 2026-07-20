@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="520" height="128" viewBox="0 0 520 128" fill="none" role="img" aria-label="GridPilot">
+  <!-- logomark -->
+  <g transform="translate(24, 16) scale(4)">
+    <path d="M12 3 L19.8 7.5 V16.5 L12 21 L4.2 16.5 V7.5 Z" stroke="#141414" stroke-width="2" stroke-linejoin="round"/>
+    <path d="M12 3 V12 M12 12 L4.2 16.5 M12 12 L19.8 16.5" stroke="#141414" stroke-width="2" stroke-linecap="round"/>
+    <circle cx="12" cy="12" r="2.6" fill="#141414"/>
+  </g>
+  <!-- wordmark -->
+  <!-- baseline chosen so the cap-height centers on the logomark (y=64) -->
+  <text x="140" y="83"
+        font-family="Inter, -apple-system, 'Segoe UI', Helvetica, Arial, sans-serif"
+        font-size="52" font-weight="650" letter-spacing="-1.5" fill="#141414">GridPilot</text>
+</svg>
