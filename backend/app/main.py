@@ -3,9 +3,9 @@ from __future__ import annotations
 import os
 from pathlib import Path
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import HTMLResponse
+from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 
 from backend.app.routers import audits, auth, caiso, dashboard, demo, projects
@@ -76,7 +76,11 @@ if STATIC_DIR.exists():
 
 
 @app.get("/", response_class=HTMLResponse)
-def landing():
+def landing(request: Request):
+    # demo.* serves the guided demo directly.
+    host = (request.headers.get("host") or "").split(":")[0]
+    if host.startswith("demo."):
+        return RedirectResponse(url="/app#/demo", status_code=307)
     path = STATIC_DIR / "landing.html"
     if path.exists():
         return HTMLResponse(path.read_text(encoding="utf-8"))
