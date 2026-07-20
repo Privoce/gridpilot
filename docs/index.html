@@ -40,6 +40,8 @@
         linear-gradient(90deg, rgba(8, 28, 51, 0.92) 0%, rgba(8, 28, 51, 0.55) 45%, rgba(8, 28, 51, 0.25) 100%),
         linear-gradient(180deg, rgba(8, 28, 51, 0.35) 0%, transparent 30%, rgba(8, 28, 51, 0.55) 100%);
     }
+    .gu-hero-canvas { position: absolute; inset: 0; pointer-events: none; overflow: hidden; }
+    .gu-hero-canvas canvas { display: block; width: 100% !important; height: 100% !important; }
     .gu-stat { border-left: 2px solid rgba(127, 180, 238, 0.55); }
     .gu-kicker {
       font-family: var(--gp-font-mono);
@@ -86,6 +88,7 @@
         <video id="gp-hero-video" src="assets/video/hero.mp4" autoplay muted loop playsinline preload="auto"></video>
         <div class="gu-hero-shade"></div>
       </div>
+      <div id="gp-hero-canvas" class="gu-hero-canvas" aria-hidden="true"></div>
       <div id="gp-hero-art" class="gu-hero-art" style="display:none" aria-hidden="true">
         <svg viewBox="0 0 900 560" fill="none" xmlns="http://www.w3.org/2000/svg">
           <!-- transmission pylons -->
@@ -425,14 +428,25 @@
     (function () {
       var v = document.getElementById("gp-hero-video");
       if (!v) return;
-      var slow = function () { v.playbackRate = 0.5; };
-      v.addEventListener("loadeddata", slow);
-      slow();
+      var START = 5; // loop the segment from 5s to the end
+      var setup = function () {
+        v.playbackRate = 0.8; // 20% slower
+        if (v.currentTime < START) v.currentTime = START;
+      };
+      v.addEventListener("loadedmetadata", setup);
+      v.addEventListener("timeupdate", function () {
+        // jump back to the 5s mark just before the native loop wraps to 0
+        if (v.duration && v.duration - v.currentTime < 0.2) v.currentTime = START;
+        else if (v.currentTime < START - 0.05) v.currentTime = START;
+      });
+      setup();
       if (window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
         v.removeAttribute("autoplay");
         v.pause();
       }
     })();
   </script>
+  <script src="https://cdn.jsdelivr.net/npm/p5@1.11.3/lib/p5.min.js" defer></script>
+  <script src="assets/js/hero-bg.js" defer></script>
 </body>
 </html>
