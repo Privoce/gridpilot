@@ -29,6 +29,8 @@
     .gu-eyebrow { color: var(--gu-sky); }
     .gu-hero-art { position: absolute; inset: 0; pointer-events: none; overflow: hidden; }
     .gu-hero-art svg { position: absolute; right: -4%; bottom: 0; height: 100%; min-width: 900px; opacity: 0.5; }
+    .gu-hero-canvas { position: absolute; inset: 0; pointer-events: none; overflow: hidden; }
+    .gu-hero-canvas canvas { display: block; width: 100% !important; height: 100% !important; }
     .gu-stat { border-left: 2px solid rgba(127, 180, 238, 0.55); }
     .gu-kicker {
       font-family: var(--gp-font-mono);
@@ -71,7 +73,8 @@
   <main>
     <!-- Hero -->
     <section class="gu-dark relative">
-      <div class="gu-hero-art" aria-hidden="true">
+      <div id="gp-hero-canvas" class="gu-hero-canvas" aria-hidden="true"></div>
+      <div id="gp-hero-art" class="gu-hero-art" aria-hidden="true">
         <svg viewBox="0 0 900 560" fill="none" xmlns="http://www.w3.org/2000/svg">
           <!-- transmission pylons -->
           <g stroke="rgba(255,255,255,0.55)" stroke-width="1.5">
@@ -406,5 +409,7 @@
       </div>
     </div>
   </footer>
+  <script src="https://cdn.jsdelivr.net/npm/p5@1.11.3/lib/p5.min.js" defer></script>
+  <script src="/assets/js/hero-bg.js" defer></script>
 </body>
 </html>
