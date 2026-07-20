@@ -1,11 +1,10 @@
-/* Animated hero background — solar + grid energy map (p5.js).
-   A drifting parcel map where some parcels are solar farms (shimmering panel
-   rows), connected through substations and transmission lines that carry
-   power pulses toward a sun-lit horizon.
+/* Animated hero background — grid energy map overlay (p5.js).
+   A drifting parcel map with substations and transmission lines that carry
+   power pulses, layered over the hero video.
 
    Interactive: moving the cursor electrifies nearby lines and raises an arc
-   from the closest substation; clicking an empty parcel builds a new solar
-   farm that ties into the grid with a burst of power.
+   from the closest substation; clicking sends a burst of power through the
+   nearest lines.
 
    The canvas itself keeps pointer-events:none so hero buttons stay clickable;
    interaction is tracked via document-level listeners. Falls back to the
@@ -16,7 +15,6 @@
   if (window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
 
   var SKY = [127, 180, 238];   // grid blue
-  var SUN = [255, 196, 92];    // solar amber
 
   new p5(function (s) {
     var W = 0, H = 0;
@@ -44,11 +42,6 @@
       return { node: best, d: bd };
     }
 
-    function makeSolar(p) {
-      p.solar = true;
-      p.built = s.millis() / 1000;
-    }
-
     function buildWorld() {
       parcels = []; nodes = []; edges = []; pulses = []; bursts = [];
       var cols = Math.max(8, Math.round(W / 150));
@@ -69,7 +62,7 @@
           if (s.random() < 0.85) {
             parcels.push({
               a: pts[r2][c2], b: pts[r2][c2 + 1], c: pts[r2 + 1][c2 + 1], d: pts[r2 + 1][c2],
-              solar: false, built: 0, seed: s.random(1000),
+              seed: s.random(1000),
             });
           }
         }
@@ -92,22 +85,6 @@
           }
         }
       }
-      // seed a few solar farms away from the headline (left half is text)
-      var candidates = parcels.filter(function (p) {
-        var cc = parcelCenter(p);
-        return cc.x > W * 0.45 && cc.y > H * 0.1;
-      });
-      for (var f = 0; f < Math.min(2, candidates.length); f++) {
-        var pick = candidates[Math.floor(s.random(candidates.length))];
-        if (!pick.solar) makeSolar(pick);
-      }
-      // wire each solar farm to its nearest substation
-      parcels.forEach(function (p) {
-        if (!p.solar) return;
-        var cc = parcelCenter(p);
-        var nn = nearestNode(cc.x, cc.y);
-        if (nn.node) edges.push({ key: "s" + p.seed, a: cc, b: nn.node, len: nn.d, feeder: true });
-      });
     }
 
     function spawnPulse(edge) {
@@ -130,48 +107,20 @@
       if (ev.target.closest("a,button,input,select,nav,header")) return;
       var pt = toLocal(ev);
       if (!pt.inside) return;
-      // build a solar farm on the clicked parcel
-      for (var i = 0; i < parcels.length; i++) {
-        var p = parcels[i];
-        var cc = parcelCenter(p);
-        if (s.dist(pt.x, pt.y, cc.x, cc.y) < 70 && !p.solar) {
-          makeSolar(p);
-          var nn = nearestNode(cc.x, cc.y);
-          if (nn.node) {
-            var ed = { key: "s" + p.seed, a: cc, b: nn.node, len: nn.d, feeder: true };
-            edges.push(ed);
-            for (var b = 0; b < 5; b++) setTimeout(spawnPulse.bind(null, ed), b * 160);
-          }
-          bursts.push({ x: cc.x, y: cc.y, t0: s.millis() / 1000 });
-          return;
-        }
-      }
+      // burst of power through the lines nearest the click
       bursts.push({ x: pt.x, y: pt.y, t0: s.millis() / 1000 });
+      var ranked = edges
+        .map(function (ed) {
+          return { ed: ed, d: s.dist(pt.x, pt.y, (ed.a.x + ed.b.x) / 2, (ed.a.y + ed.b.y) / 2) };
+        })
+        .sort(function (a, b) { return a.d - b.d; })
+        .slice(0, 3);
+      ranked.forEach(function (o, i) {
+        for (var b = 0; b < 3; b++) setTimeout(spawnPulse.bind(null, o.ed), (i * 3 + b) * 120);
+      });
     });
 
     // --- drawing helpers ---------------------------------------------------
-    function drawPanels(p, t) {
-      // rows of solar panels inside the parcel (interpolated between edges)
-      var age = t - p.built;
-      var grow = p.built === 0 ? 1 : Math.min(age / 0.9, 1);
-      var rowsN = 5;
-      for (var i = 1; i <= rowsN * grow; i++) {
-        var f = i / (rowsN + 1);
-        var x1 = s.lerp(p.a.x, p.d.x, f), y1 = s.lerp(p.a.y, p.d.y, f);
-        var x2 = s.lerp(p.b.x, p.c.x, f), y2 = s.lerp(p.b.y, p.c.y, f);
-        // shimmer: sun glint sweeping across rows
-        var glint = 0.5 + 0.5 * Math.sin(t * 1.6 + p.seed + i * 0.9);
-        s.stroke(SUN[0], SUN[1], SUN[2], 60 + 110 * glint);
-        s.strokeWeight(2.2);
-        var inset = 0.08;
-        s.line(s.lerp(x1, x2, inset), s.lerp(y1, y2, inset), s.lerp(x1, x2, 1 - inset), s.lerp(y1, y2, 1 - inset));
-      }
-      s.noFill();
-      s.stroke(SUN[0], SUN[1], SUN[2], 130);
-      s.strokeWeight(1.3);
-      s.quad(p.a.x, p.a.y, p.b.x, p.b.y, p.c.x, p.c.y, p.d.x, p.d.y);
-    }
-
     function drawArc(x1, y1, x2, y2, alpha) {
       // jagged electric arc
       s.noFill();
@@ -234,12 +183,11 @@
         s.stroke(255, 255, 255, 8 + 88 * hover);
         s.strokeWeight(1);
         s.quad(p.a.x, p.a.y, p.b.x, p.b.y, p.c.x, p.c.y, p.d.x, p.d.y);
-        if (hover > 0.4 && !p.solar) {
+        if (hover > 0.4) {
           s.fill(SKY[0], SKY[1], SKY[2], 26 * hover);
           s.quad(p.a.x, p.a.y, p.b.x, p.b.y, p.c.x, p.c.y, p.d.x, p.d.y);
           s.noFill();
         }
-        if (p.solar) drawPanels(p, t);
       }
 
       // --- transmission lines (brighten near cursor)
@@ -310,7 +258,7 @@
         if (ba > 0.9) { bursts.splice(bb, 1); continue; }
         var bf = 1 - ba / 0.9;
         s.noFill();
-        s.stroke(SUN[0], SUN[1], SUN[2], 190 * bf);
+        s.stroke(SKY[0], SKY[1], SKY[2], 190 * bf);
         s.strokeWeight(1.6);
         s.circle(bu.x, bu.y, ba * 130);
         s.stroke(255, 255, 255, 120 * bf);
