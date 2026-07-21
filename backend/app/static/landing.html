@@ -42,6 +42,18 @@
     }
     .gu-hero-canvas { position: absolute; inset: 0; pointer-events: none; overflow: hidden; }
     .gu-hero-canvas canvas { display: block; width: 100% !important; height: 100% !important; }
+    /* Timeline comparison steps */
+    .gu-step {
+      display: inline-flex; align-items: center;
+      border-radius: 8px; padding: 9px 14px;
+      font-family: var(--gp-font-mono); font-size: 11px;
+      letter-spacing: 0.08em; text-transform: uppercase; white-space: nowrap;
+    }
+    .gu-step-dim { border: 1px solid rgba(255, 255, 255, 0.16); color: rgba(255, 255, 255, 0.55); }
+    .gu-step-end { border: 1px solid rgba(255, 255, 255, 0.28); color: rgba(255, 255, 255, 0.8); }
+    .gu-step-live { background: rgba(127, 180, 238, 0.16); border: 1px solid rgba(127, 180, 238, 0.45); color: var(--gu-sky); }
+    .gu-step-done { background: #fff; border: 1px solid #fff; color: var(--gu-navy); font-weight: 600; }
+    .gu-track-rest { flex: 1 1 40px; min-width: 24px; border-top: 1px dashed rgba(255, 255, 255, 0.18); }
     .gu-stat { border-left: 2px solid rgba(127, 180, 238, 0.55); }
     .gu-kicker {
       font-family: var(--gp-font-mono);
@@ -193,6 +205,61 @@
               Values that don't reconcile across documents trigger deficiency review.
             </p>
           </article>
+        </div>
+      </div>
+    </section>
+
+    <!-- Timeline comparison -->
+    <section id="difference" class="scroll-mt-20 border-t border-line">
+      <div class="mx-auto max-w-gp px-6 py-16 md:py-24">
+        <p class="gu-kicker mb-3 text-muted">The difference</p>
+        <h2 class="mb-4 max-w-2xl text-3xl font-semibold tracking-tightish text-ink md:text-4xl">
+          The same packet, without the weeks
+        </h2>
+        <p class="mb-10 max-w-2xl text-[16px] leading-relaxed text-muted">
+          Every step a consulting firm runs sequentially happens in one working session.
+        </p>
+
+        <div class="gu-dark rounded-card p-6 md:p-10">
+          <!-- Consulting engagement -->
+          <div class="grid gap-4 md:grid-cols-[180px_1fr] md:items-center">
+            <div>
+              <p class="text-[16px] font-semibold tracking-tightish text-white">Consulting<br class="hidden md:block"/> engagement</p>
+              <p class="mt-1 font-mono text-[11px] uppercase tracking-[0.1em] text-white/50">2–4 weeks</p>
+            </div>
+            <div class="flex flex-wrap items-stretch gap-2">
+              <span class="gu-step gu-step-dim">Kickoff meeting</span>
+              <span class="gu-step gu-step-dim">Data collection</span>
+              <span class="gu-step gu-step-dim">PSLF modeling</span>
+              <span class="gu-step gu-step-dim">Drawings &amp; SLD</span>
+              <span class="gu-step gu-step-dim">Appendix 1 &amp; forms</span>
+              <span class="gu-step gu-step-dim">QC review</span>
+              <span class="gu-step gu-step-dim">Revisions</span>
+              <span class="gu-step gu-step-end">Ready to file</span>
+            </div>
+          </div>
+
+          <div class="my-8 h-px bg-white/10"></div>
+
+          <!-- With GridPilot -->
+          <div class="grid gap-4 md:grid-cols-[180px_1fr] md:items-center">
+            <div>
+              <p class="text-[16px] font-semibold tracking-tightish text-white">With<br class="hidden md:block"/> GridPilot</p>
+              <p class="mt-1 font-mono text-[11px] uppercase tracking-[0.1em]" style="color:var(--gu-sky)">One session</p>
+            </div>
+            <div class="flex flex-wrap items-center gap-2">
+              <span class="gu-step gu-step-live">Upload documents</span>
+              <span class="gu-step gu-step-live">AI intake</span>
+              <span class="gu-step gu-step-live">Validate</span>
+              <span class="gu-step gu-step-live">Generate</span>
+              <span class="gu-step gu-step-done">Ready to file</span>
+              <span class="hidden flex-1 items-center gap-3 lg:flex">
+                <span class="gu-track-rest" aria-hidden="true"></span>
+                <span class="whitespace-nowrap font-mono text-[11px] uppercase tracking-[0.1em] text-white/40">Time returned to development</span>
+                <span class="gu-track-rest" aria-hidden="true"></span>
+              </span>
+            </div>
+          </div>
         </div>
       </div>
     </section>
