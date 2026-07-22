@@ -334,9 +334,15 @@
         </ol>
 
         <div class="mt-12">
-          <div class="mb-5 flex flex-wrap items-end justify-between gap-3">
+          <div class="mb-5 flex flex-wrap items-center justify-between gap-3">
             <p class="gu-kicker text-muted">What GridPilot prepares — by ISO</p>
-            <p class="font-mono text-[11px] uppercase tracking-[0.08em] text-faint" id="gp-iso-process"></p>
+            <div class="flex flex-wrap items-center gap-3">
+              <p class="font-mono text-[11px] uppercase tracking-[0.08em] text-faint" id="gp-iso-process"></p>
+              <a id="gp-iso-download" href="#" download
+                 class="rounded-pill border border-line bg-surface px-4 py-1.5 font-mono text-[11px] uppercase tracking-[0.08em] text-ink hover:border-line-strong">
+                Download requirements (.md)
+              </a>
+            </div>
           </div>
           <div class="mb-5 flex flex-wrap gap-2" id="gp-iso-tabs" role="tablist" aria-label="Select ISO"></div>
           <div class="grid gap-4 lg:grid-cols-2">
@@ -360,6 +366,7 @@
         var ISOS = [
           {
             id: "CAISO",
+            file: "/assets/requirements/caiso.md",
             process: "GIDAP cluster / ISP \u00b7 RIMS5",
             generates: [
               "Appendix 1 \u2014 Interconnection Request",
@@ -385,6 +392,7 @@
           },
           {
             id: "MISO",
+            file: "/assets/requirements/miso.md",
             process: "DPP cycle \u00b7 Attachment X",
             generates: [
               "DPP application \u2014 Interconnection Request",
@@ -408,6 +416,7 @@
           },
           {
             id: "PJM",
+            file: "/assets/requirements/pjm.md",
             process: "Cycle process \u00b7 Queue Point",
             generates: [
               "Queue Point application data set",
@@ -431,6 +440,7 @@
           },
           {
             id: "ERCOT",
+            file: "/assets/requirements/ercot.md",
             process: "Full Interconnection Study \u00b7 RIOO",
             generates: [
               "Interconnection Request (INR) data set",
@@ -455,6 +465,7 @@
           },
           {
             id: "SPP",
+            file: "/assets/requirements/spp.md",
             process: "DISIS cluster \u00b7 Attachment V",
             generates: [
               "DISIS application data set",
@@ -478,6 +489,7 @@
           },
           {
             id: "NYISO",
+            file: "/assets/requirements/nyiso.md",
             process: "Attachment X cluster \u00b7 CRIS/ERIS",
             generates: [
               "Attachment X Interconnection Request",
@@ -501,6 +513,7 @@
           },
           {
             id: "ISO-NE",
+            file: "/assets/requirements/isone.md",
             process: "Schedule 22/23 \u00b7 CNRC/NRC",
             generates: [
               "Schedule 22 Interconnection Request",
@@ -526,6 +539,7 @@
         var gen = document.getElementById("gp-iso-generates");
         var keeps = document.getElementById("gp-iso-keeps");
         var proc = document.getElementById("gp-iso-process");
+        var dl = document.getElementById("gp-iso-download");
         if (!tabs || !gen || !keeps) return;
 
         function li(text) {
@@ -542,6 +556,11 @@
           iso.generates.forEach(function (t) { gen.appendChild(li(t)); });
           iso.keeps.forEach(function (t) { keeps.appendChild(li(t)); });
           if (proc) proc.textContent = iso.id + " \u00b7 " + iso.process;
+          if (dl) {
+            dl.href = iso.file;
+            dl.setAttribute("download", "GridPilot_" + iso.id.replace("-", "") + "_requirements.md");
+            dl.textContent = "Download " + iso.id + " requirements (.md)";
+          }
           Array.prototype.forEach.call(tabs.children, function (btn) {
             var active = btn.getAttribute("data-iso") === iso.id;
             btn.setAttribute("aria-selected", active ? "true" : "false");
