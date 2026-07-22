@@ -76,7 +76,7 @@
 <body class="bg-canvas text-ink antialiased">
   <header class="sticky top-0 z-20 border-b border-line bg-canvas/90 backdrop-blur">
     <div class="mx-auto flex max-w-gp items-center justify-between gap-6 px-6 py-4">
-      <a href="./" class="flex items-center gap-2.5 text-ink no-underline">
+      <a href="/" class="flex items-center gap-2.5 text-ink no-underline">
         <img src="assets/img/logo.svg" alt="" class="h-7 w-7" />
         <span class="text-[15px] font-semibold tracking-tightish">GridPilot</span>
       </a>
@@ -329,44 +329,240 @@
           <li class="rounded-card border border-line bg-surface p-6">
             <span class="font-mono text-[12px] text-faint">04</span>
             <strong class="mt-3 block text-[15px] font-semibold tracking-tightish">Generate the packet</strong>
-            <p class="mt-2 text-[13.5px] leading-relaxed text-muted">Ready for e-signature and RIMS5 upload.</p>
+            <p class="mt-2 text-[13.5px] leading-relaxed text-muted">Ready for e-signature and queue submission.</p>
           </li>
         </ol>
 
-        <div class="mt-12 grid gap-4 lg:grid-cols-2">
-          <div class="rounded-card border border-line bg-soft p-6 md:p-7">
-            <p class="gu-kicker mb-4 text-muted">What GridPilot generates</p>
-            <ul class="grid gap-x-6 gap-y-2 text-[14px] text-ink sm:grid-cols-2">
-              <li class="border-b border-line pb-2">Appendix 1 — Interconnection Request</li>
-              <li class="border-b border-line pb-2">Attachment A — technical data</li>
-              <li class="border-b border-line pb-2">PSLF load flow model (.epc)</li>
-              <li class="border-b border-line pb-2">PSLF dynamic models (.dyd)</li>
-              <li class="border-b border-line pb-2">Reactive capability (P–Q) curves</li>
-              <li class="border-b border-line pb-2">Flat-run &amp; bump test plots</li>
-              <li class="border-b border-line pb-2">Single-line diagram</li>
-              <li class="border-b border-line pb-2">Scaled site drawing</li>
-              <li class="border-b border-line pb-2">Project boundary KMZ</li>
-              <li class="border-b border-line pb-2">Site exclusivity demonstration</li>
-              <li class="border-b border-line pb-2">ISP eligibility demonstration</li>
-              <li class="border-b border-line pb-2">Submission README &amp; action list</li>
-            </ul>
+        <div class="mt-12">
+          <div class="mb-5 flex flex-wrap items-end justify-between gap-3">
+            <p class="gu-kicker text-muted">What GridPilot prepares — by ISO</p>
+            <p class="font-mono text-[11px] uppercase tracking-[0.08em] text-faint" id="gp-iso-process"></p>
           </div>
-          <div class="rounded-card border border-line bg-soft p-6 md:p-7">
-            <p class="gu-kicker mb-4 text-muted">What stays with you</p>
-            <ul class="grid gap-y-2 text-[14px] text-ink">
-              <li class="border-b border-line pb-2">Official state certificates</li>
-              <li class="border-b border-line pb-2">Executed land agreements</li>
-              <li class="border-b border-line pb-2">Vendor dynamic-model files</li>
-              <li class="border-b border-line pb-2">Study deposit</li>
-              <li class="border-b border-line pb-2">Final PSLF validation &amp; PE review</li>
-            </ul>
-            <p class="mt-4 text-[13px] leading-relaxed text-muted">
-              GridPilot drafts everything else and lists exactly what's left.
-            </p>
+          <div class="mb-5 flex flex-wrap gap-2" id="gp-iso-tabs" role="tablist" aria-label="Select ISO"></div>
+          <div class="grid gap-4 lg:grid-cols-2">
+            <div class="rounded-card border border-line bg-soft p-6 md:p-7">
+              <p class="gu-kicker mb-4 text-muted">What GridPilot generates</p>
+              <ul class="grid gap-x-6 gap-y-2 text-[14px] text-ink sm:grid-cols-2" id="gp-iso-generates"></ul>
+            </div>
+            <div class="rounded-card border border-line bg-soft p-6 md:p-7">
+              <p class="gu-kicker mb-4 text-muted">What stays with you</p>
+              <ul class="grid gap-y-2 text-[14px] text-ink" id="gp-iso-keeps"></ul>
+              <p class="mt-4 text-[13px] leading-relaxed text-muted">
+                GridPilot drafts everything else and lists exactly what's left.
+              </p>
+            </div>
           </div>
         </div>
       </div>
     </section>
+    <script>
+      (function () {
+        var ISOS = [
+          {
+            id: "CAISO",
+            process: "GIDAP cluster / ISP \u00b7 RIMS5",
+            generates: [
+              "Appendix 1 \u2014 Interconnection Request",
+              "Attachment A \u2014 technical data",
+              "PSLF load flow model (.epc)",
+              "PSLF dynamic models (.dyd)",
+              "Reactive capability (P\u2013Q) curves",
+              "Flat-run & bump test plots",
+              "Single-line diagram",
+              "Scaled site drawing",
+              "Project boundary KMZ",
+              "Site exclusivity demonstration",
+              "ISP eligibility demonstration",
+              "Submission README & action list",
+            ],
+            keeps: [
+              "Official state certificates",
+              "Executed land agreements (100% site exclusivity)",
+              "Vendor dynamic-model files",
+              "Study deposit ($150K ISP)",
+              "Final PSLF validation & PE review",
+            ],
+          },
+          {
+            id: "MISO",
+            process: "DPP cycle \u00b7 Attachment X",
+            generates: [
+              "DPP application \u2014 Interconnection Request",
+              "Attachment X technical data workbook",
+              "PSS/E load flow model (.raw)",
+              "PSS/E dynamic models (.dyr)",
+              "Reactive capability (P\u2013Q) curves",
+              "Single-line diagram",
+              "Scaled site drawing",
+              "Project boundary map / KMZ",
+              "Site control evidence package",
+              "Milestone (M2) calculation sheet",
+              "Submission README & action list",
+            ],
+            keeps: [
+              "Executed land agreements (100% facility + 50% tie line)",
+              "M2 milestone ($8,000/MW) & D1/D2 fees",
+              "Vendor dynamic-model files",
+              "Final PSS/E validation & PE review",
+            ],
+          },
+          {
+            id: "PJM",
+            process: "Cycle process \u00b7 Queue Point",
+            generates: [
+              "Queue Point application data set",
+              "Technical data workbook",
+              "PSS/E load flow model (.raw)",
+              "PSS/E dynamic models (.dyr)",
+              "Reactive capability (P\u2013Q) curves",
+              "Single-line diagram",
+              "Scaled site drawing",
+              "Project boundary map / KMZ",
+              "Site control demonstration",
+              "CIR / energy-only election memo",
+              "Submission README & action list",
+            ],
+            keeps: [
+              "Executed land agreements (100% at application)",
+              "Study deposit & readiness deposits",
+              "Vendor dynamic-model files",
+              "Final PSS/E validation & PE review",
+            ],
+          },
+          {
+            id: "ERCOT",
+            process: "Full Interconnection Study \u00b7 RIOO",
+            generates: [
+              "Interconnection Request (INR) data set",
+              "FIS technical data package",
+              "PSS/E load flow model (.raw)",
+              "PSS/E dynamic models (.dyr)",
+              "PSCAD model checklist & parameters",
+              "Ride-through attestation draft (NOGRR245)",
+              "Reactive capability (P\u2013Q) curves",
+              "Single-line diagram",
+              "Scaled site drawing",
+              "Project boundary map / KMZ",
+              "RARF pre-fill & README",
+            ],
+            keeps: [
+              "$5,000 INR fee & FIS deposit (with the TSP)",
+              "Executed land agreements",
+              "Vendor PSCAD & dynamic models",
+              "SGIA execution with the TSP",
+              "Final model quality tests & PE review",
+            ],
+          },
+          {
+            id: "SPP",
+            process: "DISIS cluster \u00b7 Attachment V",
+            generates: [
+              "DISIS application data set",
+              "Technical data workbook",
+              "PSS/E load flow model (.raw)",
+              "PSS/E dynamic models (.dyr)",
+              "PSCAD checklist (low-SCR areas)",
+              "Reactive capability (P\u2013Q) curves",
+              "Single-line diagram",
+              "Scaled site drawing",
+              "Project boundary map / KMZ",
+              "NRIS / ERIS election memo",
+              "Submission README & action list",
+            ],
+            keeps: [
+              "Executed land agreements (100% at application)",
+              "Study deposit & readiness security",
+              "Vendor dynamic-model files",
+              "Final PSS/E validation & PE review",
+            ],
+          },
+          {
+            id: "NYISO",
+            process: "Attachment X cluster \u00b7 CRIS/ERIS",
+            generates: [
+              "Attachment X Interconnection Request",
+              "Pre-application report request form",
+              "Technical data workbook (no TBD entries)",
+              "PSS/E load flow model (.raw)",
+              "PSS/E dynamic models (.dyr)",
+              "Reactive capability (P\u2013Q) curves",
+              "Single-line diagram",
+              "Scaled site drawing",
+              "Project boundary map / KMZ",
+              "CRIS / ERIS election memo",
+              "Submission README & action list",
+            ],
+            keeps: [
+              "Executed land agreements",
+              "Study & readiness deposits ($5K/POI pre-app fee)",
+              "Vendor dynamic-model files",
+              "Final PSS/E validation & PE review",
+            ],
+          },
+          {
+            id: "ISO-NE",
+            process: "Schedule 22/23 \u00b7 CNRC/NRC",
+            generates: [
+              "Schedule 22 Interconnection Request",
+              "PP5-6 technical data workbook",
+              "PSS/E load flow model (.raw)",
+              "PSS/E dynamic models (.dyr)",
+              "Reactive capability (P\u2013Q) curves",
+              "Single-line diagram",
+              "Scaled site drawing",
+              "Project boundary map / KMZ",
+              "CNRC / NRC election memo",
+              "Submission README & action list",
+            ],
+            keeps: [
+              "Executed land agreements",
+              "Study & readiness deposits",
+              "Vendor dynamic-model files",
+              "Final PSS/E validation & PE review",
+            ],
+          },
+        ];
+        var tabs = document.getElementById("gp-iso-tabs");
+        var gen = document.getElementById("gp-iso-generates");
+        var keeps = document.getElementById("gp-iso-keeps");
+        var proc = document.getElementById("gp-iso-process");
+        if (!tabs || !gen || !keeps) return;
+
+        function li(text) {
+          var el = document.createElement("li");
+          el.className = "border-b border-line pb-2";
+          el.textContent = text;
+          return el;
+        }
+
+        function select(id) {
+          var iso = ISOS.find(function (x) { return x.id === id; }) || ISOS[0];
+          gen.innerHTML = "";
+          keeps.innerHTML = "";
+          iso.generates.forEach(function (t) { gen.appendChild(li(t)); });
+          iso.keeps.forEach(function (t) { keeps.appendChild(li(t)); });
+          if (proc) proc.textContent = iso.id + " \u00b7 " + iso.process;
+          Array.prototype.forEach.call(tabs.children, function (btn) {
+            var active = btn.getAttribute("data-iso") === iso.id;
+            btn.setAttribute("aria-selected", active ? "true" : "false");
+            btn.className = active
+              ? "rounded-pill border border-ink bg-ink px-4 py-1.5 font-mono text-[11px] uppercase tracking-[0.08em] text-white"
+              : "rounded-pill border border-line bg-surface px-4 py-1.5 font-mono text-[11px] uppercase tracking-[0.08em] text-muted hover:border-ink/40 hover:text-ink";
+          });
+        }
+
+        ISOS.forEach(function (iso) {
+          var btn = document.createElement("button");
+          btn.type = "button";
+          btn.setAttribute("role", "tab");
+          btn.setAttribute("data-iso", iso.id);
+          btn.textContent = iso.id;
+          btn.addEventListener("click", function () { select(iso.id); });
+          tabs.appendChild(btn);
+        });
+        select("CAISO");
+      })();
+    </script>
 
     <!-- CTA band -->
     <section class="gu-dark">

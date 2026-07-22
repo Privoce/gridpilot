@@ -11,6 +11,9 @@ class ISORegion(str, Enum):
     MISO = "MISO"
     PJM = "PJM"
     ERCOT = "ERCOT"
+    SPP = "SPP"
+    NYISO = "NYISO"
+    ISONE = "ISO-NE"
 
 
 class Severity(str, Enum):

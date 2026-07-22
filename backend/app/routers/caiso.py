@@ -13,14 +13,15 @@ from backend.app.deps import AuthContext, get_auth
 from backend.app.services.caiso_packet import (
     CORRECTED_EXTRACTIONS,
     DEFAULT_INTAKE,
-    INTAKE_SECTIONS,
     REQUIREMENTS,
     extract_from_documents,
     generate_packet,
+    intake_sections_for,
     load_manifest,
     packet_file,
     validate_intake,
 )
+from backend.app.services.iso_profiles import get_profile, localize
 from backend.app.services.packet_preview import (
     render_kickoff_preview,
     render_preview,
@@ -46,8 +47,8 @@ def _resolve_manifest(packet_id: str, request: Request, auth: AuthContext) -> di
     """Load a packet manifest, regenerating it if this instance doesn't have it.
 
     Serverless instances don't share /tmp. Packet URLs carry the validated intake
-    (`?d=`); the id is content-derived, so any instance can rebuild the identical
-    packet on demand.
+    (`?d=`) and ISO (`?i=`); the id is content-derived, so any instance can
+    rebuild the identical packet on demand.
     """
     manifest = load_manifest(packet_id)
     if manifest and manifest.get("org_id") == auth.org.id:
@@ -55,7 +56,7 @@ def _resolve_manifest(packet_id: str, request: Request, auth: AuthContext) -> di
     intake = _decode_intake_param(request.query_params.get("d"))
     if intake:
         try:
-            manifest = generate_packet(intake, auth.org.id)
+            manifest = generate_packet(intake, auth.org.id, request.query_params.get("i"))
         except ValueError:
             manifest = None
         if manifest:
@@ -69,13 +70,32 @@ MEDIA_TYPES = {
     ".md": "text/markdown",
     ".epc": "text/plain",
     ".dyd": "text/plain",
+    ".raw": "text/plain",
+    ".dyr": "text/plain",
     ".zip": "application/zip",
 }
 
 
 @router.get("/intake")
-def get_intake(auth: AuthContext = Depends(get_auth)):
-    return {"sections": INTAKE_SECTIONS, "defaults": DEFAULT_INTAKE}
+def get_intake(iso: str | None = None, auth: AuthContext = Depends(get_auth)):
+    profile = get_profile(iso)
+    return {
+        "sections": intake_sections_for(iso),
+        "defaults": DEFAULT_INTAKE,
+        "profile": {
+            "iso": profile["iso"],
+            "name": profile["name"],
+            "process": profile["process"],
+            "tariff": profile["tariff"],
+            "portal": profile["portal"],
+            "portal_url": profile["portal_url"],
+            "form_name": profile["form_name"],
+            "tech_form": profile["tech_form"],
+            "model_tool": profile["model_tool"],
+            "dyn_ext": profile["dyn_ext"],
+            "site_control_note": profile["site_control_note"],
+        },
+    }
 
 
 @router.post("/extract")
@@ -121,20 +141,22 @@ async def post_extract_files(request: Request, auth: AuthContext = Depends(get_a
 @router.post("/validate")
 def post_validate(
     intake: dict[str, Any] = Body(...),
+    iso: str | None = None,
     auth: AuthContext = Depends(get_auth),
 ):
-    return validate_intake(intake)
+    return validate_intake(intake, iso)
 
 
 @router.post("/generate")
 def post_generate(
     intake: dict[str, Any] = Body(...),
+    iso: str | None = None,
     auth: AuthContext = Depends(get_auth),
 ):
-    validation = validate_intake(intake)
+    validation = validate_intake(intake, iso)
     if not validation["ok"]:
         return {"ok": False, "validation": validation}
-    manifest = generate_packet(intake, auth.org.id)
+    manifest = generate_packet(intake, auth.org.id, iso)
     return {"ok": True, "packet": manifest}
 
 
@@ -168,11 +190,20 @@ def preview_kickoff_document(key: str, request: Request, auth: AuthContext = Dep
 
 
 @router.get("/requirements/{rule_id}/preview", response_class=HTMLResponse)
-def preview_requirement(rule_id: str, auth: AuthContext = Depends(get_auth)):
+def preview_requirement(rule_id: str, iso: str | None = None, auth: AuthContext = Depends(get_auth)):
     """The ISO requirement (ground truth) behind a validation check, clause highlighted."""
     req = REQUIREMENTS.get(rule_id)
     if not req:
         raise HTTPException(status_code=404, detail="Unknown requirement")
+    profile = get_profile(iso)
+    if profile["iso"] != "CAISO":
+        req = {
+            **req,
+            "title": localize(req["title"], profile),
+            "source": localize(req["source"], profile),
+            "paragraphs": [localize(t, profile) for t in req["paragraphs"]],
+            "clause": localize(req["clause"], profile),
+        }
     return HTMLResponse(render_requirement_preview(rule_id, req))
 
 

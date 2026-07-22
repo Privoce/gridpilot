@@ -503,9 +503,11 @@ function paintGenRunningNow() {
   paintOnboarding(5);
 }
 
-async function ensureCaisoSchema() {
-  if (state.caisoSchema) return state.caisoSchema;
-  state.caisoSchema = await api.caisoIntake();
+async function ensureCaisoSchema(iso) {
+  const want = iso || "CAISO";
+  if (state.caisoSchema && state.caisoSchemaIso === want) return state.caisoSchema;
+  state.caisoSchema = await api.caisoIntake(want === "CAISO" ? undefined : want);
+  state.caisoSchemaIso = want;
   return state.caisoSchema;
 }
 
@@ -1680,7 +1682,7 @@ async function openProjectModal() {
     <form class="${panel} w-full max-w-md p-6" id="project-form">
       <h3 class="mb-4 text-lg tracking-tightish">Add project</h3>
       <div class="mb-3"><label class="${label}">Project name</label><input class="${field}" name="name" required /></div>
-      <div class="mb-3"><label class="${label}">ISO / RTO</label><select class="${field}" name="iso"><option>CAISO</option><option>PJM</option><option>MISO</option><option>ERCOT</option></select></div>
+      <div class="mb-3"><label class="${label}">ISO / RTO</label><select class="${field}" name="iso"><option>CAISO</option><option>PJM</option><option>MISO</option><option>ERCOT</option><option>SPP</option><option>NYISO</option><option>ISO-NE</option></select></div>
       <div class="mb-3"><label class="${label}">Capacity (MW)</label><input class="${field}" name="capacity_mw" type="number" step="0.1" /></div>
       <div class="mb-3"><label class="${label}">State</label><input class="${field}" name="state" placeholder="IN" /></div>
       <div class="mb-5"><label class="${label}">POI substation</label><input class="${field}" name="poi_substation" /></div>
@@ -1937,7 +1939,6 @@ function reqFileSlotHtml(f, meta) {
 async function renderRequest(projectId) {
   const me = await ensureAuth();
   if (!me) return;
-  await ensureCaisoSchema();
 
   let project = null;
   try {
@@ -1946,6 +1947,9 @@ async function renderRequest(projectId) {
     toast(err.message);
     return navigate("projects");
   }
+  const iso = project.iso || "CAISO";
+  state.reqIso = iso;
+  await ensureCaisoSchema(iso);
 
   const req = loadReq(projectId);
   const step = Math.min(4, Math.max(1, Number(req.step || 1)));
@@ -1954,7 +1958,7 @@ async function renderRequest(projectId) {
   // Arriving at Validate without a result (e.g. after a refresh) — validate now.
   if (step === 3 && !state.reqValidation && !state.reqBusy) {
     try {
-      state.reqValidation = await api.caisoValidate(intake);
+      state.reqValidation = await api.caisoValidate(intake, iso);
     } catch {
       state.reqValidation = null;
     }
@@ -1985,10 +1989,21 @@ async function renderRequest(projectId) {
   } else if (step === 1) {
     const files = (docSection?.fields || []).map((f) => reqFileSlotHtml(f, intake[f.key])).join("");
     const attached = Object.keys(reqFiles).length;
+    const profile = state.caisoSchema?.profile;
     body = `
       <div class="flex-1 p-7">
         <p class="mb-2 font-mono text-[12px] uppercase tracking-[0.12em] text-muted">Step 1 of 4</p>
         <h2 class="mb-3 text-2xl tracking-tightish">Kickoff documents</h2>
+        ${
+          profile
+            ? `<div class="mb-4 rounded-card border border-line bg-soft p-4">
+                 <p class="font-mono text-[11px] uppercase tracking-[0.08em] text-muted">${esc(profile.name)} — ${esc(profile.process)}</p>
+                 <p class="mt-1 text-[13px] leading-snug text-muted">Prepares ${esc(profile.form_name)}, ${esc(profile.tech_form)},
+                 ${esc(profile.model_tool)} models, drawings, and legal drafts per ${esc(profile.tariff)}.
+                 ${esc(profile.site_control_note)}</p>
+               </div>`
+            : ""
+        }
         <p class="mb-5 max-w-2xl text-[15px] leading-relaxed text-muted">
           Attach the documents you already have — executed site agreement, technical workbook,
           storage specification, signatory proof, vendor models, parcel boundary. GridPilot reads
@@ -2047,7 +2062,7 @@ async function renderRequest(projectId) {
               : ["border-ok/20 bg-ok-soft", "text-ok", "✓"];
         const reqBtn = it.rule
           ? `<button type="button" class="${button("ghost", "sm")}"
-               data-drawer-url="/api/caiso/requirements/${esc(it.rule.id)}/preview"
+               data-drawer-url="/api/caiso/requirements/${esc(it.rule.id)}/preview${iso !== "CAISO" ? `?iso=${encodeURIComponent(iso)}` : ""}"
                data-drawer-title="ISO requirement — ${esc(it.rule.title)}"
                data-drawer-file="${esc(it.rule.source)}">Requirement</button>`
           : "";
@@ -2090,7 +2105,7 @@ async function renderRequest(projectId) {
     let p = state.reqPacket;
     if (!p && req.packetId) {
       try {
-        p = state.reqPacket = await api.caisoPacket(req.packetId, req.packetD);
+        p = state.reqPacket = await api.caisoPacket(req.packetId, req.packetD, iso);
       } catch {
         p = null;
       }
@@ -2106,12 +2121,12 @@ async function renderRequest(projectId) {
           `<button type="button" class="${button("primary")}" id="req-generate">Regenerate packet</button>`
         )}`;
     } else {
-      const qs = req.packetD ? `?d=${req.packetD}` : "";
+      const qs = req.packetD ? `?d=${req.packetD}${iso !== "CAISO" ? `&i=${encodeURIComponent(iso)}` : ""}` : "";
       const zipUrl = `/api/caiso/packets/${esc(p.id)}/files/${encodeURIComponent(p.zip_file)}${qs}`;
       body = `
         <div class="flex-1 p-7">
           <p class="mb-2 font-mono text-[12px] uppercase tracking-[0.12em] text-muted">Step 4 of 4</p>
-          <h2 class="mb-3 text-2xl tracking-tightish">CAISO submission packet — ${esc(p.project_name)}</h2>
+          <h2 class="mb-3 text-2xl tracking-tightish">${esc(p.iso || iso)} submission packet — ${esc(p.project_name)}</h2>
           <div class="mb-5 grid gap-3 sm:grid-cols-4">
             <div class="rounded-card border border-line bg-soft p-4"><span class="font-mono text-[11px] uppercase tracking-[0.08em] text-muted">Net at POI</span><strong class="mt-1 block">${esc(p.net_mw)} MW</strong></div>
             <div class="rounded-card border border-line bg-soft p-4"><span class="font-mono text-[11px] uppercase tracking-[0.08em] text-muted">POI</span><strong class="mt-1 block text-[13px]">${esc(p.poi)}</strong></div>
@@ -2144,7 +2159,7 @@ async function renderRequest(projectId) {
   }
 
   root.innerHTML = shell(
-    `Interconnection request — ${project.name}`,
+    `${iso} interconnection request — ${project.name}`,
     `<div class="mx-auto max-w-4xl">
       ${reqStepperHtml(step)}
       <div class="${panel} flex min-h-[420px] flex-col overflow-hidden">${body}</div>
@@ -2189,11 +2204,11 @@ async function reqRunGeneration(projectId, intake) {
   state.reqBusy = {
     title: "Packet generation",
     heading: "Generating the submission packet",
-    detail: "All fifteen packet documents are generated from the validated intake…",
+    detail: "The complete document set is generated from the validated intake…",
   };
   reqRepaint(projectId);
   try {
-    const res = await api.caisoGenerate(intake);
+    const res = await api.caisoGenerate(intake, state.reqIso);
     if (!res?.ok) {
       state.reqBusy = null;
       state.reqValidation = res?.validation || null;
@@ -2277,7 +2292,7 @@ function bindRequest(projectId, step, intake) {
     document.getElementById("req-validate")?.addEventListener("click", async () => {
       const values = collectReqIntake(projectId, intake);
       try {
-        state.reqValidation = await api.caisoValidate(values);
+        state.reqValidation = await api.caisoValidate(values, state.reqIso);
         saveReq(projectId, { step: 3 });
       } catch (err) {
         toast(err.message);

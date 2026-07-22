@@ -59,11 +59,16 @@ export const api = {
   audit: (id) => request(`/api/audits/${id}`),
   triage: (auditId, findingId, body) =>
     request(`/api/audits/${auditId}/findings/${findingId}`, { method: "PATCH", body }),
-  caisoIntake: () => request("/api/caiso/intake"),
+  caisoIntake: (iso) => request(`/api/caiso/intake${iso ? `?iso=${encodeURIComponent(iso)}` : ""}`),
   caisoExtract: (files) => request("/api/caiso/extract", { method: "POST", body: { files } }),
-  caisoValidate: (intake) => request("/api/caiso/validate", { method: "POST", body: intake }),
-  caisoGenerate: (intake) => request("/api/caiso/generate", { method: "POST", body: intake }),
-  caisoPacket: (id, d) => request(`/api/caiso/packets/${id}${d ? `?d=${d}` : ""}`),
+  caisoValidate: (intake, iso) =>
+    request(`/api/caiso/validate${iso ? `?iso=${encodeURIComponent(iso)}` : ""}`, { method: "POST", body: intake }),
+  caisoGenerate: (intake, iso) =>
+    request(`/api/caiso/generate${iso ? `?iso=${encodeURIComponent(iso)}` : ""}`, { method: "POST", body: intake }),
+  caisoPacket: (id, d, iso) => {
+    const q = [d ? `d=${d}` : "", iso ? `i=${encodeURIComponent(iso)}` : ""].filter(Boolean).join("&");
+    return request(`/api/caiso/packets/${id}${q ? `?${q}` : ""}`);
+  },
   caisoExtractFiles: (formData) =>
     request("/api/caiso/extract-files", { method: "POST", body: formData }),
 };

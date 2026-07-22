@@ -159,9 +159,11 @@ def _code_body(text: str, kind: str) -> str:
     label = {
         ".epc": "GE PSLF load-flow model (.epc) — steady-state buses, branches, transformers, generators.",
         ".dyd": "GE PSLF dynamic model (.dyd) — WECC REGC_A / REEC / REPC_A controller records.",
+        ".raw": "Siemens PSS/E load-flow model (.raw) — steady-state buses, branches, transformers, generators.",
+        ".dyr": "Siemens PSS/E dynamic model (.dyr) — standard-library controller records.",
     }.get(kind, "Plain-text model file.")
     return (
-        f'<p class="note">{_e(label)} Validate in GE PSLF against the current CAISO base case '
+        f'<p class="note">{_e(label)} Validate against the current ISO base case '
         f'before submission.</p><pre class="code">{chr(10).join(lines_out)}</pre>'
     )
 
@@ -299,7 +301,7 @@ def render_preview(manifest: dict, doc: dict, path: Path, download_url: str) -> 
         body = _pdf_body(download_url)
     elif suffix == ".xlsx":
         body = _xlsx_body(path)
-    elif suffix in (".epc", ".dyd"):
+    elif suffix in (".epc", ".dyd", ".raw", ".dyr"):
         body = _code_body(path.read_text(encoding="utf-8"), suffix)
     elif suffix == ".md":
         body = _markdown_body(path.read_text(encoding="utf-8"))

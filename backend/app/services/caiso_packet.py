@@ -17,9 +17,12 @@ from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any
 
+import copy
+
 import fitz
 
 from backend.app.config import DATA_ROOT
+from backend.app.services.iso_profiles import get_profile, localize
 
 PACKETS_DIR = DATA_ROOT / "packets"
 
@@ -200,6 +203,28 @@ DEFAULT_INTAKE: dict[str, Any] = {
     "file_boundary": {"name": "Ravenwood_ParcelBoundary_KernCounty.kmz", "size": 46_210,
                       "example": True, "staged": True},
 }
+
+
+def intake_sections_for(iso: str | None) -> list[dict[str, Any]]:
+    """Intake schema localized for an ISO: form names, model formats, tracks."""
+    profile = get_profile(iso)
+    if profile["iso"] == "CAISO":
+        return INTAKE_SECTIONS
+    sections = copy.deepcopy(INTAKE_SECTIONS)
+    for section in sections:
+        section["title"] = localize(section["title"], profile)
+        if section.get("hint"):
+            section["hint"] = localize(section["hint"], profile)
+        for f in section["fields"]:
+            f["label"] = localize(f["label"], profile)
+            if f.get("hint"):
+                f["hint"] = localize(f["hint"], profile)
+            if f["key"] == "track":
+                f["options"] = list(profile["tracks"])
+                f["hint"] = f"Process track under {profile['tariff']}"
+            if f["key"] == "file_dyd":
+                f["accept"] = f".{profile['dyn_ext']},.zip"
+    return sections
 
 
 def _file_meta(v: Any) -> dict[str, Any] | None:
@@ -468,7 +493,8 @@ def _parse_cod(v: Any) -> date | None:
     return None
 
 
-def validate_intake(intake: dict[str, Any]) -> dict[str, Any]:
+def validate_intake(intake: dict[str, Any], iso: str | None = None) -> dict[str, Any]:
+    profile = get_profile(iso)
     errors: list[dict[str, Any]] = []
     warnings: list[dict[str, Any]] = []
     passed: list[dict[str, Any]] = []
@@ -477,7 +503,8 @@ def validate_intake(intake: dict[str, Any]) -> dict[str, Any]:
         req = REQUIREMENTS.get(rule_id or "")
         if not req:
             return None
-        return {"id": rule_id, "title": req["title"], "source": req["source"]}
+        return {"id": rule_id, "title": localize(req["title"], profile),
+                "source": localize(req["source"], profile)}
 
     def _evidence_ref(file_key: str | None, hl: list[str] | None = None) -> dict[str, Any] | None:
         """The examined document behind a check: which upload, and what to highlight."""
@@ -494,7 +521,8 @@ def validate_intake(intake: dict[str, Any]) -> dict[str, Any]:
 
     def _item(field: str, title: str, detail: str,
               rule: str | None, evidence: str | None, hl: list[str] | None) -> dict[str, Any]:
-        it: dict[str, Any] = {"field": field, "title": title, "detail": detail}
+        it: dict[str, Any] = {"field": field, "title": localize(title, profile),
+                              "detail": localize(detail, profile)}
         r = _rule_ref(rule)
         if r:
             it["rule"] = r
@@ -548,12 +576,14 @@ def validate_intake(intake: dict[str, Any]) -> dict[str, Any]:
             "Decimal-format latitude and longitude are required (they feed Appendix 1, Attachment A, and the KMZ).",
             rule="gps", evidence="file_boundary", hl=["gps"])
     else:
-        if not (32.0 <= lat <= 42.5 and -125.0 <= lon <= -113.5):
-            warn("gps_lat", "Coordinates outside the typical CAISO footprint",
-                 f"({lat}, {lon}) does not look like a California site — verify before submission.",
+        box = profile.get("gps_box")
+        if box and not (box[0] <= lat <= box[1] and box[2] <= lon <= box[3]):
+            warn("gps_lat", f"Coordinates outside the typical {profile['iso']} footprint",
+                 f"({lat}, {lon}) does not look like a site in the {profile['name']} region — verify before submission.",
                  rule="gps", evidence="file_boundary", hl=["gps"])
         else:
-            ok("Site coordinates valid", f"({lat}, {lon}) — {intake.get('county') or '—'} County, {intake.get('state') or 'CA'}.",
+            ok("Site coordinates valid",
+               f"({lat}, {lon}) — {intake.get('county') or '—'} County, {intake.get('state') or '—'}.",
                rule="gps", evidence="file_boundary", hl=["gps"])
 
     site_control = str(intake.get("site_control") or "")
@@ -609,7 +639,7 @@ def validate_intake(intake: dict[str, Any]) -> dict[str, Any]:
 
     track = str(intake.get("track") or "")
     if not track:
-        err("track", "Process track not selected", "Choose Cluster, Independent Study, or Fast Track.")
+        err("track", "Process track not selected", "Choose one of: " + ", ".join(profile["tracks"]) + ".")
     elif track == "Fast Track" and net is not None and net > 5:
         err("track", "Fast Track not available above 5 MW",
             f"Requested {_fmt(net)} MW at POI exceeds the 5 MW Fast Track limit — use ISP or Cluster.",
@@ -890,23 +920,34 @@ def _slug(s: str) -> str:
 
 
 def _gen_appendix1(intake: dict, d: dict, path: Path) -> None:
-    pdf = _Pdf(
-        "Appendix 1 — Interconnection Request",
-        "Independent Study Process / Fast Track (RIMS-IR-NON-CLUSTER-V01) — execute electronically in RIMS5",
-    )
-    pdf.section("1 · Process")
-    pdf.checkbox(d["track"] == "Fast Track", "Fast Track Process")
-    pdf.checkbox(d["is_isp"], "Independent Study Process")
-    pdf.checkbox(d["track"] == "Cluster", "Cluster (use the Cluster Appendix 1 form)")
+    p = d.get("profile") or get_profile(None)
+    if p["iso"] == "CAISO":
+        pdf = _Pdf(
+            "Appendix 1 — Interconnection Request",
+            "Independent Study Process / Fast Track (RIMS-IR-NON-CLUSTER-V01) — execute electronically in RIMS5",
+        )
+        pdf.section("1 · Process")
+        pdf.checkbox(d["track"] == "Fast Track", "Fast Track Process")
+        pdf.checkbox(d["is_isp"], "Independent Study Process")
+        pdf.checkbox(d["track"] == "Cluster", "Cluster (use the Cluster Appendix 1 form)")
+    else:
+        pdf = _Pdf(
+            p["form_name"],
+            f"{p['process']} ({p['tariff']}) — submit via {p['portal']}",
+        )
+        pdf.section("1 · Process")
+        for t in p["tracks"]:
+            pdf.checkbox(d["track"] == t, t)
 
     pdf.section("2 · Request type & deliverability")
     pdf.checkbox(True, "A proposed new Generating Facility")
     pdf.kv("Requested deliverability (on-peak)", str(intake.get("deliverability") or "Full Capacity"),
-           "ISP: Full Capacity deliverability assessed in the next annual Cluster Study (GIDAP 4.6)")
+           "ISP: Full Capacity deliverability assessed in the next annual Cluster Study (GIDAP 4.6)"
+           if p["iso"] == "CAISO" else f"Service level election per {p['tariff']}")
 
     pdf.section("4a · Project name & location")
     pdf.kv("Project name", str(intake.get("project_name") or ""))
-    pdf.kv("County / State", f"{intake.get('county') or '—'} / {intake.get('state') or 'CA'}")
+    pdf.kv("County / State", f"{intake.get('county') or '—'} / {intake.get('state') or '—'}")
     pdf.kv("GPS latitude (decimal)", f"{d['lat']}")
     pdf.kv("GPS longitude (decimal)", f"{d['lon']}")
 
@@ -917,7 +958,7 @@ def _gen_appendix1(intake: dict, d: dict, path: Path) -> None:
     pdf.kv("Maximum net electrical output (MW)", _fmt(d["max_net"]))
     pdf.kv("Anticipated losses to POI (MW)", _fmt(d["losses"]))
     pdf.kv("Requested Interconnection Service Capacity", f"{_fmt(d['net'])} MW at POI",
-           "This value appears in the CAISO queue and must match every document in the packet")
+           f"This value appears in the {p['iso']} queue and must match every document in the packet")
     pdf.para(
         "Output-limiting control: plant-level Power Plant Controller (PPC) monitors POI revenue metering and "
         f"limits aggregate export to {_fmt(d['net'])} MW via real-time inverter setpoint dispatch; "
@@ -947,7 +988,8 @@ def _gen_appendix1(intake: dict, d: dict, path: Path) -> None:
 
     pdf.section("5–9 · Deposit, exclusivity, submission")
     pdf.kv("Study deposit", d["deposit"],
-           "Wire directly to CAISO — Wells Fargo, ABA 121000248, Acct 4122041825; reference the project name")
+           "Wire directly to CAISO — Wells Fargo, ABA 121000248, Acct 4122041825; reference the project name"
+           if p["iso"] == "CAISO" else p["deposit_action"])
     _sf = _file_meta(intake.get("file_site_control"))
     pdf.kv("Site exclusivity", f"{intake.get('site_control') or ''} — attached",
            f"Owner: {intake.get('site_owner') or '—'}; {_fmt(d['acres'])} acres"
@@ -955,8 +997,12 @@ def _gen_appendix1(intake: dict, d: dict, path: Path) -> None:
     pdf.kv("Legal name of Interconnection Customer", str(intake.get("legal_name") or ""),
            "Must match the Secretary of State certificate exactly")
     pdf.kv("State of origin", str(intake.get("state_of_origin") or "—"))
-    pdf.para(f"Submit electronically via {RIMS5_URL}. Electronic signature executed in RIMS5 by "
-             f"{intake.get('signatory_name') or ''}, {intake.get('signatory_title') or ''}.", size=8.5, color=MUT)
+    if p["iso"] == "CAISO":
+        pdf.para(f"Submit electronically via {RIMS5_URL}. Electronic signature executed in RIMS5 by "
+                 f"{intake.get('signatory_name') or ''}, {intake.get('signatory_title') or ''}.", size=8.5, color=MUT)
+    else:
+        pdf.para(f"{p['submit_action']} ({p['portal_url']}). Executed by "
+                 f"{intake.get('signatory_name') or ''}, {intake.get('signatory_title') or ''}.", size=8.5, color=MUT)
     pdf.save(path)
 
 
@@ -985,8 +1031,13 @@ def _gen_attachment_a(intake: dict, d: dict, path: Path) -> None:
             ws.cell(r, 1).font = sect
         ws.cell(r, 3).alignment = Alignment(wrap_text=True)
 
-    row(f"GridPilot draft — {intake.get('project_name')} — transfer into the official CAISO Attachment A (.xlsm macro file); "
-        "run validation to zero errors before submission.", style="head")
+    p = d.get("profile") or get_profile(None)
+    if p["iso"] == "CAISO":
+        row(f"GridPilot draft — {intake.get('project_name')} — transfer into the official CAISO Attachment A (.xlsm macro file); "
+            "run validation to zero errors before submission.", style="head")
+    else:
+        row(f"GridPilot draft — {intake.get('project_name')} — transfer into the official {p['iso']} "
+            f"technical data workbook ({p['tech_form']}); run validation before submission.", style="head")
     row("GENERAL", style="sect")
     row("Project Name", str(intake.get("project_name") or ""))
     row("Interconnection Customer (legal name)", str(intake.get("legal_name") or ""),
@@ -1321,16 +1372,17 @@ def _gen_kmz(intake: dict, d: dict, path: Path) -> None:
 
 
 def _gen_epc(intake: dict, d: dict, path: Path) -> None:
+    p = d.get("profile") or get_profile(None)
     name8 = _slug(str(intake.get("project_name")))[:5].upper()
     pv_mva = round(d["pv_mw"] * 1.05, 1)
     bess_mva = round(d["bess_mw"] * 1.05, 1)
     lines = [
-        f"! GE PSLF EPC — {intake.get('project_name')} {_fmt(d['net'])} MW — generated by GridPilot",
-        "! Rebuild/validate in GE PSLF against the current CAISO base case (obtained under NDA) before submission",
+        f"! {p['model_tool']} load flow — {intake.get('project_name')} {_fmt(d['net'])} MW — generated by GridPilot",
+        f"! Rebuild/validate in {p['model_tool']} against the current {p['iso']} base case (obtained under NDA) before submission",
         "title",
         f"{intake.get('project_name')} Interconnection — {_fmt(d['net'])} MW at {intake.get('poi_name')} {_fmt(d['kv'])} kV",
         "comments",
-        f"Base case: CAISO {d['cod'].year} Summer Peak (to be obtained from CAISO via NDA)",
+        f"Base case: {p['iso']} {d['cod'].year} Summer Peak (to be obtained from {p['iso']} via NDA)",
         "end",
         "bus data",
         f' 90001 "{name8}-POI"  {d["kv"]:.2f} : #9 1 1.0200  0.00 : 0 "SCE " " 1"',
@@ -1362,6 +1414,7 @@ def _gen_epc(intake: dict, d: dict, path: Path) -> None:
 
 
 def _gen_dyd(intake: dict, d: dict, path: Path) -> None:
+    p = d.get("profile") or get_profile(None)
     name8 = _slug(str(intake.get("project_name")))[:5].upper()
     pv_mva = round(d["pv_mw"] * 1.05, 1)
     bess_mva = round(d["bess_mw"] * 1.05, 1)
@@ -1373,7 +1426,7 @@ def _gen_dyd(intake: dict, d: dict, path: Path) -> None:
     else:
         vendor_note = "PLACEHOLDER — swap in vendor MOD-026/027-verified parameters before submission"
     lines = [
-        f"# GE PSLF DYD — {intake.get('project_name')} — generated by GridPilot ({vendor_note})",
+        f"# {p['model_tool']} dynamic data — {intake.get('project_name')} — generated by GridPilot ({vendor_note})",
     ]
     common_regc = ('"lvplsw" 1 "rrpwr" 10.0 "brkpt" 0.9 "zerox" 0.4 "lvpl1" 1.22 "vtmax" 1.2 "lvpnt1" 0.8 '
                    '"lvpnt0" 0.4 "qmin" -1.3 "accel" 0.7 "tg" 0.02 "tfltr" 0.02 "iqrmax" 99 "iqrmin" -99 "xe" 0.8')
@@ -1496,12 +1549,18 @@ def _gen_mw_poi_plot(intake: dict, d: dict, path: Path) -> None:
 
 
 def _gen_readme(intake: dict, d: dict, docs: list[dict], path: Path) -> None:
+    p = d.get("profile") or get_profile(None)
     proj = intake.get("project_name")
+    if p["iso"] == "CAISO":
+        mapping_note = ("Generated by GridPilot from the developer intake. Mapped to the CAISO ISP/Fast Track\n"
+                        "Minimum Requirements checklist (RIMS-IR-NON-CLUSTER-V01).")
+    else:
+        mapping_note = (f"Generated by GridPilot from the developer intake. Mapped to the {p['iso']} "
+                        f"{p['process']} requirements ({p['tariff']}).")
     lines = [
-        f"# {proj} — CAISO {d['track']} Interconnection Request Packet",
+        f"# {proj} — {p['iso']} {d['track']} Interconnection Request Packet",
         "",
-        "Generated by GridPilot from the developer intake. Mapped to the CAISO ISP/Fast Track",
-        "Minimum Requirements checklist (RIMS-IR-NON-CLUSTER-V01).",
+        mapping_note,
         "",
         "| # | Document | Status |",
         "|---|----------|--------|",
@@ -1512,26 +1571,39 @@ def _gen_readme(intake: dict, d: dict, docs: list[dict], path: Path) -> None:
         "",
         "## Consistency (enforced from a single intake source)",
         f"Gross {_fmt(d['gross'])} MW − Aux {_fmt(d['aux'])} − Losses {_fmt(d['losses'])} = {_fmt(d['net'])} MW at POI;",
-        f"legal name \"{intake.get('legal_name')}\" identical across Appendix 1 / site exclusivity / signatory docs;",
-        f"GPS {d['lat']}, {d['lon']} identical across Appendix 1 / Attachment A / KMZ.",
+        localize(f"legal name \"{intake.get('legal_name')}\" identical across Appendix 1 / site exclusivity / signatory docs;", p),
+        localize(f"GPS {d['lat']}, {d['lon']} identical across Appendix 1 / Attachment A / KMZ.", p),
         "",
         "## What GridPilot cannot do for you (hard dependencies)",
-        "- GE PSLF validation against the CAISO base case (NDA) for final .epc/.dyd and plots",
-        "- Vendor .dyd dynamic model files (request from the equipment vendor on day one)",
+        f"- {p['model_tool']} validation against the {p['iso']} base case (NDA) for final model files and plots",
+        f"- Vendor .{p['dyn_ext']} dynamic model files (request from the equipment vendor on day one)",
         "- Official Secretary of State certificate; executed land agreements",
-        f"- Study deposit wire: {d['deposit']} to CAISO (Wells Fargo, ABA 121000248, Acct 4122041825)",
-        f"- Electronic signature in RIMS5: {RIMS5_URL}",
-        "",
-        "## Official CAISO templates & references (caiso.com/documents/…)",
-        "- Appendix 1 blank template: interconnectionrequestform-appendix1-independentstudyandfasttrack.docx",
-        "- Attachment A official macro workbook: generating-facility-data-attachment-a-to-appendix-1.xlsm",
-        "- Site exclusivity demonstration form: siteexclusivity-controldemonstrationform.docx",
-        "- ISP eligibility form: independent-study-process-eligibility-form.docx",
-        "- Flat run / bump test plot instructions: flatruntestandbumptestplotinstructions.pdf",
-        "- Reactive capability whitepaper (P-Q curve standard): evaluategeneratorreactivecapability-whitepaper.pdf",
-        "- Prohibited project names (check before naming in Appendix 1): prohibitedprojectnames.xlsx",
+        (f"- Study deposit wire: {d['deposit']} to CAISO (Wells Fargo, ABA 121000248, Acct 4122041825)"
+         if p["iso"] == "CAISO" else f"- Deposits & fees: {p['deposit_action']}"),
+        (f"- Electronic signature in RIMS5: {RIMS5_URL}"
+         if p["iso"] == "CAISO" else f"- Submission: {p['submit_action']} — {p['portal_url']}"),
         "",
     ]
+    if p["iso"] == "CAISO":
+        lines += [
+            "## Official CAISO templates & references (caiso.com/documents/…)",
+            "- Appendix 1 blank template: interconnectionrequestform-appendix1-independentstudyandfasttrack.docx",
+            "- Attachment A official macro workbook: generating-facility-data-attachment-a-to-appendix-1.xlsm",
+            "- Site exclusivity demonstration form: siteexclusivity-controldemonstrationform.docx",
+            "- ISP eligibility form: independent-study-process-eligibility-form.docx",
+            "- Flat run / bump test plot instructions: flatruntestandbumptestplotinstructions.pdf",
+            "- Reactive capability whitepaper (P-Q curve standard): evaluategeneratorreactivecapability-whitepaper.pdf",
+            "- Prohibited project names (check before naming in Appendix 1): prohibitedprojectnames.xlsx",
+            "",
+        ]
+    else:
+        lines += [
+            f"## {p['iso']} references",
+            f"- Process: {p['process']} — {p['tariff']}",
+            f"- Portal: {p['portal_url']}",
+            f"- Site control: {p['site_control_note']}",
+            "",
+        ]
     path.write_text("\n".join(lines), encoding="utf-8")
 
 
@@ -1539,24 +1611,33 @@ def _gen_readme(intake: dict, d: dict, docs: list[dict], path: Path) -> None:
 # Packet assembly
 # ---------------------------------------------------------------------------
 
-def packet_id_for(intake: dict[str, Any], org_id: str) -> str:
+def packet_id_for(intake: dict[str, Any], org_id: str, iso: str | None = None) -> str:
     """Deterministic packet id — the same intake always maps to the same id.
 
     Serverless instances don't share /tmp, so a packet generated on one instance
     may be requested from another. A content-derived id lets any instance
     regenerate the identical packet on demand (see routers/caiso.py).
     """
-    canonical = json.dumps({"org": org_id, "intake": intake}, sort_keys=True, default=str)
+    profile = get_profile(iso)
+    payload: dict[str, Any] = {"org": org_id, "intake": intake}
+    if profile["iso"] != "CAISO":  # keep pre-existing CAISO packet ids stable
+        payload["iso"] = profile["iso"]
+    canonical = json.dumps(payload, sort_keys=True, default=str)
     return hashlib.sha256(canonical.encode("utf-8")).hexdigest()[:12]
 
 
-def generate_packet(intake: dict[str, Any], org_id: str) -> dict[str, Any]:
-    validation = validate_intake(intake)
+def generate_packet(intake: dict[str, Any], org_id: str, iso: str | None = None) -> dict[str, Any]:
+    profile = get_profile(iso)
+    loc = lambda s: localize(s, profile)  # noqa: E731
+    validation = validate_intake(intake, iso)
     if not validation["ok"]:
         raise ValueError("Intake has blocking issues; resolve them before generating the packet.")
 
     d = _derived(intake)
-    pid = packet_id_for(intake, org_id)
+    d["profile"] = profile
+    if profile["iso"] != "CAISO":
+        d["deposit"] = f"Per {profile['iso']} deposit schedule"
+    pid = packet_id_for(intake, org_id, iso)
     pdir = PACKETS_DIR / pid
     pdir.mkdir(parents=True, exist_ok=True)
     slug = _slug(str(intake.get("project_name")))
@@ -1571,29 +1652,32 @@ def generate_packet(intake: dict[str, Any], org_id: str) -> dict[str, Any]:
         })
         return pdir / filename
 
+    form_file = "Appendix1" if profile["iso"] == "CAISO" else "InterconnectionRequest"
+    tech_file = "AttachmentA" if profile["iso"] == "CAISO" else "TechnicalData"
     _gen_appendix1(intake, d, add(
-        "01", "appendix1", "Appendix 1 — Interconnection Request", f"01_Appendix1_{slug}.pdf",
-        "application", "generated", "DRAFT — enter into RIMS5 & e-sign", "GridPilot",
-        "Complete draft; the official submission is executed electronically in RIMS5."))
+        "01", "appendix1", profile["form_name"], f"01_{form_file}_{slug}.pdf",
+        "application", "generated", loc("DRAFT — enter into RIMS5 & e-sign"), "GridPilot",
+        loc("Complete draft; the official submission is executed electronically in RIMS5.")))
     _gen_attachment_a(intake, d, add(
-        "02", "attachment_a", "Attachment A — Generator Technical Data", f"02_AttachmentA_{slug}.xlsx",
-        "application", "generated", "DATA READY — transfer into official .xlsm", "GridPilot",
-        "Transfer into CAISO's official macro workbook and run validation to zero errors."))
-    if d["is_isp"]:
+        "02", "attachment_a", profile["tech_form"], f"02_{tech_file}_{slug}.xlsx",
+        "application", "generated", loc("DATA READY — transfer into official .xlsm"), "GridPilot",
+        loc("Transfer into CAISO's official macro workbook and run validation to zero errors.")))
+    if profile["iso"] == "CAISO" and d["is_isp"]:
         _gen_isp_eligibility(intake, d, add(
             "03", "isp_eligibility", "ISP Eligibility Demonstration", f"03_ISP_Eligibility_{slug}.pdf",
             "application", "generated", "DRAFT — attach evidence (PO, financing, permits)", "GridPilot",
             "Narrative pre-filled; attach supporting evidence for each item."))
 
+    raw_ext, dyn_ext = profile["raw_ext"], profile["dyn_ext"]
     _gen_epc(intake, d, add(
-        "10", "epc", "Load Flow Model (.epc)", f"10_LoadFlowModel_{slug}.epc",
-        "models", "generated", "GENERATED — validate in GE PSLF vs CAISO base case", "GridPilot",
+        "10", "epc", f"Load Flow Model (.{raw_ext})", f"10_LoadFlowModel_{slug}.{raw_ext}",
+        "models", "generated", loc("GENERATED — validate in GE PSLF vs CAISO base case"), "GridPilot",
         "Steady-state model of generator, GSU, collector, and interconnection to the POI."))
     _gen_dyd(intake, d, add(
-        "11", "dyd", "Dynamic Model (.dyd)", f"11_DynamicModel_{slug}.dyd",
+        "11", "dyd", f"Dynamic Model (.{dyn_ext})", f"11_DynamicModel_{slug}.{dyn_ext}",
         "models", "generated",
-        "GENERATED — WECC standard models" + ("" if intake.get("dyd_status") == "Received from vendor"
-                                              else "; swap in vendor UDM"),
+        loc("GENERATED — WECC standard models") + ("" if intake.get("dyd_status") == "Received from vendor"
+                                                   else "; swap in vendor UDM"),
         "GridPilot", "REGC_A / REEC_A / REPC_A; vendor MOD-026/027 parameters when received."))
     _gen_reactive_curve(intake, d, add(
         "12", "reactive", "Reactive Power Capability Curve", f"12_ReactivePowerCurve_{slug}.pdf",
@@ -1601,11 +1685,11 @@ def generate_packet(intake: dict[str, Any], org_id: str) -> dict[str, Any]:
 
     _gen_flat_bump(intake, d, add(
         "13", "flat_bump", "Flat Run + Bump Test Plots", f"13_FlatRun_BumpTest_{slug}.pdf",
-        "simulations", "generated", "ILLUSTRATIVE — regenerate from PSLF runs", "GridPilot",
-        "CAISO accepts screenshots; final plots must come from validated PSLF runs."))
+        "simulations", "generated", loc("ILLUSTRATIVE — regenerate from PSLF runs"), "GridPilot",
+        loc("CAISO accepts screenshots; final plots must come from validated PSLF runs.")))
     _gen_mw_poi_plot(intake, d, add(
         "14", "mw_poi", "Requested MW at POI Plot", f"14_MW_at_POI_{slug}.pdf",
-        "simulations", "generated", "ILLUSTRATIVE — regenerate from PSLF runs", "GridPilot"))
+        "simulations", "generated", loc("ILLUSTRATIVE — regenerate from PSLF runs"), "GridPilot"))
 
     _gen_sld(intake, d, add(
         "09", "sld", "Single-Line Diagram", f"09_SingleLineDiagram_{slug}.pdf",
@@ -1635,17 +1719,25 @@ def generate_packet(intake: dict[str, Any], org_id: str) -> dict[str, Any]:
                       "reference", "generated", "GENERATED", "GridPilot")
     _gen_readme(intake, d, sorted(docs, key=lambda x: x["n"]), readme_path)
 
-    zip_path = pdir / f"{slug}_CAISO_Packet.zip"
+    zip_path = pdir / f"{slug}_{profile['iso'].replace('-', '')}_Packet.zip"
     with zipfile.ZipFile(zip_path, "w", zipfile.ZIP_DEFLATED) as z:
         for doc in docs:
             fp = pdir / doc["file"]
             if fp.exists():
                 z.write(fp, doc["file"])
 
+    if profile["iso"] == "CAISO":
+        deposit_action = {
+            "title": f"Wire the study deposit — {d['deposit']}",
+            "detail": "Directly to CAISO: Wells Fargo, ABA 121000248, Acct 4122041825. "
+                      f"Reference \"{str(intake.get('project_name') or '').upper()}\" in the wire notes."}
+    else:
+        deposit_action = {
+            "title": "Fund the study deposits and fees",
+            "detail": profile["deposit_action"] + " Reference "
+                      f"\"{str(intake.get('project_name') or '').upper()}\" in the wire notes."}
     actions = [
-        {"title": f"Wire the study deposit — {d['deposit']}",
-         "detail": "Directly to CAISO: Wells Fargo, ABA 121000248, Acct 4122041825. "
-                   f"Reference \"{str(intake.get('project_name') or '').upper()}\" in the wire notes."},
+        deposit_action,
         {"title": "Order the Secretary of State certificate",
          "detail": f"Certificate of Good Standing for {intake.get('legal_name')} — see document 04 for instructions."},
     ]
@@ -1661,21 +1753,27 @@ def generate_packet(intake: dict[str, Any], org_id: str) -> dict[str, Any]:
             "detail": f"{intake.get('site_control')} with {intake.get('site_owner')} — LOIs are not accepted."})
     if _file_meta(intake.get("file_dyd")) is None and intake.get("dyd_status") != "Received from vendor":
         actions.append({
-            "title": "Chase vendor .dyd dynamic model files",
-            "detail": "The most common schedule risk. GridPilot used WECC standard models as placeholders — "
-                      "swap in vendor MOD-026/027-verified parameters before submission."})
-    actions.append({
-        "title": "E-sign Appendix 1 in RIMS5 and upload the packet",
-        "detail": f"{RIMS5_URL} — CAISO confirms acceptance within ~4 weeks and the project enters the queue."})
+            "title": loc("Chase vendor .dyd dynamic model files"),
+            "detail": loc("The most common schedule risk. GridPilot used WECC standard models as placeholders — "
+                          "swap in vendor MOD-026/027-verified parameters before submission.")})
+    if profile["iso"] == "CAISO":
+        actions.append({
+            "title": "E-sign Appendix 1 in RIMS5 and upload the packet",
+            "detail": f"{RIMS5_URL} — CAISO confirms acceptance within ~4 weeks and the project enters the queue."})
+    else:
+        actions.append({
+            "title": profile["submit_action"],
+            "detail": f"{profile['portal_url']} — see the {profile['iso']} requirements reference for "
+                      "window dates and acceptance timelines."})
 
     consistency = [
         {"title": "MW chain reconciled",
-         "detail": f"Gross {_fmt(d['gross'])} − Aux {_fmt(d['aux'])} − Losses {_fmt(d['losses'])} = "
-                   f"{_fmt(d['net'])} MW at POI — identical in Appendix 1, Attachment A, the .epc model, and the SLD."},
+         "detail": loc(f"Gross {_fmt(d['gross'])} − Aux {_fmt(d['aux'])} − Losses {_fmt(d['losses'])} = "
+                       f"{_fmt(d['net'])} MW at POI — identical in Appendix 1, Attachment A, the model, and the SLD.")},
         {"title": "Legal name consistent",
-         "detail": f"\"{intake.get('legal_name')}\" used verbatim across Appendix 1, signatory consent, and site exclusivity."},
+         "detail": loc(f"\"{intake.get('legal_name')}\" used verbatim across Appendix 1, signatory consent, and site exclusivity.")},
         {"title": "GPS consistent",
-         "detail": f"{d['lat']}, {d['lon']} identical in Appendix 1, Attachment A, and the KMZ boundary."},
+         "detail": loc(f"{d['lat']}, {d['lon']} identical in Appendix 1, Attachment A, and the KMZ boundary.")},
         {"title": "Dates sequential",
          "detail": f"In-service {d['in_service'].strftime('%m/%d/%Y')} → trial operation "
                    f"{d['trial_op'].strftime('%m/%d/%Y')} → COD {d['cod'].strftime('%m/%d/%Y')} (within 7 years)."},
@@ -1684,6 +1782,8 @@ def generate_packet(intake: dict[str, Any], org_id: str) -> dict[str, Any]:
     manifest = {
         "id": pid,
         "org_id": org_id,
+        "iso": profile["iso"],
+        "iso_process": profile["process"],
         "created_at": datetime.now(timezone.utc).isoformat(),
         "project_name": intake.get("project_name"),
         "legal_name": intake.get("legal_name"),
