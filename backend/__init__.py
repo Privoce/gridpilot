@@ -1,1 +1,1 @@
-"""Nerviom / GridPilot backend."""
+"""Haraton, Inc. / GridPilot backend."""
