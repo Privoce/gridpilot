@@ -87,6 +87,16 @@ def landing(request: Request):
     return HTMLResponse("<a href='/app'>Open GridPilot</a>")
 
 
+@app.get("/privacy", response_class=HTMLResponse)
+def privacy():
+    return HTMLResponse((STATIC_DIR / "privacy.html").read_text(encoding="utf-8"))
+
+
+@app.get("/terms", response_class=HTMLResponse)
+def terms():
+    return HTMLResponse((STATIC_DIR / "terms.html").read_text(encoding="utf-8"))
+
+
 @app.get("/app")
 @app.get("/app/{path:path}")
 def spa(path: str = ""):
