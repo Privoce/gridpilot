@@ -1,13 +1,20 @@
 from __future__ import annotations
 
+import secrets
+from urllib.parse import urlencode
+
+import httpx
 from fastapi import APIRouter, Depends, HTTPException, Request, Response
+from fastapi.responses import RedirectResponse
 from sqlalchemy.orm import Session
 
 from backend.app.auth import (
     create_account_token,
+    create_oauth_state,
     create_session_token,
     hash_password,
     read_account_token,
+    read_oauth_state,
     slugify,
     verify_password,
 )
@@ -182,6 +189,122 @@ def login(
     _set_session(response, user, org, membership.role.value)
     _set_account_cookie(response, user, org, membership.role.value)
     return _me_payload(user, org, membership.role.value, project_count)
+
+
+GOOGLE_AUTH_URL = "https://accounts.google.com/o/oauth2/v2/auth"
+GOOGLE_TOKEN_URL = "https://oauth2.googleapis.com/token"
+GOOGLE_USERINFO_URL = "https://openidconnect.googleapis.com/v1/userinfo"
+
+
+def _external_base(request: Request) -> str:
+    """Public origin of this request — Vercel terminates TLS at the proxy."""
+    proto = request.headers.get("x-forwarded-proto") or request.url.scheme
+    host = request.headers.get("x-forwarded-host") or request.headers.get("host") or request.url.netloc
+    return f"{proto}://{host}"
+
+
+def _google_configured() -> bool:
+    return bool(settings.google_client_id and settings.google_client_secret)
+
+
+@router.get("/config")
+def auth_config():
+    """Which optional sign-in methods are available (drives the UI)."""
+    return {"google": _google_configured()}
+
+
+@router.get("/google/start")
+def google_start(request: Request):
+    if not _google_configured():
+        raise HTTPException(status_code=404, detail="Google sign-in is not configured")
+    base = _external_base(request)
+    state = create_oauth_state({"n": secrets.token_urlsafe(16), "b": base})
+    params = {
+        "client_id": settings.google_client_id,
+        "redirect_uri": f"{base}/api/auth/google/callback",
+        "response_type": "code",
+        "scope": "openid email profile",
+        "state": state,
+        "prompt": "select_account",
+    }
+    return RedirectResponse(f"{GOOGLE_AUTH_URL}?{urlencode(params)}", status_code=302)
+
+
+@router.get("/google/callback")
+def google_callback(request: Request, db: Session = Depends(get_db)):
+    if not _google_configured():
+        raise HTTPException(status_code=404, detail="Google sign-in is not configured")
+
+    def fail(reason: str) -> RedirectResponse:
+        return RedirectResponse(f"/app?auth_error={reason}#/login", status_code=302)
+
+    state = read_oauth_state(request.query_params.get("state") or "")
+    code = request.query_params.get("code")
+    if not state or not code:
+        return fail("google_state")
+    base = state.get("b") or _external_base(request)
+
+    try:
+        with httpx.Client(timeout=15) as client:
+            token_res = client.post(GOOGLE_TOKEN_URL, data={
+                "client_id": settings.google_client_id,
+                "client_secret": settings.google_client_secret,
+                "code": code,
+                "grant_type": "authorization_code",
+                "redirect_uri": f"{base}/api/auth/google/callback",
+            })
+            token_res.raise_for_status()
+            access_token = token_res.json().get("access_token")
+            if not access_token:
+                return fail("google_token")
+            info_res = client.get(GOOGLE_USERINFO_URL,
+                                  headers={"Authorization": f"Bearer {access_token}"})
+            info_res.raise_for_status()
+            info = info_res.json()
+    except httpx.HTTPError:
+        return fail("google_http")
+
+    email = str(info.get("email") or "").lower().strip()
+    if not email or not info.get("email_verified", True):
+        return fail("google_email")
+    name = str(info.get("name") or email.split("@")[0]).strip()
+
+    user = db.query(User).filter(User.email == email).first()
+    if not user:
+        # The account may live on another serverless instance — the signed
+        # account cookie can restore it here.
+        user = _restore_account_from_cookie(request, db, email)
+    if not user:
+        # First Google sign-in: provision a user + workspace. The random
+        # password keeps password login closed until the user sets one.
+        base_slug = slugify(f"{name}-workspace")
+        slug = base_slug
+        i = 2
+        while db.query(Organization).filter(Organization.slug == slug).first():
+            slug = f"{base_slug}-{i}"
+            i += 1
+        user = User(email=email, name=name,
+                    password_hash=hash_password(secrets.token_urlsafe(32)))
+        org = Organization(name=f"{name}'s Workspace", slug=slug, plan=Plan.FREE)
+        db.add(user)
+        db.add(org)
+        db.flush()
+        db.add(Membership(user_id=user.id, org_id=org.id, role=MemberRole.OWNER))
+        db.commit()
+        db.refresh(user)
+
+    membership = db.query(Membership).filter(Membership.user_id == user.id).first()
+    if not membership:
+        return fail("google_org")
+    org = db.get(Organization, membership.org_id)
+    assert org
+    maybe_roll_period(org)
+    db.commit()
+
+    response = RedirectResponse("/app#/dashboard", status_code=302)
+    _set_session(response, user, org, membership.role.value)
+    _set_account_cookie(response, user, org, membership.role.value)
+    return response
 
 
 @router.post("/logout")

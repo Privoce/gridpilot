@@ -29,6 +29,8 @@ class Settings(BaseSettings):
     report_dir: Path = Path()
     rules_dir: Path = Path(__file__).resolve().parent / "rules"
     max_pages: int = 6
+    google_client_id: str = ""
+    google_client_secret: str = ""
     session_cookie: str = "gp_session"
     session_max_age: int = 60 * 60 * 24 * 14  # 14 days
     free_audit_limit: int = 25

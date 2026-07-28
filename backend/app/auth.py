@@ -105,6 +105,23 @@ def read_projects_token(token: str) -> dict | None:
     return data if isinstance(data, dict) and data.get("org") else None
 
 
+def _oauth_serializer() -> URLSafeTimedSerializer:
+    return URLSafeTimedSerializer(settings.secret_key, salt="gridpilot-oauth-state")
+
+
+def create_oauth_state(claims: dict) -> str:
+    """Signed, short-lived state for the OAuth redirect round-trip (CSRF guard)."""
+    return _oauth_serializer().dumps(claims)
+
+
+def read_oauth_state(token: str) -> dict | None:
+    try:
+        data = _oauth_serializer().loads(token, max_age=600)
+    except (BadSignature, SignatureExpired):
+        return None
+    return data if isinstance(data, dict) else None
+
+
 def slugify(value: str) -> str:
     value = value.strip().lower()
     value = re.sub(r"[^a-z0-9]+", "-", value)

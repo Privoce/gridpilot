@@ -59,6 +59,7 @@ export const api = {
   audit: (id) => request(`/api/audits/${id}`),
   triage: (auditId, findingId, body) =>
     request(`/api/audits/${auditId}/findings/${findingId}`, { method: "PATCH", body }),
+  authConfig: () => request("/api/auth/config"),
   caisoIntake: (iso) => request(`/api/caiso/intake${iso ? `?iso=${encodeURIComponent(iso)}` : ""}`),
   caisoExtract: (files) => request("/api/caiso/extract", { method: "POST", body: { files } }),
   caisoValidate: (intake, iso) =>

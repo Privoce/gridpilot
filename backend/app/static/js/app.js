@@ -1614,8 +1614,31 @@ function bindWizard(step) {
 }
 
 /* ---------- Auth ---------- */
-function authView(mode) {
+async function ensureAuthCfg() {
+  if (state.authCfg) return state.authCfg;
+  try {
+    state.authCfg = await api.authConfig();
+  } catch {
+    state.authCfg = { google: false };
+  }
+  return state.authCfg;
+}
+
+const GOOGLE_ICON = `<svg width="16" height="16" viewBox="0 0 18 18" aria-hidden="true"><path fill="#4285F4" d="M17.64 9.2c0-.64-.06-1.25-.16-1.84H9v3.48h4.84a4.14 4.14 0 0 1-1.8 2.72v2.26h2.92c1.7-1.57 2.68-3.88 2.68-6.62z"/><path fill="#34A853" d="M9 18c2.43 0 4.47-.8 5.96-2.18l-2.92-2.26c-.8.54-1.84.86-3.04.86-2.34 0-4.32-1.58-5.03-3.7H.96v2.33A9 9 0 0 0 9 18z"/><path fill="#FBBC05" d="M3.97 10.72a5.4 5.4 0 0 1 0-3.44V4.95H.96a9 9 0 0 0 0 8.1l3.01-2.33z"/><path fill="#EA4335" d="M9 3.58c1.32 0 2.5.45 3.44 1.35l2.58-2.59A9 9 0 0 0 .96 4.95l3.01 2.33C4.68 5.16 6.66 3.58 9 3.58z"/></svg>`;
+
+function authView(mode, cfg) {
   const isSignup = mode === "signup";
+  const googleBtn = cfg?.google
+    ? `<a href="/api/auth/google/start"
+         class="mb-5 flex w-full items-center justify-center gap-2.5 rounded-card border border-line bg-surface px-4 py-2.5 text-[14px] text-ink hover:border-line-strong">
+         ${GOOGLE_ICON} Continue with Google
+       </a>
+       <div class="mb-5 flex items-center gap-3">
+         <span class="h-px flex-1 bg-line"></span>
+         <span class="font-mono text-[10px] uppercase tracking-[0.1em] text-muted">or ${isSignup ? "register with email" : "sign in with email"}</span>
+         <span class="h-px flex-1 bg-line"></span>
+       </div>`
+    : "";
   return `
   <div class="grid min-h-screen place-items-center bg-canvas p-6">
     <form class="${panel} w-full max-w-md p-8" id="auth-form">
@@ -1626,6 +1649,7 @@ function authView(mode) {
           : 'Prefer the walkthrough? <a class="text-ink underline-offset-2 hover:underline" href="#/demo">Open the guided demo</a>'
       }</p>
       <div id="auth-error" class="mb-3 hidden rounded-card border border-danger/30 bg-danger-soft px-3 py-2 text-[13px] text-danger"></div>
+      ${googleBtn}
       ${
         isSignup
           ? `<div class="mb-3"><label class="${label}">Full name</label><input class="${field}" name="name" required /></div>
@@ -1647,11 +1671,21 @@ function authView(mode) {
 }
 
 async function renderLogin() {
-  root.innerHTML = authView("login");
+  const cfg = await ensureAuthCfg();
+  root.innerHTML = authView("login", cfg);
   bindAuth("login");
+  // Surface a failed Google round-trip (the callback redirects with ?auth_error=).
+  const err = new URLSearchParams(window.location.search).get("auth_error");
+  if (err) {
+    const errEl = document.getElementById("auth-error");
+    errEl.textContent = "Google sign-in didn't complete — try again or use email.";
+    errEl.classList.remove("hidden");
+    window.history.replaceState(null, "", window.location.pathname + window.location.hash);
+  }
 }
 async function renderSignup() {
-  root.innerHTML = authView("signup");
+  const cfg = await ensureAuthCfg();
+  root.innerHTML = authView("signup", cfg);
   bindAuth("signup");
 }
 
