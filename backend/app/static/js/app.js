@@ -331,7 +331,7 @@ function shell(title, bodyHtml, { showChip = true } = {}) {
   </div>
   ${
     state.toast
-      ? `<div class="fixed bottom-4 right-4 z-30 rounded-pill bg-primary px-4 py-2 font-mono text-[12px] uppercase tracking-[0.08em] text-primary-fg">${esc(state.toast)}</div>`
+      ? `<div class="fixed bottom-4 left-4 right-4 z-30 w-fit max-w-full rounded-card px-4 py-2 font-mono text-[12px] uppercase tracking-[0.08em] [overflow-wrap:anywhere] sm:left-auto sm:max-w-md sm:rounded-pill bg-primary text-primary-fg" style="margin-left:auto">${esc(state.toast)}</div>`
       : ""
   }
   ${state.modal || ""}`;
