@@ -763,14 +763,14 @@ function intakeFieldHtml(f, values, prov = null, errs = null) {
         ? `<span class="rounded-pill border border-warn/40 bg-warn-soft px-1.5 font-mono text-[9px] uppercase tracking-[0.06em]">Uploaded — not submitted</span>`
         : `<span class="rounded-pill border border-ok/30 bg-ok-soft px-1.5 font-mono text-[9px] uppercase tracking-[0.06em] text-ok">Submitted</span>`;
       body = `
-        <div class="flex min-w-0 flex-1 items-center gap-2.5">
+        <div class="flex w-full min-w-0 flex-1 items-center gap-2.5 sm:w-auto">
            <span class="grid h-8 w-8 shrink-0 place-items-center rounded-card border border-line bg-white font-mono text-[10px] uppercase text-muted">${esc((file.name.split(".").pop() || "doc").slice(0, 4))}</span>
            <div class="min-w-0">
-             <p class="flex items-center gap-2 truncate text-[13px] text-ink" title="${esc(file.name)}"><span class="truncate">${esc(file.name)}</span>${statusChip}</p>
+             <p class="flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[13px] text-ink" title="${esc(file.name)}"><span class="max-w-full truncate">${esc(file.name)}</span>${statusChip}</p>
              <p class="font-mono text-[11px] text-muted">${esc(fmtBytes(file.size))}${file.example ? " · example file" : ""}</p>
            </div>
          </div>
-         <div class="flex shrink-0 flex-wrap justify-end gap-1.5">
+         <div class="flex w-full shrink-0 flex-wrap justify-end gap-1.5 sm:w-auto">
            <button type="button" class="${button("ghost", "sm")}" data-file-preview="${esc(f.key)}" data-file-preview-label="${esc(f.label)}">Preview</button>
            ${staged ? `<button type="button" class="${button("primary", "sm")}" data-file-submit="${esc(f.key)}">Submit</button>` : `<button type="button" class="${button("ghost", "sm")}" data-file-attach="${esc(f.key)}">Replace</button>`}
            <button type="button" class="${button("ghost", "sm")}" data-file-remove="${esc(f.key)}">Remove</button>
@@ -791,7 +791,7 @@ function intakeFieldHtml(f, values, prov = null, errs = null) {
     return `
       <div>
         <label class="${label}">${esc(f.label)} ${req}</label>
-        <div class="flex items-center gap-3 rounded-card border border-dashed ${boxTone} px-3 py-2.5">
+        <div class="flex flex-wrap items-center gap-x-3 gap-y-2 rounded-card border border-dashed ${boxTone} px-3 py-2.5">
           ${body}
           <input type="file" class="hidden" data-file-input="${esc(f.key)}" ${f.accept ? `accept="${esc(f.accept)}"` : ""} />
         </div>
@@ -889,7 +889,7 @@ function renderWizardStep(step) {
           The full workflow — document upload, AI extraction, intake, validation, generation, and packet review — is complete.
           The workspace also provides pre-filing SLD audits for uploaded drawings.
         </p>
-        <div class="grid gap-3 sm:grid-cols-3">
+        <div class="grid grid-cols-1 gap-3 sm:grid-cols-3">
           <div class="rounded-card border border-line bg-soft p-4"><span class="font-mono text-[11px] uppercase tracking-[0.08em] text-muted">Project</span><strong class="mt-1 block text-[14px]">${esc(p?.project_name || s.project)}</strong></div>
           <div class="rounded-card border border-line bg-soft p-4"><span class="font-mono text-[11px] uppercase tracking-[0.08em] text-muted">Documents</span><strong class="mt-1 block text-[14px]">${esc(p?.documents?.length ?? "15")} generated</strong></div>
           <div class="rounded-card border border-line bg-soft p-4"><span class="font-mono text-[11px] uppercase tracking-[0.08em] text-muted">Next step</span><strong class="mt-1 block text-[14px]">Submit via RIMS5</strong></div>
@@ -987,7 +987,7 @@ function renderWizardStep(step) {
           each document, then submit it to include it in the intake. Submitted documents are read by
           GridPilot to populate the intake form in the next step; every value remains editable there.
         </p>
-        <div class="grid gap-x-4 gap-y-3">
+        <div class="grid grid-cols-1 gap-x-4 gap-y-3">
           ${(docSection?.fields || []).map((f) => intakeFieldHtml(f, values)).join("")}
         </div>
       </div>
@@ -1031,7 +1031,7 @@ function renderWizardStep(step) {
                 <h3 class="text-[14px] tracking-tightish">${esc(sec.title)}</h3>
                 ${sec.hint ? `<p class="text-[12px] text-muted">${esc(sec.hint)}</p>` : ""}
               </div>
-              <div class="grid gap-x-4 gap-y-3 sm:grid-cols-2">
+              <div class="grid grid-cols-1 gap-x-4 gap-y-3 sm:grid-cols-2">
                 ${sec.fields.map((f) => intakeFieldHtml(f, values, prov, errs)).join("")}
               </div>
             </fieldset>`
@@ -1980,15 +1980,17 @@ function reqFileSlotHtml(f, meta) {
   return `
     <div>
       <label class="${label}">${esc(f.label)} ${f.required ? '<span class="text-danger">*</span>' : ""}</label>
-      <div class="flex items-center gap-3 rounded-card border border-dashed px-3 py-2.5 ${has ? "border-line bg-soft" : f.required ? "border-danger/40 bg-danger-soft/40" : "border-line bg-soft"}">
+      <div class="flex flex-wrap items-center gap-x-3 gap-y-2 rounded-card border border-dashed px-3 py-2.5 ${has ? "border-line bg-soft" : f.required ? "border-danger/40 bg-danger-soft/40" : "border-line bg-soft"}">
         ${
           has
-            ? `<div class="min-w-0 flex-1">
+            ? `<div class="w-full min-w-0 flex-1 sm:w-auto">
                  <p class="truncate text-[13px] text-ink" title="${esc(name)}">${esc(name)}</p>
                  <p class="font-mono text-[11px] text-muted">${esc(fmtBytes(size))}${stale ? " · re-attach to extract again" : ""}</p>
                </div>
-               <button type="button" class="${button("ghost", "sm")}" data-req-attach="${esc(f.key)}">Replace</button>
-               <button type="button" class="${button("ghost", "sm")}" data-req-remove="${esc(f.key)}">Remove</button>`
+               <div class="flex w-full shrink-0 flex-wrap justify-end gap-1.5 sm:w-auto">
+                 <button type="button" class="${button("ghost", "sm")}" data-req-attach="${esc(f.key)}">Replace</button>
+                 <button type="button" class="${button("ghost", "sm")}" data-req-remove="${esc(f.key)}">Remove</button>
+               </div>`
             : `<span class="flex-1 text-[13px] text-muted">No file attached</span>
                <button type="button" class="${button("ghost", "sm")}" data-req-attach="${esc(f.key)}">Choose file</button>`
         }
@@ -2071,7 +2073,7 @@ async function renderRequest(projectId) {
           storage specification, signatory proof, vendor models, parcel boundary. GridPilot reads
           them and populates the intake form; every value remains editable.
         </p>
-        <div class="grid gap-x-4 gap-y-3">${files}</div>
+        <div class="grid grid-cols-1 gap-x-4 gap-y-3">${files}</div>
       </div>
       ${footer(
         `<a class="${button("ghost")}" href="#/project/${esc(projectId)}">Back to project</a>`,
@@ -2097,7 +2099,7 @@ async function renderRequest(projectId) {
               (sec) => `
             <fieldset>
               <legend class="mb-3 border-b border-line pb-1.5 font-mono text-[11px] uppercase tracking-[0.1em] text-muted">${esc(sec.title)}</legend>
-              <div class="grid gap-x-4 gap-y-3 sm:grid-cols-2">
+              <div class="grid grid-cols-1 gap-x-4 gap-y-3 sm:grid-cols-2">
                 ${sec.fields.map((f) => intakeFieldHtml(f, intake, prov, errs)).join("")}
               </div>
             </fieldset>`
@@ -2427,7 +2429,7 @@ async function renderProject(id) {
           </div>`
         : ""
     }
-    <div class="grid gap-4 lg:grid-cols-2">
+    <div class="grid grid-cols-1 gap-4 lg:grid-cols-2">
       <div class="${panel} p-4">
         <h3 class="mb-3 border-b border-line pb-2 text-[14px]">Drawings</h3>
         ${
@@ -2577,7 +2579,7 @@ async function renderAudit(id) {
         <button type="button" class="${button("ghost", "sm")} mt-3" data-drawer-url="/api/audits/${a.id}/report.html" data-drawer-title="Audit report" data-drawer-file="report.html">HTML report</button>
       </div>
     </div>
-    <div class="grid gap-4 lg:grid-cols-2">
+    <div class="grid grid-cols-1 gap-4 lg:grid-cols-2">
       <div class="space-y-4">
         <div class="${panel} overflow-hidden">
           <div class="flex items-center justify-between border-b border-line px-4 py-3"><h3 class="text-[14px]">Drawing</h3><span class="font-mono text-[11px] text-muted">${esc(a.drawing_filename || "")}</span></div>
