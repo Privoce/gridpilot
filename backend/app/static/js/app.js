@@ -273,43 +273,61 @@ function shell(title, bodyHtml, { showChip = true } = {}) {
   ];
   const chip = showChip ? demoChipHtml() : "";
 
-  return `
-  <div class="flex min-h-screen bg-canvas">
-    <aside class="flex w-[220px] shrink-0 flex-col border-r border-line bg-soft">
+  const navLinks = nav
+    .map(([k, label]) => {
+      const active =
+        r === k ||
+        (k === "projects" && r === "project") ||
+        (k === "audits" && r === "audit");
+      return `<a href="#/${k}" class="rounded-input px-3 py-2 text-[13px] ${
+        active ? "bg-surface text-ink" : "text-muted hover:bg-surface hover:text-ink"
+      }">${label}</a>`;
+    })
+    .join("");
+  const orgFooter = `
+      <div class="mt-auto border-t border-line p-4 text-[12px] text-muted">
+        <strong class="mb-1 block text-[13px] text-ink">${esc(org?.name || "")}</strong>
+        <span class="rounded-pill border border-line px-2 py-0.5 font-mono text-[10px] uppercase tracking-[0.08em]">${esc(org?.plan || "free")}</span>
+        ${state.me?.is_demo ? `<span class="ml-1 rounded-pill border border-line px-2 py-0.5 font-mono text-[10px] uppercase tracking-[0.08em]">Demo</span>` : ""}
+        <div class="mt-2">${esc(org?.audits_used_period ?? 0)} / ${esc(org?.audit_limit ?? 0)} audits</div>
+      </div>`;
+  const brand = `
       <div class="flex items-center gap-2.5 border-b border-line px-4 py-4">
         <img src="/assets/img/logo.svg" alt="" class="h-7 w-7" />
         <div>
           <div class="text-[14px] tracking-tightish">GridPilot</div>
           <div class="font-mono text-[10px] uppercase tracking-[0.1em] text-muted">Interconnection</div>
         </div>
-      </div>
-      <nav class="flex flex-col gap-0.5 p-2">
-        ${nav
-          .map(([k, label]) => {
-            const active =
-              r === k ||
-              (k === "projects" && r === "project") ||
-              (k === "audits" && r === "audit");
-            return `<a href="#/${k}" class="rounded-input px-3 py-2 text-[13px] ${
-              active ? "bg-surface text-ink" : "text-muted hover:bg-surface hover:text-ink"
-            }">${label}</a>`;
-          })
-          .join("")}
-      </nav>
-      <div class="mt-auto border-t border-line p-4 text-[12px] text-muted">
-        <strong class="mb-1 block text-[13px] text-ink">${esc(org?.name || "")}</strong>
-        <span class="rounded-pill border border-line px-2 py-0.5 font-mono text-[10px] uppercase tracking-[0.08em]">${esc(org?.plan || "free")}</span>
-        ${state.me?.is_demo ? `<span class="ml-1 rounded-pill border border-line px-2 py-0.5 font-mono text-[10px] uppercase tracking-[0.08em]">Demo</span>` : ""}
-        <div class="mt-2">${esc(org?.audits_used_period ?? 0)} / ${esc(org?.audit_limit ?? 0)} audits</div>
-      </div>
+      </div>`;
+
+  return `
+  <div class="flex min-h-screen bg-canvas">
+    <aside class="hidden w-[220px] shrink-0 flex-col border-r border-line bg-soft md:flex">
+      ${brand}
+      <nav class="flex flex-col gap-0.5 p-2">${navLinks}</nav>
+      ${orgFooter}
     </aside>
     <div class="flex min-w-0 flex-1 flex-col">
-      <header class="sticky top-0 z-10 flex h-14 items-center justify-between border-b border-line bg-canvas/90 px-5 backdrop-blur">
-        <h2 class="text-[16px] tracking-tightish">${esc(title)}</h2>
-        <div class="text-[13px] text-muted">${esc(user?.name || "")} · <a href="#" id="logout-link" class="text-ink underline-offset-2 hover:underline">Sign out</a></div>
+      <header class="sticky top-0 z-10 flex h-14 items-center justify-between gap-3 border-b border-line bg-canvas/90 px-4 backdrop-blur md:px-5">
+        <div class="flex min-w-0 items-center gap-2.5">
+          <button type="button" id="mobile-nav-btn" aria-label="Open menu"
+            class="grid h-9 w-9 shrink-0 place-items-center rounded-input border border-line bg-surface text-ink md:hidden">
+            <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><path d="M2 4h12M2 8h12M2 12h12"/></svg>
+          </button>
+          <h2 class="truncate text-[16px] tracking-tightish">${esc(title)}</h2>
+        </div>
+        <div class="shrink-0 whitespace-nowrap text-[13px] text-muted"><span class="hidden sm:inline">${esc(user?.name || "")} · </span><a href="#" id="logout-link" class="text-ink underline-offset-2 hover:underline">Sign out</a></div>
       </header>
-      <div class="p-5">${chip}${bodyHtml}</div>
+      <div class="p-4 md:p-5">${chip}${bodyHtml}</div>
     </div>
+  </div>
+  <div id="mobile-nav" class="fixed inset-0 z-40 hidden md:hidden">
+    <div class="absolute inset-0 bg-black/40" data-mobile-nav-close></div>
+    <aside class="absolute inset-y-0 left-0 flex w-[264px] flex-col border-r border-line bg-soft shadow-2xl">
+      ${brand}
+      <nav class="flex flex-col gap-0.5 p-2">${navLinks}</nav>
+      ${orgFooter}
+    </aside>
   </div>
   ${
     state.toast
@@ -326,6 +344,16 @@ function bindShell() {
     state.me = null;
     state.demoCtx = null;
     navigate("login");
+  });
+  const mobileNav = document.getElementById("mobile-nav");
+  document.getElementById("mobile-nav-btn")?.addEventListener("click", () => {
+    mobileNav?.classList.remove("hidden");
+  });
+  mobileNav?.addEventListener("click", (e) => {
+    // Close on backdrop click or after choosing a destination.
+    if (e.target.closest("[data-mobile-nav-close]") || e.target.closest("a")) {
+      mobileNav.classList.add("hidden");
+    }
   });
   bindDrawerTriggers();
 }
@@ -345,7 +373,7 @@ function openDrawer({ title, file, url, downloadUrl, html }) {
   el.id = "gp-drawer";
   el.className = "fixed inset-0 z-50";
   el.innerHTML = `
-    <div class="gp-drawer-backdrop absolute inset-0 bg-ink/40" data-drawer-dismiss></div>
+    <div class="gp-drawer-backdrop absolute inset-0 bg-black/40" data-drawer-dismiss></div>
     <aside class="gp-drawer-panel absolute inset-y-0 right-0 flex w-full flex-col border-l border-line bg-canvas shadow-2xl sm:w-[min(880px,92vw)]" role="dialog" aria-label="Preview">
       <div class="flex items-center justify-between gap-3 border-b border-line bg-soft px-5 py-3">
         <div class="min-w-0">
@@ -845,7 +873,7 @@ function packetDocRowHtml(pid, doc, qs = null) {
 
 function renderWizardStep(step) {
   const footer = (left, right) => `
-    <div class="flex items-center justify-between gap-3 border-t border-line bg-soft px-6 py-3.5">
+    <div class="flex items-center justify-between gap-3 border-t border-line bg-soft px-4 py-3.5 sm:px-6">
       <div>${left || ""}</div>
       <div class="flex flex-wrap justify-end gap-2">${right || ""}</div>
     </div>`;
@@ -854,7 +882,7 @@ function renderWizardStep(step) {
   if (step > WIZARD_LAST || loadOnboard().completed) {
     const p = state.packet;
     return `
-      <div class="flex-1 p-7">
+      <div class="flex-1 p-5 sm:p-7">
         <p class="mb-2 font-mono text-[12px] uppercase tracking-[0.12em] text-muted">Complete</p>
         <h2 class="mb-3 text-2xl tracking-tightish">Submission packet complete</h2>
         <p class="mb-6 max-w-xl text-[15px] leading-relaxed text-muted">
@@ -876,7 +904,7 @@ function renderWizardStep(step) {
 
   if (step === 1) {
     return `
-      <div class="flex-1 p-7">
+      <div class="flex-1 p-5 sm:p-7">
         <p class="mb-2 font-mono text-[12px] uppercase tracking-[0.12em] text-muted">Step 1 of ${WIZARD_LAST}</p>
         <h2 class="mb-3 text-2xl tracking-tightish">Project scenario</h2>
         <p class="mb-4 max-w-2xl text-[15px] leading-relaxed text-muted">
@@ -924,7 +952,7 @@ function renderWizardStep(step) {
       const stageIdx = ui.stage ?? 0;
       const stageLabel = EXTRACT_STAGES[Math.min(stageIdx, EXTRACT_STAGES.length - 1)].label;
       return `
-        <div class="flex-1 p-7">
+        <div class="flex-1 p-5 sm:p-7">
           <p class="mb-2 font-mono text-[12px] uppercase tracking-[0.12em] text-muted">Step 2 of ${WIZARD_LAST}</p>
           <h2 class="mb-3 text-2xl tracking-tightish">Extracting data from the documents</h2>
           <p class="mb-5 max-w-2xl text-[15px] leading-relaxed text-muted">
@@ -951,7 +979,7 @@ function renderWizardStep(step) {
         ${footer("", `<button type="button" class="${button("primary")}" disabled>Extracting…</button>`)}`;
     }
     return `
-      <div class="flex-1 p-7">
+      <div class="flex-1 p-5 sm:p-7">
         <p class="mb-2 font-mono text-[12px] uppercase tracking-[0.12em] text-muted">Step 2 of ${WIZARD_LAST}</p>
         <h2 class="mb-3 text-2xl tracking-tightish">Kickoff documents</h2>
         <p class="mb-5 max-w-2xl text-[15px] leading-relaxed text-muted">
@@ -980,7 +1008,7 @@ function renderWizardStep(step) {
     }
     const errCount = Object.keys(errs).length;
     return `
-      <div class="flex-1 p-7">
+      <div class="flex-1 p-5 sm:p-7">
         <p class="mb-2 font-mono text-[12px] uppercase tracking-[0.12em] text-muted">Step 3 of ${WIZARD_LAST}</p>
         <h2 class="mb-3 text-2xl tracking-tightish">Developer intake</h2>
         <p class="mb-5 max-w-2xl text-[15px] leading-relaxed text-muted">
@@ -1022,7 +1050,7 @@ function renderWizardStep(step) {
     const v = state.validation;
     if (!v) {
       return `
-        <div class="flex-1 p-7">
+        <div class="flex-1 p-5 sm:p-7">
           <p class="mb-2 font-mono text-[12px] uppercase tracking-[0.12em] text-muted">Step 4 of ${WIZARD_LAST}</p>
           <h2 class="mb-3 text-2xl tracking-tightish">Kickoff data validation</h2>
           <div class="rounded-card border border-danger/30 bg-danger-soft p-4 text-[13px]">Could not reach the validation service. Check your connection and retry.</div>
@@ -1154,7 +1182,7 @@ function renderWizardStep(step) {
        ...v.warnings.map((it) => ({ ...it, status: "warn" })),
        ...v.passed.map((it) => ({ ...it, status: "ok" }))];
     return `
-      <div class="flex-1 p-7">
+      <div class="flex-1 p-5 sm:p-7">
         <p class="mb-2 font-mono text-[12px] uppercase tracking-[0.12em] text-muted">Step 4 of ${WIZARD_LAST}</p>
         <h2 class="mb-3 text-2xl tracking-tightish">Kickoff data validation</h2>
         <p class="mb-4 max-w-2xl text-[15px] leading-relaxed text-muted">
@@ -1184,7 +1212,7 @@ function renderWizardStep(step) {
       const stageIdx = ui.stage ?? 0;
       const stageLabel = GEN_STAGES[Math.min(stageIdx, GEN_STAGES.length - 1)].label;
       return `
-        <div class="flex-1 p-7">
+        <div class="flex-1 p-5 sm:p-7">
           <p class="mb-2 font-mono text-[12px] uppercase tracking-[0.12em] text-muted">Step 5 of ${WIZARD_LAST}</p>
           <h2 class="mb-3 text-2xl tracking-tightish">Generating the submission packet</h2>
           <p class="mb-5 max-w-2xl text-[15px] leading-relaxed text-muted">
@@ -1211,7 +1239,7 @@ function renderWizardStep(step) {
         ${footer(`<span class="font-mono text-[12px] text-muted">15 documents · Appendix 1, Attachment A, PSLF models, drawings</span>`, `<button type="button" class="${button("primary")}" disabled>Generating…</button>`)}`;
     }
     return `
-      <div class="flex-1 p-7">
+      <div class="flex-1 p-5 sm:p-7">
         <p class="mb-2 font-mono text-[12px] uppercase tracking-[0.12em] text-muted">Step 5 of ${WIZARD_LAST}</p>
         <h2 class="mb-3 text-2xl tracking-tightish">Generate the submission packet</h2>
         <div class="rounded-card border border-line bg-soft p-4"><strong class="block">Ready to generate</strong><p class="text-[13px] text-muted">All 15 packet documents will be generated from the validated intake.</p></div>
@@ -1226,7 +1254,7 @@ function renderWizardStep(step) {
   const p = state.packet;
   if (!p) {
     return `
-      <div class="flex-1 p-7">
+      <div class="flex-1 p-5 sm:p-7">
         <p class="mb-2 font-mono text-[12px] uppercase tracking-[0.12em] text-muted">Step 6 of ${WIZARD_LAST}</p>
         <h2 class="mb-3 text-2xl tracking-tightish">Packet expired</h2>
         <p class="mb-5 max-w-xl text-[15px] leading-relaxed text-muted">
@@ -1241,14 +1269,14 @@ function renderWizardStep(step) {
   }
   const zipUrl = `/api/caiso/packets/${esc(p.id)}/files/${encodeURIComponent(p.zip_file)}${packetQS()}`;
   return `
-    <div class="flex-1 p-7">
+    <div class="flex-1 p-5 sm:p-7">
       <p class="mb-2 font-mono text-[12px] uppercase tracking-[0.12em] text-muted">Step 6 of ${WIZARD_LAST}</p>
       <h2 class="mb-3 text-2xl tracking-tightish">CAISO submission packet — ${esc(p.project_name)}</h2>
       <p class="mb-4 max-w-2xl text-[15px] leading-relaxed text-muted">
         ${esc(p.documents.length)} documents mapped to the CAISO ISP/Fast Track minimum-requirements checklist,
         generated from one intake so every value stays consistent.
       </p>
-      <div class="mb-5 grid gap-3 sm:grid-cols-4">
+      <div class="mb-5 grid grid-cols-2 gap-3 sm:grid-cols-4">
         <div class="rounded-card border border-line bg-soft p-4"><span class="font-mono text-[11px] uppercase tracking-[0.08em] text-muted">Net at POI</span><strong class="mt-1 block">${esc(p.net_mw)} MW</strong></div>
         <div class="rounded-card border border-line bg-soft p-4"><span class="font-mono text-[11px] uppercase tracking-[0.08em] text-muted">POI</span><strong class="mt-1 block text-[13px]">${esc(p.poi)}</strong></div>
         <div class="rounded-card border border-line bg-soft p-4"><span class="font-mono text-[11px] uppercase tracking-[0.08em] text-muted">Track</span><strong class="mt-1 block text-[13px]">${esc(p.track)}</strong></div>
@@ -1712,7 +1740,7 @@ function bindAuth(mode) {
 /* ---------- App pages ---------- */
 async function openProjectModal() {
   state.modal = `
-  <div class="fixed inset-0 z-20 grid place-items-center bg-ink/40 p-5" id="modal">
+  <div class="fixed inset-0 z-20 grid place-items-center bg-black/40 p-5" id="modal">
     <form class="${panel} w-full max-w-md p-6" id="project-form">
       <h3 class="mb-4 text-lg tracking-tightish">Add project</h3>
       <div class="mb-3"><label class="${label}">Project name</label><input class="${field}" name="name" required /></div>
@@ -1766,7 +1794,7 @@ async function renderDashboard() {
   root.innerHTML = shell(
     "Dashboard",
     `
-    <div class="mb-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+    <div class="mb-4 grid grid-cols-2 gap-3 lg:grid-cols-4">
       ${[
         ["Projects", data.projects],
         ["Audits this period", `${data.audits_this_period} / ${data.audit_limit}`],
@@ -2000,7 +2028,7 @@ async function renderRequest(projectId) {
   const docSection = (state.caisoSchema?.sections || []).find((s) => s.id === "documents");
 
   const footer = (left, right) => `
-    <div class="flex items-center justify-between gap-3 border-t border-line bg-soft px-6 py-3.5">
+    <div class="flex items-center justify-between gap-3 border-t border-line bg-soft px-4 py-3.5 sm:px-6">
       <div class="flex flex-wrap gap-2">${left || ""}</div>
       <div class="flex flex-wrap justify-end gap-2">${right || ""}</div>
     </div>`;
@@ -2009,7 +2037,7 @@ async function renderRequest(projectId) {
 
   if (state.reqBusy) {
     body = `
-      <div class="flex-1 p-7">
+      <div class="flex-1 p-5 sm:p-7">
         <p class="mb-2 font-mono text-[12px] uppercase tracking-[0.12em] text-muted">${esc(state.reqBusy.title)}</p>
         <h2 class="mb-3 text-2xl tracking-tightish">${esc(state.reqBusy.heading)}</h2>
         <div class="rounded-card border border-focus/20 bg-info-soft p-4">
@@ -2025,7 +2053,7 @@ async function renderRequest(projectId) {
     const attached = Object.keys(reqFiles).length;
     const profile = state.caisoSchema?.profile;
     body = `
-      <div class="flex-1 p-7">
+      <div class="flex-1 p-5 sm:p-7">
         <p class="mb-2 font-mono text-[12px] uppercase tracking-[0.12em] text-muted">Step 1 of 4</p>
         <h2 class="mb-3 text-2xl tracking-tightish">Kickoff documents</h2>
         ${
@@ -2056,7 +2084,7 @@ async function renderRequest(projectId) {
     const errs = {};
     for (const e of v?.errors || []) if (e.field) errs[e.field] = e.title;
     body = `
-      <div class="flex-1 p-7">
+      <div class="flex-1 p-5 sm:p-7">
         <p class="mb-2 font-mono text-[12px] uppercase tracking-[0.12em] text-muted">Step 2 of 4</p>
         <h2 class="mb-3 text-2xl tracking-tightish">Intake</h2>
         <p class="mb-5 max-w-2xl text-[15px] leading-relaxed text-muted">
@@ -2117,7 +2145,7 @@ async function renderRequest(projectId) {
       })
       .join("");
     body = `
-      <div class="flex-1 p-7">
+      <div class="flex-1 p-5 sm:p-7">
         <p class="mb-2 font-mono text-[12px] uppercase tracking-[0.12em] text-muted">Step 3 of 4</p>
         <h2 class="mb-3 text-2xl tracking-tightish">Validation</h2>
         ${
@@ -2146,7 +2174,7 @@ async function renderRequest(projectId) {
     }
     if (!p) {
       body = `
-        <div class="flex-1 p-7">
+        <div class="flex-1 p-5 sm:p-7">
           <h2 class="mb-3 text-2xl tracking-tightish">Packet unavailable</h2>
           <p class="mb-5 max-w-xl text-[15px] text-muted">Regenerate the packet from the saved intake.</p>
         </div>
@@ -2158,10 +2186,10 @@ async function renderRequest(projectId) {
       const qs = req.packetD ? `?d=${req.packetD}${iso !== "CAISO" ? `&i=${encodeURIComponent(iso)}` : ""}` : "";
       const zipUrl = `/api/caiso/packets/${esc(p.id)}/files/${encodeURIComponent(p.zip_file)}${qs}`;
       body = `
-        <div class="flex-1 p-7">
+        <div class="flex-1 p-5 sm:p-7">
           <p class="mb-2 font-mono text-[12px] uppercase tracking-[0.12em] text-muted">Step 4 of 4</p>
           <h2 class="mb-3 text-2xl tracking-tightish">${esc(p.iso || iso)} submission packet — ${esc(p.project_name)}</h2>
-          <div class="mb-5 grid gap-3 sm:grid-cols-4">
+          <div class="mb-5 grid grid-cols-2 gap-3 sm:grid-cols-4">
             <div class="rounded-card border border-line bg-soft p-4"><span class="font-mono text-[11px] uppercase tracking-[0.08em] text-muted">Net at POI</span><strong class="mt-1 block">${esc(p.net_mw)} MW</strong></div>
             <div class="rounded-card border border-line bg-soft p-4"><span class="font-mono text-[11px] uppercase tracking-[0.08em] text-muted">POI</span><strong class="mt-1 block text-[13px]">${esc(p.poi)}</strong></div>
             <div class="rounded-card border border-line bg-soft p-4"><span class="font-mono text-[11px] uppercase tracking-[0.08em] text-muted">Track</span><strong class="mt-1 block text-[13px]">${esc(p.track)}</strong></div>
@@ -2669,7 +2697,7 @@ async function renderBilling() {
   root.innerHTML = shell(
     "Billing",
     `
-    <div class="mb-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+    <div class="mb-4 grid grid-cols-2 gap-3 lg:grid-cols-4">
       <div class="${panel} p-4"><div class="font-mono text-[11px] uppercase tracking-[0.08em] text-muted">Plan</div><div class="mt-1 text-xl capitalize">${esc(b.plan)}</div></div>
       <div class="${panel} p-4"><div class="font-mono text-[11px] uppercase tracking-[0.08em] text-muted">Audits used</div><div class="mt-1 text-xl">${b.audits_used_period} / ${b.audit_limit}</div></div>
       <div class="${panel} p-4"><div class="font-mono text-[11px] uppercase tracking-[0.08em] text-muted">Projects</div><div class="mt-1 text-xl">${b.project_count} / ${b.project_limit}</div></div>

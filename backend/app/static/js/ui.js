@@ -23,7 +23,8 @@ export const label = "mb-1.5 block text-[12px] font-mono uppercase tracking-[0.0
 export const panel = "rounded-card border border-line bg-surface";
 
 export const table = {
-  wrap: "w-full border-collapse text-[13px]",
+  // On phones the table becomes its own horizontal scroll container.
+  wrap: "w-full border-collapse text-[13px] max-md:block max-md:overflow-x-auto",
   th: "border-b border-line bg-soft px-2 py-2 text-left font-mono text-[11px] uppercase tracking-[0.08em] text-muted",
   td: "border-b border-line px-2 py-2.5 align-top text-ink",
 };
