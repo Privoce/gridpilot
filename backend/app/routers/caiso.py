@@ -72,8 +72,31 @@ MEDIA_TYPES = {
     ".dyd": "text/plain",
     ".raw": "text/plain",
     ".dyr": "text/plain",
+    ".dxf": "application/dxf",
+    ".json": "application/json",
     ".zip": "application/zip",
 }
+
+
+def _equipment_suggestions() -> dict[str, list[dict[str, str]]]:
+    """Library entries for the intake pickers (generic fallbacks excluded)."""
+    from backend.app.engine import equipment as lib
+
+    def rows(entries: dict, rating: Any) -> list[dict[str, str]]:
+        out = []
+        for e in entries.values():
+            if not e.get("verified"):
+                continue
+            out.append({"value": f"{e['vendor']} {e['model']}", "label": rating(e)})
+        return out
+
+    return {
+        "inverters": rows(lib.INVERTERS,
+                          lambda e: f"{e['mva']:g} MVA · {e['wecc_models']['gen']}/"
+                                    f"{e['wecc_models']['elec']} · OEM verified"),
+        "bess": rows(lib.BESS_UNITS,
+                     lambda e: f"{e['mw']:g} MW / {e['mwh']:g} MWh · OEM verified"),
+    }
 
 
 @router.get("/intake")
@@ -82,6 +105,7 @@ def get_intake(iso: str | None = None, auth: AuthContext = Depends(get_auth)):
     return {
         "sections": intake_sections_for(iso),
         "defaults": DEFAULT_INTAKE,
+        "equipment": _equipment_suggestions(),
         "profile": {
             "iso": profile["iso"],
             "name": profile["name"],
@@ -138,13 +162,104 @@ async def post_extract_files(request: Request, auth: AuthContext = Depends(get_a
         raise HTTPException(status_code=502, detail=str(exc))
 
 
+@router.post("/ingest-datasheet")
+async def post_ingest_datasheet(request: Request, auth: AuthContext = Depends(get_auth)):
+    """Draft equipment entry from an OEM datasheet.
+
+    Multipart (real accounts): Grok reads the document and returns candidate
+    ratings. JSON metadata (guided demo): a deterministic draft parsed from the
+    filename. Either way the user reviews and confirms before the entry joins
+    the intake's `custom_equipment` records — never auto-applied.
+    """
+    ct = request.headers.get("content-type") or ""
+    if ct.startswith("multipart/"):
+        from backend.app.services.caiso_extract_ai import (
+            ExtractionError,
+            extract_equipment_from_datasheet,
+        )
+
+        form = await request.form()
+        part = form.get("file")
+        kind = str(form.get("kind") or "pv_inverter")
+        if part is None or isinstance(part, str):
+            raise HTTPException(status_code=400, detail="Attach a datasheet file")
+        data = await part.read()
+        try:
+            draft = await extract_equipment_from_datasheet(part.filename or "datasheet", data, kind)
+        except ExtractionError as exc:
+            raise HTTPException(status_code=502, detail=str(exc))
+        return {"draft": draft}
+
+    from backend.app.services.caiso_packet import demo_datasheet_draft
+
+    body = await request.json()
+    return {"draft": demo_datasheet_draft(str(body.get("name") or "datasheet.pdf"),
+                                          str(body.get("kind") or "pv_inverter"))}
+
+
 @router.post("/validate")
 def post_validate(
     intake: dict[str, Any] = Body(...),
     iso: str | None = None,
     auth: AuthContext = Depends(get_auth),
 ):
-    return validate_intake(intake, iso)
+    from backend.app.engine.graph import history_public, record_history
+
+    actor = (auth.user.name if auth.user else None) or "Developer"
+    record_history(intake, by=actor, note="Intake validated", iso=iso)
+    result = validate_intake(intake, iso)
+    result["graph_history"] = history_public(intake)
+    return result
+
+
+@router.post("/engineering")
+def post_engineering(
+    body: dict[str, Any] = Body(...),
+    iso: str | None = None,
+    auth: AuthContext = Depends(get_auth),
+):
+    """Run the deterministic engineering pass for the design review step.
+
+    Body: {"intake": {...}, "prov": {field: {file}}} — approvals ride inside
+    the intake (`approvals` key) so the pass is stateless and reproducible.
+    Returns the design summary, solved load flow, checks, the assumption
+    ledger with approval state, and the SLD as inline SVG.
+    """
+    from backend.app.engine.consistency import run_engineering
+    from backend.app.engine.sld import build_sld, to_svg
+
+    intake = body.get("intake") or body
+    prov = body.get("prov") or None
+    actor = (auth.user.name if auth.user else None) or "Engineer of record"
+    eng = run_engineering(intake, iso, prov, actor=actor,
+                          history_note="Engineering design review")
+    pf = eng["powerflow"]
+    return {
+        "ready": eng["ready"],
+        "graph_version": eng["graph"].get("version", ""),
+        "graph_history": eng["graph_history"],
+        "intake_echo": {"graph_history": intake.get("graph_history") or []},
+        "topology": eng["design"]["topology"],
+        "counts": eng["design"]["counts"],
+        "schedule": eng["design"]["schedule"],
+        "missing": eng["design"]["missing"],
+        "loadflow": {
+            "converged": pf["converged"], "iterations": pf["iterations"],
+            "p_poi_mw": pf["p_poi_mw"], "q_poi_mvar": pf["q_poi_mvar"],
+            "p_pv_mw": pf["p_pv_mw"], "p_bess_mw": pf["p_bess_mw"],
+            "aux_mw": pf["aux_mw"], "losses_mw": pf["losses_mw"],
+            "losses_declared_mw": pf["losses_declared_mw"],
+            "poi_match": pf["poi_match"], "voltages": pf["voltages"],
+            "flows": pf["flows"], "warnings": pf["warnings"],
+        },
+        "short_circuit": eng["short_circuit"]["results"],
+        "dynamics": {"all_pass": eng["bump"]["all_pass"],
+                     "checks": eng["bump"]["checks"]},
+        "checks": eng["checks"],
+        "approvals": eng["approvals"],
+        "source_trace": eng["source_trace"],
+        "sld_svg": to_svg(build_sld(eng["graph"], eng["design"], intake)),
+    }
 
 
 @router.post("/generate")
@@ -153,11 +268,16 @@ def post_generate(
     iso: str | None = None,
     auth: AuthContext = Depends(get_auth),
 ):
+    from backend.app.engine.graph import history_public, record_history
+
+    actor = (auth.user.name if auth.user else None) or "Developer"
+    record_history(intake, by=actor, note="Packet generated", iso=iso)
     validation = validate_intake(intake, iso)
     if not validation["ok"]:
-        return {"ok": False, "validation": validation}
+        return {"ok": False, "validation": validation,
+                "graph_history": history_public(intake)}
     manifest = generate_packet(intake, auth.org.id, iso)
-    return {"ok": True, "packet": manifest}
+    return {"ok": True, "packet": manifest, "graph_history": history_public(intake)}
 
 
 @router.get("/kickoff/{key}/preview", response_class=HTMLResponse)

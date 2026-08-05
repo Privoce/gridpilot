@@ -44,7 +44,15 @@ for (const slot of ["file_technical", "file_bess"]) {
   await page.locator(`[data-fix-submit="${slot}"]`).first().click();
   await page.waitForTimeout(3800);
 }
-await page.waitForSelector("#wiz-generate", { timeout: 30000 });
+await page.waitForSelector("#wiz-next", { timeout: 30000 });
+await page.click("#wiz-next");
+await page.waitForSelector("h2:has-text('Engineering design review')", { timeout: 20000 });
+await page.waitForSelector("[data-eng-approve], #wiz-generate:not([disabled])", { timeout: 20000 });
+if (await page.locator("#eng-approve-all").count()) {
+  await page.click("#eng-approve-all");
+  await page.waitForSelector("text=all approved", { timeout: 20000 });
+}
+await page.waitForSelector("#wiz-generate:not([disabled])", { timeout: 20000 });
 await page.click("#wiz-generate");
 await page.waitForSelector('a:has-text("Download packet (.zip)")', { timeout: 60000 });
 console.log("demo packet step reached");

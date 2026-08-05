@@ -127,10 +127,18 @@ await page.locator("[data-fix-submit]").first().click();
 await page.waitForTimeout(3800);
 console.log("picker path revalidated clean:", (await page.textContent("body")).includes("Intake is clean"));
 
-// Generate → packet
+// Design review → generate → packet
+await page.click("#wiz-next");
+await page.waitForSelector("h2:has-text('Engineering design review')", { timeout: 20000 });
+await page.waitForSelector("[data-eng-approve], #wiz-generate:not([disabled])", { timeout: 20000 });
+if (await page.locator("#eng-approve-all").count()) {
+  await page.click("#eng-approve-all");
+  await page.waitForSelector("text=all approved", { timeout: 20000 });
+}
+await page.waitForSelector("#wiz-generate:not([disabled])", { timeout: 20000 });
 await page.click("#wiz-generate");
 await page.waitForSelector("#wiz-finish", { timeout: 30000 });
-console.log("packet step reached:", (await page.textContent(".flex-1.p-7 p")).trim());
+console.log("packet step reached:", (await page.locator("h2").first().textContent()).trim());
 
 console.log("EXTRACT FLOW TEST DONE");
 await browser.close();

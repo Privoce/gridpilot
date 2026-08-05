@@ -77,6 +77,40 @@ PAGE = """<!DOCTYPE html>
   figcaption {{ margin-top: 10px; font-size: 12px; color: var(--muted); }}
   .grid2 {{ display: grid; gap: 14px; grid-template-columns: 1fr; }}
   @media (min-width: 860px) {{ .grid2 {{ grid-template-columns: 3fr 2fr; }} }}
+  .sum {{ display: flex; flex-wrap: wrap; gap: 10px; margin: 0 0 16px; }}
+  .sum .card {{ flex: 1 1 150px; padding: 10px 14px; background: #fff;
+    border: 1px solid var(--line); border-radius: 10px; }}
+  .sum .card b {{ display: block; font-size: 16px; letter-spacing: -0.01em; }}
+  .sum .card span {{ font-family: "JetBrains Mono", monospace; font-size: 10px;
+    text-transform: uppercase; letter-spacing: 0.07em; color: var(--muted); }}
+  figure.sld {{ margin: 0 0 18px; padding: 16px; background: #fff;
+    border: 1px solid var(--line); border-radius: 10px; }}
+  figure.sld > svg {{ width: 100%; height: auto; display: block; }}
+  details.src {{ margin-top: 18px; }}
+  details.src summary {{ cursor: pointer; font-family: "JetBrains Mono", monospace;
+    font-size: 11px; text-transform: uppercase; letter-spacing: 0.07em; color: var(--muted);
+    padding: 6px 0; }}
+  details.src pre.code {{ margin-top: 8px; }}
+  .rec {{ margin: 0 0 12px; padding: 14px 16px; background: #fff;
+    border: 1px solid var(--line); border-radius: 10px; }}
+  .rec .head {{ display: flex; flex-wrap: wrap; align-items: baseline; gap: 8px 12px;
+    margin-bottom: 9px; }}
+  .rec .model {{ font-family: "JetBrains Mono", monospace; font-size: 12px; font-weight: 600;
+    color: var(--accent); text-transform: uppercase; }}
+  .rec .role {{ font-size: 12px; color: var(--muted); }}
+  .rec .bus {{ margin-left: auto; font-family: "JetBrains Mono", monospace; font-size: 11px;
+    color: var(--muted); }}
+  .chips {{ display: flex; flex-wrap: wrap; gap: 6px; }}
+  .chips code {{ padding: 2px 9px; background: var(--soft); border: 1px solid var(--line);
+    border-radius: 6px; font-family: "JetBrains Mono", monospace; font-size: 11px; }}
+  .chips code b {{ color: var(--accent); font-weight: 500; }}
+  td.num {{ font-family: "JetBrains Mono", monospace; white-space: nowrap; font-size: 12px; }}
+  .lgd {{ display: flex; flex-wrap: wrap; gap: 8px 18px; margin: 10px 0 0;
+    font-size: 11.5px; color: var(--muted); }}
+  .lgd i {{ display: inline-block; width: 22px; border-top: 2px solid var(--ink);
+    vertical-align: middle; margin-right: 6px; }}
+  .lgd i.thick {{ border-top-width: 4px; }}
+  .lgd i.dash {{ border-top-style: dashed; }}
 </style>
 </head>
 <body>
@@ -143,19 +177,23 @@ def _xlsx_body(path: Path) -> str:
     return "".join(parts)
 
 
-def _code_body(text: str, kind: str) -> str:
+def _code_pre(text: str) -> str:
     lines_out = []
     for line in text.splitlines():
         esc = _e(line)
-        if line.lstrip().startswith(("!", "#")):
+        if line.lstrip().startswith(("!", "#", "/")):
             lines_out.append(f'<span class="cm">{esc}</span>')
         else:
-            esc = re.sub(
-                r"^(\w[\w_]*)",
-                r'<span class="kw">\1</span>',
-                esc,
-            )
+            esc = re.sub(r"^(\w[\w_]*)", r'<span class="kw">\1</span>', esc)
             lines_out.append(esc)
+    return f'<pre class="code">{chr(10).join(lines_out)}</pre>'
+
+
+def _source_details(text: str, label: str = "View file source") -> str:
+    return f'<details class="src"><summary>{_e(label)}</summary>{_code_pre(text)}</details>'
+
+
+def _code_body(text: str, kind: str) -> str:
     label = {
         ".epc": "GE PSLF load-flow model (.epc) — steady-state buses, branches, transformers, generators.",
         ".dyd": "GE PSLF dynamic model (.dyd) — WECC REGC_A / REEC / REPC_A controller records.",
@@ -164,8 +202,482 @@ def _code_body(text: str, kind: str) -> str:
     }.get(kind, "Plain-text model file.")
     return (
         f'<p class="note">{_e(label)} Validate against the current ISO base case '
-        f'before submission.</p><pre class="code">{chr(10).join(lines_out)}</pre>'
+        f'before submission.</p>{_code_pre(text)}'
     )
+
+
+# ---------------------------------------------------------------------------
+# DXF — parse the R12 entity stream and render the actual drawing as SVG
+# ---------------------------------------------------------------------------
+
+def _parse_dxf_entities(text: str) -> list[dict[str, Any]]:
+    lines = text.splitlines()
+    pairs = [(lines[i].strip(), lines[i + 1]) for i in range(0, len(lines) - 1, 2)]
+    ents: list[dict[str, Any]] = []
+    section = None
+    cur: dict[str, Any] | None = None
+    expect_section_name = False
+    for code, val in pairs:
+        if expect_section_name:
+            if code == "2":
+                section = val.strip()
+            expect_section_name = False
+            continue
+        if code == "0":
+            if cur is not None:
+                ents.append(cur)
+                cur = None
+            v = val.strip()
+            if v == "SECTION":
+                expect_section_name = True
+            elif v == "ENDSEC":
+                section = None
+            elif section == "ENTITIES" and v in ("LINE", "CIRCLE", "TEXT"):
+                cur = {"type": v}
+            continue
+        if cur is not None:
+            cur[code] = val
+    if cur is not None:
+        ents.append(cur)
+    return ents
+
+
+def _dxf_body(text: str) -> str:
+    ents = _parse_dxf_entities(text)
+    if not ents:
+        return _code_body(text, ".dxf")
+
+    def f(ent: dict, code: str, default: float = 0.0) -> float:
+        try:
+            return float(ent.get(code, default))
+        except (TypeError, ValueError):
+            return default
+
+    # Bounding box (DXF y-up); flip to screen coordinates for display.
+    xs: list[float] = []
+    ys: list[float] = []
+    for en in ents:
+        if en["type"] == "LINE":
+            xs += [f(en, "10"), f(en, "11")]
+            ys += [f(en, "20"), f(en, "21")]
+        elif en["type"] == "CIRCLE":
+            r = f(en, "40")
+            xs += [f(en, "10") - r, f(en, "10") + r]
+            ys += [f(en, "20") - r, f(en, "20") + r]
+        elif en["type"] == "TEXT":
+            xs.append(f(en, "10"))
+            ys.append(f(en, "20"))
+    if not xs:
+        return _code_body(text, ".dxf")
+    pad = 12.0
+    x0, x1 = min(xs) - pad, max(xs) + pad
+    y0, y1 = min(ys) - pad, max(ys) + pad
+
+    def fy(y: float) -> float:
+        return (y1 + y0) - y  # restore screen orientation inside the bbox
+
+    svg = [f'<svg xmlns="http://www.w3.org/2000/svg" viewBox="{x0:.1f} {y0:.1f} '
+           f'{x1 - x0:.1f} {y1 - y0:.1f}" font-family="Helvetica, Arial, sans-serif">']
+    counts = {"LINE": 0, "CIRCLE": 0, "TEXT": 0}
+    layers: dict[str, int] = {}
+    for en in ents:
+        layer = str(en.get("8", "SLD")).strip()
+        layers[layer] = layers.get(layer, 0) + 1
+        counts[en["type"]] = counts.get(en["type"], 0) + 1
+        if en["type"] == "LINE":
+            sw = 3.2 if layer == "SLD-BUS" else 1.1
+            dash = ' stroke-dasharray="7 5"' if layer == "SLD-BOUNDARY" else ""
+            svg.append(f'<line x1="{f(en, "10"):.1f}" y1="{fy(f(en, "20")):.1f}" '
+                       f'x2="{f(en, "11"):.1f}" y2="{fy(f(en, "21")):.1f}" '
+                       f'stroke="#111" stroke-width="{sw}"{dash}/>')
+        elif en["type"] == "CIRCLE":
+            svg.append(f'<circle cx="{f(en, "10"):.1f}" cy="{fy(f(en, "20")):.1f}" '
+                       f'r="{f(en, "40"):.1f}" stroke="#111" stroke-width="1.1" fill="none"/>')
+        elif en["type"] == "TEXT":
+            anchor = {"1": "middle", "2": "end"}.get(str(en.get("72", "")).strip(), "start")
+            svg.append(f'<text x="{f(en, "10"):.1f}" y="{fy(f(en, "20")):.1f}" '
+                       f'font-size="{f(en, "40", 8.0):.1f}" text-anchor="{anchor}" '
+                       f'fill="#111">{_e(str(en.get("1", "")))}</text>')
+    svg.append("</svg>")
+
+    layer_rows = "".join(
+        f'<tr><td class="k">{_e(name)}</td><td class="num">{n} entities</td></tr>'
+        for name, n in sorted(layers.items())
+    )
+    return f"""
+    <p class="note">CAD-editable DXF (R12) rendered directly from the file's entity stream —
+    the same drawing your CAD tool will open. Layers carry the bus work, symbols, text, and
+    ownership boundary separately.</p>
+    <div class="sum">
+      <div class="card"><b>{counts.get("LINE", 0)}</b><span>Line entities</span></div>
+      <div class="card"><b>{counts.get("CIRCLE", 0)}</b><span>Circle entities</span></div>
+      <div class="card"><b>{counts.get("TEXT", 0)}</b><span>Text entities</span></div>
+      <div class="card"><b>{len(layers)}</b><span>CAD layers</span></div>
+    </div>
+    <div class="grid2">
+      <figure class="sld">{"".join(svg)}
+        <figcaption>Rendered from the DXF LINE / CIRCLE / TEXT entities. Open in AutoCAD-class
+        tools for editing; the PDF sheet in this packet is the stamped-format equivalent.</figcaption>
+      </figure>
+      <div>
+        <table><tr><th colspan="2">CAD layers</th></tr>{layer_rows}</table>
+        <div class="lgd" style="margin-top:12px">
+          <span><i class="thick"></i>SLD-BUS — buses</span>
+          <span><i></i>SLD — equipment</span>
+          <span><i class="dash"></i>SLD-BOUNDARY — ownership</span>
+        </div>
+      </div>
+    </div>
+    {_source_details(text, "View DXF source (R12 tagged data)")}"""
+
+
+# ---------------------------------------------------------------------------
+# PSLF .epc — solved-case dashboard with parsed data tables
+# ---------------------------------------------------------------------------
+
+_EPC_BUS_RE = re.compile(
+    r'^\s*(\d+)\s+"([^"]+)"\s+([\d.]+)\s*:\s*#9\s+(\d)\s+([\d.]+)\s+([-\d.]+)\s*:')
+_EPC_BRANCH_RE = re.compile(
+    r'^\s*(\d+)\s+"([^"]+)"\s+[\d.]+\s+(\d+)\s+"([^"]+)"\s+[\d.]+\s+"\s*(\d+)"\s*:\s*'
+    r'([-\d.]+)\s+([-\d.]+)\s+([-\d.]+)\s*:\s*([\d.]+)')
+_EPC_XFMR_RE = re.compile(
+    r'^\s*(\d+)\s+"([^"]+)"\s+[\d.]+\s+(\d+)\s+"([^"]+)"\s+[\d.]+\s+"\s*(\d+)"\s*:\s*'
+    r'([-\d.]+)\s+([-\d.]+)\s*:\s*([\d.]+)')
+_EPC_GEN_RE = re.compile(
+    r'^\s*(\d+)\s+"([^"]+)"\s+([\d.]+)\s+"\s*(\d+)"\s*:\s*([-\d.]+)\s+([-\d.]+)\s+'
+    r'([-\d.]+)\s+(-[\d.]+)\s*:\s*([\d.]+)')
+_EPC_LOAD_RE = re.compile(
+    r'^\s*(\d+)\s+"([^"]+)"\s+([\d.]+)\s+"\s*(\d+)"\s*:\s*([-\d.]+)\s+([-\d.]+)')
+
+_EPC_BUS_TYPE = {"0": "Swing (utility)", "1": "PQ", "2": "Generator"}
+
+
+def _epc_sections(text: str) -> tuple[list[str], dict[str, list[str]]]:
+    comments: list[str] = []
+    sections: dict[str, list[str]] = {}
+    cur: str | None = None
+    for line in text.splitlines():
+        s = line.strip()
+        if not s:
+            continue
+        if s.startswith("!"):
+            comments.append(s.lstrip("! "))
+            continue
+        low = s.lower()
+        if low in ("title", "comments") or low.endswith(" data"):
+            cur = low
+            sections[cur] = []
+            continue
+        if low == "end":
+            cur = None
+            continue
+        if cur is not None:
+            sections[cur].append(line)
+    return comments, sections
+
+
+def _rows_table(headers: list[str], rows: list[list[str]], num_from: int = 2) -> str:
+    if not rows:
+        return ""
+    head = "".join(f"<th>{_e(h)}</th>" for h in headers)
+    body = "".join(
+        "<tr>" + "".join(
+            f'<td class="{"num" if i >= num_from else ""}">{_e(c)}</td>'
+            for i, c in enumerate(r)
+        ) + "</tr>"
+        for r in rows
+    )
+    return f"<table><tr>{head}</tr>{body}</table>"
+
+
+def _epc_body(text: str) -> str:
+    comments, sec = _epc_sections(text)
+
+    # Header cards from the writer's solved-case comments.
+    iters = losses = dispatch = ""
+    m = re.search(r"(\d+)\s+iterations", " ".join(comments))
+    if m:
+        iters = m.group(1)
+    m = re.search(r"losses\s+([\d.]+)\s*MW", " ".join(comments))
+    if m:
+        losses = m.group(1)
+    m = re.search(r"Dispatch:\s*(.+?)\s*(?:$|—)", next((c for c in comments if "Dispatch" in c), ""))
+    if m:
+        dispatch = m.group(1)
+
+    parts: list[str] = ['<p class="note">GE PSLF steady-state model rendered from the file '
+                        "contents — every number below traces to the solved load-flow case, the "
+                        "project graph, or an OEM datasheet. Validate against the current ISO "
+                        "base case before submission.</p>"]
+    cards = []
+    if iters:
+        cards.append(f'<div class="card"><b>{_e(iters)}</b><span>Solver iterations</span></div>')
+    if losses:
+        cards.append(f'<div class="card"><b>{_e(losses)} MW</b><span>Series losses</span></div>')
+    buses = sec.get("bus data", [])
+    cards.append(f'<div class="card"><b>{len(buses)}</b><span>Buses</span></div>')
+    cards.append(f'<div class="card"><b>{len(sec.get("generator data", []))}</b><span>Generators</span></div>')
+    parts.append(f'<div class="sum">{"".join(cards)}</div>')
+    if dispatch:
+        parts.append(f'<p class="note">Dispatch: {_e(dispatch)}</p>')
+    if sec.get("title"):
+        parts.append(f'<h2 class="sheet">Case title</h2><p>{_e(" ".join(sec["title"]))}</p>')
+
+    rows = []
+    for line in buses:
+        m = _EPC_BUS_RE.match(line)
+        if m:
+            num, name, kv, btype, v, ang = m.groups()
+            rows.append([num, name.strip(), f"{float(kv):g}", _EPC_BUS_TYPE.get(btype, btype),
+                         v, ang])
+    if rows:
+        parts.append('<h2 class="sheet">Bus data — solved voltages</h2>')
+        parts.append(_rows_table(["Bus", "Name", "kV", "Type", "V (pu)", "Angle (°)"], rows))
+
+    rows = []
+    for line in sec.get("branch data", []):
+        m = _EPC_BRANCH_RE.match(line)
+        if m:
+            f_, fn, t_, tn, cid, r, x, b, rate = m.groups()
+            rows.append([f"{fn.strip()} → {tn.strip()}", cid, r, x, b, f"{float(rate):g}"])
+    if rows:
+        parts.append('<h2 class="sheet">Branch data</h2>')
+        parts.append(_rows_table(["Branch", "ID", "R (pu)", "X (pu)", "B (pu)", "Rating (MVA)"],
+                                 rows, num_from=1))
+
+    rows = []
+    for line in sec.get("transformer data", []):
+        m = _EPC_XFMR_RE.match(line)
+        if m:
+            f_, fn, t_, tn, cid, r, x, mva = m.groups()
+            rows.append([f"{fn.strip()} → {tn.strip()}", cid, r, x, f"{float(mva):g}"])
+    if rows:
+        parts.append('<h2 class="sheet">Transformer data</h2>')
+        parts.append(_rows_table(["Transformer", "ID", "R (pu)", "X (pu)", "Rating (MVA)"],
+                                 rows, num_from=1))
+
+    rows = []
+    for line in sec.get("generator data", []):
+        m = _EPC_GEN_RE.match(line)
+        if m:
+            bus, name, kv, cid, p, q, qmax, qmin, mva = m.groups()
+            rows.append([name.strip(), f"{float(kv):g}", p, q, qmax, qmin, f"{float(mva):g}"])
+    if rows:
+        parts.append('<h2 class="sheet">Generator dispatch — from the solved case</h2>')
+        parts.append(_rows_table(
+            ["Unit", "kV", "P (MW)", "Q (Mvar)", "Qmax", "Qmin", "MVA base"], rows, num_from=1))
+
+    rows = []
+    for line in sec.get("load data", []):
+        m = _EPC_LOAD_RE.match(line)
+        if m:
+            bus, name, kv, cid, p, q = m.groups()
+            rows.append([name.strip(), f"{float(kv):g}", p, q])
+    if rows:
+        parts.append('<h2 class="sheet">Load data — auxiliary / station service</h2>')
+        parts.append(_rows_table(["Bus", "kV", "P (MW)", "Q (Mvar)"], rows, num_from=1))
+
+    parts.append(_source_details(text, "View .epc source (as submitted)"))
+    return "".join(parts)
+
+
+# ---------------------------------------------------------------------------
+# PSLF .dyd / PSS/E .dyr — WECC controller records as cards
+# ---------------------------------------------------------------------------
+
+_WECC_ROLE = {
+    "regc": "Converter interface — current injection",
+    "reec": "Electrical controls — V/Q and P priority",
+    "repc": "Plant controller — POI regulation & droop",
+}
+
+
+def _model_role(model: str) -> str:
+    key = model.lower()[:4]
+    return _WECC_ROLE.get(key, "Controller record")
+
+
+# Record grammar shared with the engine's vendor-file parser.
+from backend.app.engine.vendor_models import DYD_PARAM_RE as _DYD_PARAM_RE
+from backend.app.engine.vendor_models import DYD_REC_RE as _DYD_REC_RE
+
+
+def _dyd_body(text: str) -> str:
+    parts: list[str] = ['<p class="note">GE PSLF dynamic data rendered from the file contents — '
+                        "WECC standard-library models with the parameter blocks the packet "
+                        "submits. Generic blocks are flagged for replacement with OEM "
+                        "MOD-026/027 data.</p>"]
+    for line in text.splitlines():
+        s = line.strip()
+        if not s:
+            continue
+        if s.startswith("#"):
+            note = s.lstrip("# ")
+            warn_style = ' style="border-color:#f59e0b66;background:#fffbeb;color:#92400e"'
+            style = warn_style if "GENERIC" in note.upper() else ""
+            parts.append(f'<p class="note"{style}>{_e(note)}</p>')
+            continue
+        m = _DYD_REC_RE.match(s)
+        if not m:
+            continue
+        model, bus, name, kv, cid, params = m.groups()
+        chips = []
+        for pm in _DYD_PARAM_RE.finditer(params):
+            k = pm.group(1) or pm.group(3)
+            v = pm.group(2) or pm.group(4)
+            chips.append(f"<code><b>{_e(k)}</b> = {_e(v)}</code>")
+        parts.append(f"""
+        <div class="rec">
+          <div class="head">
+            <span class="model">{_e(model.upper())}</span>
+            <span class="role">{_e(_model_role(model))}</span>
+            <span class="bus">bus {_e(bus)} · {_e(name.strip())} · {_e(f"{float(kv):g}")} kV · id {_e(cid)}</span>
+          </div>
+          <div class="chips">{"".join(chips)}</div>
+        </div>""")
+    parts.append(_source_details(text, "View .dyd source (as submitted)"))
+    return "".join(parts)
+
+
+_DYR_REC_RE = re.compile(r"^(\d+)\s+'([\w]+)'\s+(\d+)\s+(.*?)\s*/\s*$")
+
+
+def _dyr_body(text: str) -> str:
+    parts: list[str] = ['<p class="note">Siemens PSS/E dynamic data rendered from the file '
+                        "contents — WECC standard-library models with positional parameter "
+                        "lists in library order.</p>"]
+    for line in text.splitlines():
+        s = line.strip()
+        if not s:
+            continue
+        if s.startswith("/"):
+            parts.append(f'<p class="note">{_e(s.lstrip("/ "))}</p>')
+            continue
+        m = _DYR_REC_RE.match(s)
+        if not m:
+            continue
+        bus, model, cid, params = m.groups()
+        chips = "".join(f"<code>{_e(v)}</code>" for v in params.split())
+        parts.append(f"""
+        <div class="rec">
+          <div class="head">
+            <span class="model">{_e(model.upper())}</span>
+            <span class="role">{_e(_model_role(model))}</span>
+            <span class="bus">bus {_e(bus)} · id {_e(cid)}</span>
+          </div>
+          <div class="chips">{chips}</div>
+        </div>""")
+    parts.append(_source_details(text, "View .dyr source (as submitted)"))
+    return "".join(parts)
+
+
+# ---------------------------------------------------------------------------
+# PSS/E .raw — section tables
+# ---------------------------------------------------------------------------
+
+def _raw_body(text: str) -> str:
+    lines = text.splitlines()
+    parts: list[str] = ['<p class="note">Siemens PSS/E v33 case rendered from the file '
+                        "contents — solved bus voltages, dispatch, and network data. Validate "
+                        "against the current ISO base case before submission.</p>"]
+    sections: dict[str, list[str]] = {}
+    cur = None
+    for line in lines[1:]:
+        s = line.strip()
+        if not s or s == "Q":
+            continue
+        m = re.search(r"BEGIN (\w[\w ]*?) DATA", s)
+        if m or "END OF" in s:
+            cur = m.group(1).title() if m else None
+            if cur:
+                sections[cur] = []
+            continue
+        if cur:
+            sections[cur].append(s)
+        # Header comment lines before the first section read as notes.
+        elif not sections and not s[0].isdigit():
+            parts.append(f'<p class="note">{_e(s)}</p>')
+
+    headers = {
+        "Bus": ["Bus", "Name", "kV", "Type", "V (pu)", "Angle (°)"],
+        "Load": ["Bus", "ID", "P (MW)", "Q (Mvar)"],
+        "Generator": ["Bus", "ID", "P (MW)", "Q (Mvar)", "Qmax", "Qmin", "MVA base"],
+        "Branch": ["From", "To", "ID", "R (pu)", "X (pu)", "B (pu)", "Rating (MVA)"],
+    }
+    pick = {
+        "Bus": [0, 1, 2, 3, 7, 8],
+        "Load": [0, 1, 5, 6],
+        "Generator": [0, 1, 2, 3, 4, 5, 8],
+        "Branch": [0, 1, 2, 3, 4, 5, 6],
+    }
+    type_map = {"3": "Swing", "2": "Generator", "1": "PQ"}
+    for name, rows_raw in sections.items():
+        if name in headers:
+            rows = []
+            for r in rows_raw:
+                cells = [c.strip().strip("'").strip() for c in r.split(",")]
+                sel = [cells[i] if i < len(cells) else "" for i in pick[name]]
+                if name == "Bus" and len(sel) > 3:
+                    sel[3] = type_map.get(sel[3], sel[3])
+                rows.append(sel)
+            parts.append(f'<h2 class="sheet">{_e(name)} data</h2>')
+            parts.append(_rows_table(headers[name], rows, num_from=1))
+        elif rows_raw:
+            body = "".join(f'<tr><td class="num">{_e(r)}</td></tr>' for r in rows_raw)
+            parts.append(f'<h2 class="sheet">{_e(name)} data</h2>'
+                         f"<table><tr><th>Record</th></tr>{body}</table>")
+
+    parts.append(_source_details(text, "View .raw source (as submitted)"))
+    return "".join(parts)
+
+
+# ---------------------------------------------------------------------------
+# JSON — portal field export as tables
+# ---------------------------------------------------------------------------
+
+def _json_body(text: str) -> str:
+    import json as _json
+
+    try:
+        data = _json.loads(text)
+    except Exception:
+        return _code_body(text, ".json")
+
+    def kv_table(obj: dict) -> str:
+        rows = []
+        for k, v in obj.items():
+            if isinstance(v, dict):
+                v = ", ".join(f"{ik}: {iv}" for ik, iv in v.items())
+            elif isinstance(v, list):
+                v = "; ".join(str(i) for i in v)
+            label = str(k).replace("_", " ").capitalize()
+            rows.append(f'<tr><td class="k">{_e(label)}</td><td class="num">{_e(v)}</td></tr>')
+        return f"<table>{''.join(rows)}</table>"
+
+    parts: list[str] = ['<p class="note">Portal field export rendered from the JSON contents — '
+                        "values keyed for direct entry into the ISO application portal, all "
+                        "traced to the project graph.</p>"]
+    if isinstance(data, dict):
+        flat = {k: v for k, v in data.items() if not isinstance(v, (dict, list))}
+        if flat:
+            parts.append(kv_table(flat))
+        for k, v in data.items():
+            if isinstance(v, dict):
+                parts.append(f'<h2 class="sheet">{_e(str(k).replace("_", " "))}</h2>')
+                parts.append(kv_table(v))
+            elif isinstance(v, list) and v and isinstance(v[0], dict):
+                cols = list(v[0].keys())
+                head = "".join(f"<th>{_e(c)}</th>" for c in cols)
+                body = "".join(
+                    "<tr>" + "".join(f'<td class="num">{_e(row.get(c, ""))}</td>' for c in cols) + "</tr>"
+                    for row in v
+                )
+                parts.append(f'<h2 class="sheet">{_e(str(k).replace("_", " "))}</h2>'
+                             f"<table><tr>{head}</tr>{body}</table>")
+    else:
+        parts.append(_code_body(text, ".json"))
+    parts.append(_source_details(text, "View JSON source"))
+    return "".join(parts)
 
 
 def _markdown_body(text: str) -> str:
@@ -301,8 +813,18 @@ def render_preview(manifest: dict, doc: dict, path: Path, download_url: str) -> 
         body = _pdf_body(download_url)
     elif suffix == ".xlsx":
         body = _xlsx_body(path)
-    elif suffix in (".epc", ".dyd", ".raw", ".dyr"):
-        body = _code_body(path.read_text(encoding="utf-8"), suffix)
+    elif suffix == ".dxf":
+        body = _dxf_body(path.read_text(encoding="utf-8"))
+    elif suffix == ".epc":
+        body = _epc_body(path.read_text(encoding="utf-8"))
+    elif suffix == ".dyd":
+        body = _dyd_body(path.read_text(encoding="utf-8"))
+    elif suffix == ".raw":
+        body = _raw_body(path.read_text(encoding="utf-8"))
+    elif suffix == ".dyr":
+        body = _dyr_body(path.read_text(encoding="utf-8"))
+    elif suffix == ".json":
+        body = _json_body(path.read_text(encoding="utf-8"))
     elif suffix == ".md":
         body = _markdown_body(path.read_text(encoding="utf-8"))
     elif suffix == ".kmz":
@@ -571,6 +1093,46 @@ def render_kickoff_preview(key: str, intake: dict, meta: dict, hl: list[str] | N
                 + _kmz_body(path, {})
             )
         title = "Project Boundary (KMZ)"
+    elif key == "file_dyd":
+        from backend.app.engine.vendor_models import demo_vendor_dyd_text
+
+        text = demo_vendor_dyd_text(intake)
+        body = (
+            '<p class="note">Vendor-supplied PSLF parameter package for the selected inverter — '
+            "the OEM blocks GridPilot integrates into the plant-level dynamic model. Records are "
+            "per-unit; the engine scales them to the fleet MVA base when it writes the packet "
+            ".dyd.</p>"
+            + (HL_CSS + _hl_note(hl) if hl else "")
+            + _dyd_body(text)
+        )
+        title = "Vendor PSLF Dynamic Model (.dyd)"
+    elif key == "file_base_case":
+        poi = _e(str(intake.get("poi_name") or "POI"))
+        kv = _e(str(intake.get("poi_voltage_kv") or "230"))
+        body = f"""
+        <p class="note">Demo stand-in for a <strong>customer-supplied ISO base-case extract</strong>
+        covering the {_e(poi)} area. Real ISO base cases are confidential and stay in the customer's
+        authorized environment — GridPilot never fabricates one. Without a real extract the plant
+        model is validated against a flat system equivalent at the POI.</p>
+        <div class="sum">
+          <div class="card"><b>{poi}</b><span>Anchor POI</span></div>
+          <div class="card"><b>{kv} kV</b><span>System voltage</span></div>
+          <div class="card"><b>DEMO</b><span>Not a live ISO case</span></div>
+          <div class="card"><b>PSLF</b><span>Extract format</span></div>
+        </div>
+        <table>
+          <tr><th colspan="4">Area extract — representative buses (demo)</th></tr>
+          <tr><th>Bus</th><th>Name</th><th>kV</th><th>Role</th></tr>
+          <tr><td>11001</td><td>WHIRLWND</td><td>{kv}</td><td>POI / swing</td></tr>
+          <tr><td>11002</td><td>WHIRL-HS</td><td>{kv}</td><td>Utility high-side</td></tr>
+          <tr><td>11014</td><td>ANTELOPE</td><td>{kv}</td><td>Neighboring station</td></tr>
+          <tr><td>11022</td><td>WINDHUB</td><td>{kv}</td><td>Neighboring station</td></tr>
+        </table>
+        <p class="note" style="margin-top:14px">In production the customer drops the licensed extract
+        here; GridPilot records it on the validation report and reminds the engineer to re-run the
+        final load-flow against that case in the authorized environment.</p>
+        """ + (HL_CSS + _hl_note(hl) if hl else "")
+        title = "ISO Base Case Extract (customer-supplied)"
     else:
         title = "Kickoff document"
         body = '<p class="note">No inline preview available for this document.</p>'

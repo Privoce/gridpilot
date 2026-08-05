@@ -129,7 +129,17 @@ await page.waitForSelector("text=Validation", { timeout: 15000 });
 const clean = (await page.locator("text=Intake is clean").count()) > 0;
 console.log("validation clean after site file:", clean);
 
-// ---- 5. Generate ----
+// ---- 5. Design review + generate ----
+await page.click("#req-design");
+await page.waitForSelector("h2:has-text('Engineering design review')", { timeout: 20000 });
+await page.waitForSelector("text=Plant topology", { timeout: 20000 });
+console.log("design review rendered (MISO)");
+const pendingBtns = await page.locator("[data-eng-approve]").count();
+if (pendingBtns) {
+  await page.click("#eng-approve-all");
+  await page.waitForSelector("text=all approved", { timeout: 20000 });
+}
+await page.waitForSelector("#req-generate:not([disabled])", { timeout: 20000 });
 await page.click("#req-generate");
 await page.waitForSelector('a:has-text("Download packet (.zip)")', { timeout: 60000 });
 const packetHeader = await page.locator("h2:has-text('submission packet')").first().textContent();

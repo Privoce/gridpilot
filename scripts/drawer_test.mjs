@@ -1,7 +1,7 @@
-// Headless test: preview drawer for kickoff documents (Step 2) and packet docs (Step 5).
+// Headless test: preview drawer for kickoff documents (Step 2) and packet docs (Step 6).
 // Usage: node scripts/drawer_test.mjs  (server must be running on :8000)
 import { chromium } from "playwright-core";
-import { mkdirSync } from "fs";
+import { mkdirSync, writeFileSync } from "fs";
 
 const BASE = "http://127.0.0.1:8000";
 const shots = "/tmp/gp_drawer";
@@ -21,7 +21,7 @@ await page.waitForSelector("#start-demo-btn", { timeout: 10000 });
 await page.click("#start-demo-btn");
 await page.waitForSelector("#wiz-next", { timeout: 15000 });
 await page.click("#wiz-next");
-await page.waitForSelector("#intake-form", { timeout: 10000 });
+await page.waitForSelector("#wiz-extract", { timeout: 10000 }); // step 2: kickoff documents
 
 // 1. Preview the preloaded lease -> drawer with server-rendered document
 await page.click('[data-file-preview="file_site_control"]');
@@ -50,11 +50,10 @@ await page.screenshot({ path: shots + "/3_signatory_drawer.png" });
 await page.keyboard.press("Escape");
 await page.waitForTimeout(400);
 
-// 4. Attach a text .dyd this session and preview it (blob URL)
-import { writeFileSync } from "fs";
+// 4. Attach a text .dyd this session and preview it
 writeFileSync("/tmp/vendor_model.dyd", "regc_a 90004 \"RAVEN-PV\" 0.60 \"1\" : #9 mva=131.3 ...vendor params...");
 await page.setInputFiles('[data-file-input="file_dyd"]', "/tmp/vendor_model.dyd");
-await page.waitForTimeout(500);
+await page.waitForTimeout(600);
 await page.click('[data-file-preview="file_dyd"]');
 await page.waitForSelector("#gp-drawer iframe", { timeout: 8000 });
 await page.waitForTimeout(600);
@@ -62,9 +61,27 @@ await page.screenshot({ path: shots + "/4_session_dyd_drawer.png" });
 await page.keyboard.press("Escape");
 await page.waitForTimeout(400);
 
-// 5. Full run to Step 5 and open a packet doc preview in the drawer
+// 5. Submit staged docs, extract, correct the seeded defects, validate clean
+while ((await page.locator("[data-file-submit]").count()) > 0) {
+  await page.locator("[data-file-submit]").first().click();
+  await page.waitForTimeout(250);
+}
+await page.click("#wiz-extract");
+await page.waitForSelector("#intake-form", { timeout: 25000 });
+await page.fill('[data-intake="net_mw_poi"]', "125");
+await page.fill('[data-intake="bess_mwh"]', "200");
 await page.click("#wiz-validate");
-await page.waitForSelector("#wiz-generate", { timeout: 10000 });
+await page.waitForSelector("#wiz-next", { timeout: 15000 });
+
+// 6. Design review sign-off, then generate and open a packet doc drawer
+await page.click("#wiz-next");
+await page.waitForSelector("h2:has-text('Engineering design review')", { timeout: 20000 });
+await page.waitForSelector("[data-eng-approve], #wiz-generate:not([disabled])", { timeout: 20000 });
+if (await page.locator("#eng-approve-all").count()) {
+  await page.click("#eng-approve-all");
+  await page.waitForSelector("text=all approved", { timeout: 20000 });
+}
+await page.waitForSelector("#wiz-generate:not([disabled])", { timeout: 20000 });
 await page.click("#wiz-generate");
 await page.waitForSelector("#wiz-finish", { timeout: 30000 });
 await page.click('[data-drawer-url*="Appendix1"]');

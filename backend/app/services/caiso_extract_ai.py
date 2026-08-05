@@ -135,6 +135,62 @@ def _parse_json_block(text: str) -> dict[str, Any]:
     raise ExtractionError("Model did not return valid JSON")
 
 
+_EQUIPMENT_FIELDS = """{
+ "kind": "pv_inverter" | "bess",
+ "vendor": string,                 // manufacturer name
+ "model": string,                  // model designation
+ "mva": number,                    // apparent power rating per unit (MVA)
+ "mw": number,                     // active power rating per unit (MW)
+ "mwh": number | null,             // energy rating (BESS only)
+ "ac_kv": number,                  // AC output voltage (kV)
+ "pf_range": number,               // power factor range at rated output (e.g. 0.9)
+ "notes": string                   // one line: what the datasheet supports
+}"""
+
+
+async def extract_equipment_from_datasheet(
+    filename: str, data: bytes, kind: str = "pv_inverter"
+) -> dict[str, Any]:
+    """One Grok call mapping an OEM datasheet onto a draft equipment entry.
+
+    The draft is reviewed by the user before it becomes an (unverified)
+    custom-equipment record in the intake — GridPilot never adds equipment
+    parameters without human review.
+    """
+    if not settings.xai_api_key:
+        raise ExtractionError("AI extraction is not configured (XAI_API_KEY missing)")
+    text = document_text(filename, data)[:MAX_CHARS_PER_DOC]
+    prompt = f"""You are GridPilot, ingesting an OEM equipment datasheet into an engineering library.
+
+Extract the equipment ratings below from the datasheet. Return STRICT JSON only (no markdown)
+matching this schema:
+{_EQUIPMENT_FIELDS}
+
+RULES:
+- Only report values the document actually supports — use null when absent.
+- The uploader indicated this is a "{kind}" datasheet; correct the kind only if the document clearly disagrees.
+- Numbers are plain JSON numbers in the stated units.
+
+DATASHEET — file: {filename}
+{text}
+"""
+    async with httpx.AsyncClient(timeout=120.0) as client:
+        resp = await client.post(
+            f"{settings.xai_base_url.rstrip('/')}/responses",
+            headers={
+                "Authorization": f"Bearer {settings.xai_api_key}",
+                "Content-Type": "application/json",
+            },
+            json={"model": settings.xai_model, "input": prompt},
+        )
+    if resp.status_code >= 400:
+        raise ExtractionError(f"xAI API {resp.status_code}: {resp.text[:400]}")
+    draft = _parse_json_block(_extract_output_text(resp.json()))
+    draft["kind"] = draft.get("kind") if draft.get("kind") in ("pv_inverter", "bess") else kind
+    draft["source"] = filename
+    return draft
+
+
 async def extract_intake_from_uploads(
     docs: dict[str, tuple[str, bytes]],
 ) -> dict[str, Any]:
@@ -215,6 +271,20 @@ DOCUMENTS:
                 "source": slot,
                 "source_label": SLOT_LABELS.get(slot, slot),
                 "file": docs[slot][0],
+            }
+    # Vendor .dyd parameter blocks are parsed deterministically (never via the
+    # LLM) so the engine can integrate the OEM values with full provenance.
+    if "file_dyd" in docs:
+        from backend.app.engine.vendor_models import vendor_overrides
+
+        vd_name, vd_data = docs["file_dyd"]
+        overrides = vendor_overrides(vd_data.decode("utf-8", errors="replace"), vd_name)
+        if overrides:
+            fields["vendor_dyd"] = overrides
+            provenance["vendor_dyd"] = {
+                "source": "file_dyd",
+                "source_label": SLOT_LABELS["file_dyd"],
+                "file": vd_name,
             }
     return {
         "fields": fields,

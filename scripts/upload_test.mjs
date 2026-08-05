@@ -1,4 +1,4 @@
-// Headless test for the Step 2 kickoff-document upload components.
+// Headless test for the Step 2 kickoff-document upload components (staged flow).
 // Usage: node scripts/upload_test.mjs  (server must be running on :8000)
 import { chromium } from "playwright-core";
 import { mkdirSync, writeFileSync } from "fs";
@@ -18,52 +18,75 @@ page.on("console", (m) => {
   if (m.type() === "error") console.log("CONSOLE ERR:", m.text());
 });
 
+const submitAllStaged = async () => {
+  while ((await page.locator("[data-file-submit]").count()) > 0) {
+    await page.locator("[data-file-submit]").first().click();
+    await page.waitForTimeout(250);
+  }
+};
+
 await page.goto(BASE + "/app#/demo");
 await page.waitForSelector("#start-demo-btn", { timeout: 10000 });
 await page.click("#start-demo-btn");
 await page.waitForSelector("#wiz-next", { timeout: 15000 });
 await page.click("#wiz-next");
-await page.waitForSelector("#intake-form", { timeout: 10000 });
+await page.waitForSelector("#wiz-extract", { timeout: 10000 }); // step 2: documents
 
-// 1. Preloaded example files visible
-const chips = await page.locator("[data-file-attach]").count();
-const preloaded = await page.getByText("preloaded example").count();
-console.log("file components:", chips >= 4, "| preloaded examples:", preloaded);
-await page.locator('[data-file-field], fieldset:last-of-type').last().scrollIntoViewIfNeeded().catch(() => {});
+// 1. Documents arrive staged with per-file controls
+const stagedChips = await page.getByText("Uploaded — not submitted").count();
+const removeBtns = await page.locator("[data-file-remove]").count();
+console.log("staged docs:", stagedChips >= 4, "| remove buttons:", removeBtns >= 4);
 await page.screenshot({ path: shots + "/1_step2_uploads.png", fullPage: true });
 
-// 2. Remove the lease -> validation should block
+// 2. Remove the lease -> downstream validation must block
 await page.click('[data-file-remove="file_site_control"]');
 await page.waitForTimeout(300);
-await page.screenshot({ path: shots + "/2_lease_removed.png", fullPage: true });
+await submitAllStaged();
+await page.click("#wiz-extract");
+await page.waitForSelector("#intake-form", { timeout: 25000 });
 await page.click("#wiz-validate");
-await page.waitForSelector("#wiz-back-2", { timeout: 10000 });
+await page.waitForSelector("#wiz-back-2", { timeout: 15000 });
 const errText = await page.textContent("body");
 console.log("blocking on missing lease:", errText.includes("Executed site agreement not attached"));
-await page.screenshot({ path: shots + "/3_validate_blocked.png", fullPage: true });
+await page.screenshot({ path: shots + "/2_validate_blocked.png", fullPage: true });
 
-// 3. Back, attach a custom lease file
-await page.click("#wiz-back-2");
+// 3. Back to documents, attach a custom lease and a vendor .dyd
+await page.click("#wiz-back-2"); // -> intake (step 3)
 await page.waitForSelector("#intake-form", { timeout: 10000 });
+await page.click("#wiz-back"); // -> documents (step 2)
+await page.waitForSelector("#wiz-extract", { timeout: 10000 });
 await page.setInputFiles('[data-file-input="file_site_control"]', "/tmp/Ravenwood_Lease_Custom_2026.pdf");
-await page.waitForTimeout(400);
+await page.waitForSelector('[data-file-submit="file_site_control"]', { timeout: 8000 });
 const hasCustom = (await page.textContent("body")).includes("Ravenwood_Lease_Custom_2026.pdf");
 console.log("custom lease attached:", hasCustom);
-
-// 4. Attach the vendor .dyd too
 await page.setInputFiles('[data-file-input="file_dyd"]', "/tmp/SG4400UD_vendor_model.dyd");
-await page.waitForTimeout(400);
-await page.screenshot({ path: shots + "/4_custom_files.png", fullPage: true });
+await page.waitForSelector('[data-file-submit="file_dyd"]', { timeout: 8000 });
+await page.screenshot({ path: shots + "/3_custom_files.png", fullPage: true });
+await submitAllStaged();
 
-// 5. Validate clean, generate, land on packet
+// 4. Re-extract, correct the seeded defects, validate clean
+await page.click("#wiz-extract");
+await page.waitForSelector("#intake-form", { timeout: 25000 });
+await page.fill('[data-intake="net_mw_poi"]', "125");
+await page.fill('[data-intake="bess_mwh"]', "200");
 await page.click("#wiz-validate");
-await page.waitForSelector("#wiz-generate", { timeout: 10000 });
+await page.waitForSelector("#wiz-next", { timeout: 15000 });
 const vText = await page.textContent("body");
 console.log("validation shows custom lease:", vText.includes("Ravenwood_Lease_Custom_2026.pdf"),
-  "| vendor dyd pass:", vText.includes("SG4400UD_vendor_model.dyd"));
-await page.screenshot({ path: shots + "/5_validate_clean.png", fullPage: true });
+  "| vendor dyd shown:", vText.includes("SG4400UD_vendor_model.dyd"));
+await page.screenshot({ path: shots + "/4_validate_clean.png", fullPage: true });
+
+// 5. Design review sign-off, generate, land on packet
+await page.click("#wiz-next");
+await page.waitForSelector("h2:has-text('Engineering design review')", { timeout: 20000 });
+await page.waitForSelector("[data-eng-approve], #wiz-generate:not([disabled])", { timeout: 20000 });
+if (await page.locator("#eng-approve-all").count()) {
+  await page.click("#eng-approve-all");
+  await page.waitForSelector("text=all approved", { timeout: 20000 });
+}
+await page.waitForSelector("#wiz-generate:not([disabled])", { timeout: 20000 });
 await page.click("#wiz-generate");
 await page.waitForSelector("#wiz-finish", { timeout: 30000 });
-await page.screenshot({ path: shots + "/6_packet.png", fullPage: true });
+await page.screenshot({ path: shots + "/5_packet.png", fullPage: true });
 console.log("UPLOAD TEST DONE");
 await browser.close();

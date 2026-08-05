@@ -66,10 +66,17 @@ export const api = {
     request(`/api/caiso/validate${iso ? `?iso=${encodeURIComponent(iso)}` : ""}`, { method: "POST", body: intake }),
   caisoGenerate: (intake, iso) =>
     request(`/api/caiso/generate${iso ? `?iso=${encodeURIComponent(iso)}` : ""}`, { method: "POST", body: intake }),
+  caisoEngineering: (intake, prov, iso) =>
+    request(`/api/caiso/engineering${iso ? `?iso=${encodeURIComponent(iso)}` : ""}`, {
+      method: "POST",
+      body: { intake, prov: prov || null },
+    }),
   caisoPacket: (id, d, iso) => {
     const q = [d ? `d=${d}` : "", iso ? `i=${encodeURIComponent(iso)}` : ""].filter(Boolean).join("&");
     return request(`/api/caiso/packets/${id}${q ? `?${q}` : ""}`);
   },
   caisoExtractFiles: (formData) =>
     request("/api/caiso/extract-files", { method: "POST", body: formData }),
+  caisoIngestDatasheet: (body) =>
+    request("/api/caiso/ingest-datasheet", { method: "POST", body }),
 };

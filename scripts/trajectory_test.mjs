@@ -111,7 +111,7 @@ await fillIntake({
   inverter: "TBD", dyd_status: "Requested — pending",
 });
 await page.click("#req-validate");
-await page.waitForSelector("#req-generate, #req-back-2b", { timeout: 20000 });
+await page.waitForSelector("#req-design, #req-back-2b", { timeout: 20000 });
 const manualClean = (await page.locator("text=Intake is clean").count()) > 0;
 check("B2 manual intake validates clean", manualClean);
 if (!manualClean) {
@@ -119,9 +119,17 @@ if (!manualClean) {
   await page.screenshot({ path: shots + "/B2_validation.png", fullPage: true });
 }
 
+await page.click("#req-design");
+await page.waitForSelector("h2:has-text('Engineering design review')", { timeout: 20000 });
+await page.waitForSelector("[data-eng-approve], #req-generate:not([disabled])", { timeout: 30000 });
+if (await page.locator("#eng-approve-all").count()) {
+  await page.click("#eng-approve-all");
+  await page.waitForSelector("text=all approved", { timeout: 20000 });
+}
+await page.waitForSelector("#req-generate:not([disabled])", { timeout: 20000 });
 await page.click("#req-generate");
 await page.waitForSelector("text=CAISO submission packet", { timeout: 120000 });
-check("B3 manual path generates packet", true);
+check("B3 manual path generates packet (after design sign-off)", true);
 
 // every packet document preview + download resolves
 const urls = await page.$$eval("[data-drawer-url]", (ns) =>

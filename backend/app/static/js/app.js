@@ -12,7 +12,7 @@ const WIZARD_META = [
   { n: 2, label: "Documents" },
   { n: 3, label: "Intake" },
   { n: 4, label: "Validate" },
-  { n: 5, label: "Generate" },
+  { n: 5, label: "Design" },
   { n: 6, label: "Packet" },
 ];
 const WIZARD_LAST = 6;
@@ -66,15 +66,15 @@ const EXTRACT_MIN_MS = 5400;
 
 // The consulting-firm workstream GridPilot performs (Demo流程 Phase 2, Steps A–G).
 const GEN_STAGES = [
-  { at: 0, label: "Kickoff — validating intake & confirming POI…" },
-  { at: 800, label: "Building load flow model (.epc) — generator, GSU, collector, POI…" },
-  { at: 1800, label: "Integrating dynamic models (.dyd) — REGC_A / REEC_A / REPC_A…" },
-  { at: 2800, label: "Running flat run + bump test — fault cleared after 5 cycles…" },
-  { at: 3700, label: "Generating reactive power capability curve (±0.95 PF)…" },
-  { at: 4600, label: "Drafting single-line diagram & scaled site drawing…" },
-  { at: 5400, label: "Plotting project boundary KMZ…" },
-  { at: 6100, label: "Filling Appendix 1 & Attachment A…" },
-  { at: 6950, label: "QC — cross-checking MW chain, legal name, GPS across all documents…" },
+  { at: 0, label: "Kickoff — validating intake & building the project graph…" },
+  { at: 800, label: "Solving load flow — backward/forward sweep on the plant equivalent…" },
+  { at: 1800, label: "Writing models from the solved case (.epc/.dyd, OEM parameters)…" },
+  { at: 2800, label: "Running flat start + bump tests — LVRT, droop, settling checks…" },
+  { at: 3700, label: "Computing short-circuit duties & reactive capability (±0.95 PF)…" },
+  { at: 4600, label: "Drawing the single-line diagram from the topology (PDF + DXF)…" },
+  { at: 5400, label: "Equipment schedule, site drawing, boundary KMZ…" },
+  { at: 6100, label: "Filling Appendix 1, Attachment A, portal field export…" },
+  { at: 6950, label: "QC — tracing every value back to the project graph…" },
 ];
 const GEN_MIN_MS = 7800;
 
@@ -160,6 +160,20 @@ function loadIntake() {
 
 function saveIntake(values) {
   localStorage.setItem(INTAKE_KEY, JSON.stringify(values));
+}
+
+/** Pull graph_history off an API response into an intake object. */
+function applyGraphHistory(intake, res) {
+  const hist = res?.intake_echo?.graph_history || res?.graph_history;
+  if (!Array.isArray(hist) || !hist.length || !intake) return false;
+  intake.graph_history = hist;
+  return true;
+}
+
+/** Persist graph_history into the demo intake store. */
+function mergeGraphHistory(res) {
+  const intake = loadIntake();
+  if (applyGraphHistory(intake, res)) saveIntake(intake);
 }
 
 function clearIntake() {
@@ -462,7 +476,7 @@ async function renderDemo() {
         <div class="flex justify-between gap-3 border-b border-line px-3 py-2.5 text-[13px]"><span class="text-muted">Project</span><strong class="text-right">${esc(s.project)} · ${esc(s.type)}</strong></div>
         <div class="flex justify-between gap-3 border-b border-line px-3 py-2.5 text-[13px]"><span class="text-muted">POI</span><strong class="text-right">${esc(s.poi)}</strong></div>
         <div class="flex justify-between gap-3 border-b border-line px-3 py-2.5 text-[13px]"><span class="text-muted">Track</span><strong class="text-right">${esc(s.track)} · COD ${esc(s.cod)}</strong></div>
-        <div class="flex justify-between gap-3 px-3 py-2.5 text-[13px]"><span class="text-muted">Deliverable</span><strong class="text-right">Complete RIMS5 submission packet (15 documents)</strong></div>
+        <div class="flex justify-between gap-3 px-3 py-2.5 text-[13px]"><span class="text-muted">Deliverable</span><strong class="text-right">Complete RIMS5 submission packet (20 documents)</strong></div>
       </div>
       <div class="mb-4 flex flex-wrap gap-x-4 gap-y-1 text-[12px]">
         <a class="text-ink underline-offset-2 hover:underline" href="https://www.caiso.com/library/interconnection-request-technical-data-forms" target="_blank" rel="noopener">CAISO IR technical data forms</a>
@@ -571,6 +585,7 @@ async function renderOnboarding() {
   if (step === 4) {
     try {
       state.validation = await api.caisoValidate(loadIntake());
+      mergeGraphHistory(state.validation);
     } catch {
       state.validation = null;
     }
@@ -622,6 +637,10 @@ const FIX_EXAMPLES = {
     meta: { name: "Sungrow_SG4400UD_PSLF_Models.dyd", size: 18_240 },
     label: "Use example vendor file",
   },
+  file_base_case: {
+    meta: { name: "Whirlwind_230kV_Area_Extract_DEMO.epc", size: 42_880 },
+    label: "Use example base-case extract",
+  },
 };
 
 /** The example file the demo can apply as a fix for this upload slot, if any. */
@@ -665,6 +684,7 @@ async function applyValidationFix(key, meta) {
   const values = loadIntake();
   values[key] = meta;
   saveIntake(values);
+  state.demoEng = null; // corrected document — the design review must re-run
   state.fixUi = { key, file: meta.name, stage: 0, startedAt: Date.now() };
   paintOnboarding(4);
 
@@ -700,6 +720,7 @@ async function applyValidationFix(key, meta) {
     saveIntake({ ...loadIntake(), ...(res.fields || {}) });
     saveExtract(res.provenance || {});
     state.validation = await api.caisoValidate(loadIntake());
+    mergeGraphHistory(state.validation);
     window.clearInterval(tick);
     state.fixUi = null;
     toast(`Re-extracted from ${meta.name} — revalidated`);
@@ -776,8 +797,12 @@ function intakeFieldHtml(f, values, prov = null, errs = null) {
            <button type="button" class="${button("ghost", "sm")}" data-file-remove="${esc(f.key)}">Remove</button>
          </div>`;
     } else {
+      const ex = fixExampleMeta(f.key);
       body = `<span class="flex-1 text-[13px] text-muted">No file attached</span>
-         <button type="button" class="${button("ghost", "sm")}" data-file-attach="${esc(f.key)}">Choose file</button>`;
+         <div class="flex shrink-0 flex-wrap justify-end gap-1.5">
+           ${ex ? `<button type="button" class="${button("primary", "sm")}" data-file-example="${esc(f.key)}">${esc(ex.label)}</button>` : ""}
+           <button type="button" class="${button("ghost", "sm")}" data-file-attach="${esc(f.key)}">Choose file</button>
+         </div>`;
     }
     const boxTone = uploading
       ? "border-focus/30 bg-info-soft"
@@ -806,7 +831,29 @@ function intakeFieldHtml(f, values, prov = null, errs = null) {
         .join("")}
     </select>`;
   } else {
-    control = `<input class="${field}${errRing}" data-intake="${esc(f.key)}" type="${f.type === "number" ? "number" : "text"}" ${f.type === "number" ? 'step="any"' : ""} value="${esc(val)}" />`;
+    // Equipment-library suggestions: native datalist keeps free text possible.
+    // Datasheet-ingested records (riding in the intake) join the list unverified.
+    let suggestions = f.suggest ? [...(state.caisoSchema?.equipment?.[f.suggest] || [])] : [];
+    if (f.suggest) {
+      const kind = f.suggest === "bess" ? "bess" : "pv_inverter";
+      for (const e of values.custom_equipment || []) {
+        if ((e.kind || "pv_inverter") !== kind) continue;
+        suggestions.push({
+          value: `${e.vendor} ${e.model}`,
+          label: `${e.mva} MVA · from datasheet — unverified`,
+        });
+      }
+    }
+    const listAttr = suggestions.length ? ` list="dl-${esc(f.key)}"` : "";
+    const datalist = suggestions.length
+      ? `<datalist id="dl-${esc(f.key)}">${suggestions
+          .map((s) => `<option value="${esc(s.value)}" label="${esc(s.label)}"></option>`)
+          .join("")}</datalist>`
+      : "";
+    const ingestBtn = f.suggest
+      ? `<button type="button" class="mt-1 text-[11px] font-medium text-focus underline decoration-dotted underline-offset-2" data-ingest="${esc(f.key)}" data-ingest-kind="${f.suggest === "bess" ? "bess" : "pv_inverter"}">Add equipment from a datasheet…</button>`
+      : "";
+    control = `<input class="${field}${errRing}" data-intake="${esc(f.key)}" type="${f.type === "number" ? "number" : "text"}" ${f.type === "number" ? 'step="any"' : ""} value="${esc(val)}"${listAttr} />${datalist}${ingestBtn}`;
   }
   return `
     <div${fieldErr ? ` data-field-error="${esc(f.key)}"` : ""}>
@@ -1201,7 +1248,7 @@ function renderWizardStep(step) {
       ${footer(
         `<button type="button" class="${button("ghost")}" id="wiz-back">Fix intake</button>`,
         v.ok
-          ? `<button type="button" class="${button("primary")}" id="wiz-generate">Generate submission packet</button>`
+          ? `<button type="button" class="${button("primary")}" id="wiz-next">Review engineering design</button>`
           : `<button type="button" class="${button("primary")}" id="wiz-back-2">Fix intake to continue</button>`
       )}`;
   }
@@ -1216,7 +1263,8 @@ function renderWizardStep(step) {
           <p class="mb-2 font-mono text-[12px] uppercase tracking-[0.12em] text-muted">Step 5 of ${WIZARD_LAST}</p>
           <h2 class="mb-3 text-2xl tracking-tightish">Generating the submission packet</h2>
           <p class="mb-5 max-w-2xl text-[15px] leading-relaxed text-muted">
-            All fifteen packet documents are generated from the validated intake.
+            The full packet — application forms, solved models, drawings, and engineering
+            reports — is generated from the approved project graph.
           </p>
           <div class="rounded-card border border-focus/20 bg-info-soft p-4">
             <div class="mb-3 flex gap-3">
@@ -1236,17 +1284,26 @@ function renderWizardStep(step) {
             </ol>
           </div>
         </div>
-        ${footer(`<span class="font-mono text-[12px] text-muted">15 documents · Appendix 1, Attachment A, PSLF models, drawings</span>`, `<button type="button" class="${button("primary")}" disabled>Generating…</button>`)}`;
+        ${footer(`<span class="font-mono text-[12px] text-muted">20 documents · forms, solved models, drawings, engineering reports</span>`, `<button type="button" class="${button("primary")}" disabled>Generating…</button>`)}`;
     }
+    const eng = state.demoEng;
+    const ready = !!eng?.ready;
     return `
       <div class="flex-1 p-5 sm:p-7">
         <p class="mb-2 font-mono text-[12px] uppercase tracking-[0.12em] text-muted">Step 5 of ${WIZARD_LAST}</p>
-        <h2 class="mb-3 text-2xl tracking-tightish">Generate the submission packet</h2>
-        <div class="rounded-card border border-line bg-soft p-4"><strong class="block">Ready to generate</strong><p class="text-[13px] text-muted">All 15 packet documents will be generated from the validated intake.</p></div>
+        <h2 class="mb-3 text-2xl tracking-tightish">Engineering design review</h2>
+        <p class="mb-4 max-w-2xl text-[15px] leading-relaxed text-muted">
+          The deterministic engine sized the plant from the validated intake, generated the
+          single-line diagram, and solved the load flow. Review the design and sign off the
+          engineering assumptions — the packet is generated from this exact graph.
+        </p>
+        ${engineeringPanelHtml(eng)}
       </div>
       ${footer(
         `<button type="button" class="${button("ghost")}" id="wiz-back">Back</button>`,
-        `<button type="button" class="${button("primary")}" id="wiz-generate">Generate submission packet</button>`
+        `<button type="button" class="${button("primary")}" id="wiz-generate" ${ready ? "" : "disabled"}>
+           ${ready ? "Generate submission packet" : eng ? `Approve ${eng.approvals?.pending ?? ""} assumption(s) to continue` : "Running engineering…"}
+         </button>`
       )}`;
   }
 
@@ -1330,6 +1387,7 @@ function collectIntakeForm() {
     }
   });
   saveIntake(values);
+  state.demoEng = null; // intake changed — the design review must re-run
   return values;
 }
 
@@ -1367,6 +1425,7 @@ async function startWizardGeneration() {
     const [res] = await Promise.all([apiCall, waitMin]);
     window.clearInterval(tick);
     state.genUi = null;
+    mergeGraphHistory(res);
 
     if (!res?.ok) {
       state.validation = res?.validation || null;
@@ -1376,7 +1435,7 @@ async function startWizardGeneration() {
       return;
     }
     state.packet = res.packet;
-    saveOnboard({ packetId: res.packet.id, packetD: encodeIntakeParam(intake) });
+    saveOnboard({ packetId: res.packet.id, packetD: encodeIntakeParam(loadIntake()) });
     setWizardStep(6);
     toast(`Packet ready — ${res.packet.documents.length} documents`);
     paintOnboarding(6);
@@ -1430,6 +1489,7 @@ async function startExtraction() {
     window.clearInterval(tick);
     state.extractUi = null;
     state.validation = null;
+    state.demoEng = null;
     saveIntake({ ...loadIntake(), ...(res.fields || {}) });
     saveExtract(res.provenance || {});
     setWizardStep(3);
@@ -1441,6 +1501,19 @@ async function startExtraction() {
     toast(err.message);
     paintOnboarding(2);
   }
+}
+
+async function loadDemoEngineering() {
+  if (state.demoEngLoading) return;
+  state.demoEngLoading = true;
+  try {
+    state.demoEng = await api.caisoEngineering(loadIntake(), loadExtract() || null, null);
+    mergeGraphHistory(state.demoEng);
+  } catch (err) {
+    toast(`Engineering pass failed: ${err.message}`);
+  }
+  state.demoEngLoading = false;
+  if (route().name === "onboarding" && getWizardStep() === 5) paintOnboarding(5);
 }
 
 function bindWizard(step) {
@@ -1467,7 +1540,8 @@ function bindWizard(step) {
   });
   document.getElementById("wiz-extract")?.addEventListener("click", () => {
     const values = loadIntake();
-    const staged = ["file_site_control", "file_technical", "file_bess", "file_signatory", "file_dyd", "file_boundary"]
+    const staged = ["file_site_control", "file_technical", "file_bess", "file_signatory",
+      "file_dyd", "file_boundary", "file_base_case"]
       .filter((k) => values[k] && typeof values[k] === "object" && values[k].staged);
     if (staged.length) {
       toast(`${staged.length} uploaded document(s) awaiting submission — submit or remove them first`);
@@ -1485,6 +1559,7 @@ function bindWizard(step) {
   document.getElementById("wiz-intake-reset")?.addEventListener("click", () => {
     clearIntake();
     clearExtract();
+    state.demoEng = null;
     toast("Intake reset to the Ravenwood example");
     render();
   });
@@ -1500,14 +1575,26 @@ function bindWizard(step) {
     clearExtract();
     state.packet = null;
     state.validation = null;
+    state.demoEng = null;
     setWizardStep(1);
     toast("Demo restarted");
     render();
   });
-  // Persist form edits (Step 3) — survives refreshes and step hops.
+  // Persist form edits (Step 3) — survives refreshes and step hops. Persist on
+  // every keystroke so an async repaint can never resurrect a stale value.
   if (step === 3) {
     document.querySelectorAll("[data-intake]").forEach((el) => {
+      el.addEventListener("input", () => collectIntakeForm());
       el.addEventListener("change", () => collectIntakeForm());
+    });
+    bindDatasheetIngest({
+      getIntake: () => collectIntakeForm(),
+      persist: (intake) => {
+        saveIntake(intake);
+        state.demoEng = null;
+      },
+      repaint: () => paintOnboarding(3),
+      real: false,
     });
     // Returning from a failed validation: bring the first flagged field into view.
     document.querySelector("[data-field-error]")?.scrollIntoView({ block: "center", behavior: "smooth" });
@@ -1550,6 +1637,20 @@ function bindWizard(step) {
       });
     });
   }
+  // Step 5: engineering design review — run the engine, bind the approval queue.
+  if (step === 5) {
+    if (!state.demoEng && !state.demoEngLoading) loadDemoEngineering();
+    bindEngineeringApprovals({
+      getIntake: () => loadIntake(),
+      persist: (intake) => saveIntake(intake),
+      afterChange: () => {
+        state.demoEng = null;
+        paintOnboarding(5);
+        loadDemoEngineering();
+      },
+    });
+  }
+
   // File upload components live on Step 2 (kickoff documents).
   if (step === 2) {
     const repaint = () => {
@@ -1560,6 +1661,16 @@ function bindWizard(step) {
     document.querySelectorAll("[data-file-attach]").forEach((btn) => {
       btn.addEventListener("click", () => {
         document.querySelector(`[data-file-input="${btn.getAttribute("data-file-attach")}"]`)?.click();
+      });
+    });
+    document.querySelectorAll("[data-file-example]").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        const key = btn.getAttribute("data-file-example");
+        const fix = fixExampleMeta(key);
+        if (!fix) return;
+        delete sessionFiles[key];
+        const { label, ...meta } = fix;
+        startSimulatedUpload(key, { ...meta, example: true }, repaint);
       });
     });
     document.querySelectorAll("[data-file-input]").forEach((inp) => {
@@ -1898,6 +2009,345 @@ async function renderProjects() {
   document.getElementById("new-project-btn")?.addEventListener("click", () => openProjectModal());
 }
 
+/* ---------- Engineering design review (shared by the demo and the real wizard) ----------
+ * Renders the deterministic engine's output: topology, equipment schedule, the
+ * SLD derived from the project graph, the solved load flow, consistency checks,
+ * and the assumption ledger with the engineer approval workflow.
+ */
+
+function engStatusPill(ok, textOk, textBad, warn = false) {
+  const cls = ok
+    ? "border-ok/30 bg-ok-soft text-ok"
+    : warn
+      ? "border-warn/40 bg-warn-soft text-ink"
+      : "border-danger/30 bg-danger-soft text-danger";
+  return `<span class="rounded-pill border px-2 py-0.5 font-mono text-[10px] uppercase tracking-[0.07em] ${cls}">${esc(ok ? textOk : textBad)}</span>`;
+}
+
+function engineeringPanelHtml(eng) {
+  if (!eng) {
+    return `
+      <div class="rounded-card border border-focus/20 bg-info-soft p-4">
+        <div class="flex gap-3">
+          <div class="gp-spin mt-0.5 h-4 w-4 shrink-0 rounded-full border-2 border-focus/30 border-t-focus"></div>
+          <p class="text-[14px] text-ink">Running the engineering engine — sizing the plant, solving the load flow, checking consistency…</p>
+        </div>
+      </div>`;
+  }
+  const lf = eng.loadflow;
+  const counts = eng.counts || {};
+  const chips = [
+    [counts.inverters, "inverters"],
+    [counts.blocks, "blocks"],
+    [counts.feeders, "feeders"],
+    [counts.bess_units, "BESS units"],
+    [counts.main_transformers, "main xfmrs"],
+  ]
+    .filter(([n]) => n)
+    .map(
+      ([n, l]) => `<div class="rounded-card border border-line bg-soft px-3 py-2 text-center">
+        <strong class="block text-[16px] tracking-tightish">${esc(n)}</strong>
+        <span class="font-mono text-[10px] uppercase tracking-[0.07em] text-muted">${esc(l)}</span>
+      </div>`
+    )
+    .join("");
+
+  const scheduleRows = (eng.schedule || [])
+    .map(
+      (r) => `<tr>
+        <td class="${table.td}">${esc(r.item)}</td>
+        <td class="${table.td}">${esc(r.make_model)}</td>
+        <td class="${table.td} text-center">${esc(r.qty)}</td>
+        <td class="${table.td}">${esc(r.rating)}</td>
+        <td class="${table.td}">${r.verified ? '<span class="text-ok">OEM</span>' : '<span class="text-ink">Confirm</span>'}</td>
+      </tr>`
+    )
+    .join("");
+
+  const checkRows = (eng.checks || [])
+    .map((c) => {
+      const [icon, cls] =
+        c.status === "pass" ? ["✓", "text-ok"] : c.status === "warn" ? ["!", "text-ink"] : ["✕", "text-danger"];
+      return `<li class="flex gap-2 text-[12.5px]"><span class="font-mono ${cls}">${icon}</span>
+        <span class="min-w-0"><strong class="text-ink">${esc(c.name)}.</strong> <span class="text-muted">${esc(c.detail)}</span></span></li>`;
+    })
+    .join("");
+
+  const missing = (eng.missing || [])
+    .map(
+      (m) => `<li class="flex gap-2 text-[12.5px]"><span class="font-mono text-ink">!</span>
+      <span><strong class="text-ink">${esc(m.label)}</strong> <span class="text-muted">— impacts: ${esc(m.impact)}</span></span></li>`
+    )
+    .join("");
+
+  const ap = eng.approvals || { items: [], pending: 0, total: 0 };
+  const approvalRows = (ap.items || [])
+    .map(
+      (a) => `
+      <div class="flex flex-wrap items-center gap-x-3 gap-y-2 rounded-card border p-3 ${a.approved ? "border-ok/25 bg-ok-soft" : "border-warn/30 bg-warn-soft"}">
+        <div class="w-full min-w-0 flex-1 sm:w-auto">
+          <p class="text-[13px] text-ink"><strong>${esc(a.label)}</strong> — ${esc(a.value)} ${esc(a.unit || "")}</p>
+          <p class="mt-0.5 text-[11.5px] leading-snug text-muted">${esc(a.trace || a.origin || "")}</p>
+          ${a.approved && a.approval ? `<p class="mt-0.5 font-mono text-[10.5px] uppercase tracking-[0.06em] text-ok">Approved by ${esc(a.approval.by)} · ${esc(a.approval.at)}</p>` : ""}
+        </div>
+        <div class="w-full shrink-0 sm:w-auto">
+          ${
+            a.approved
+              ? `<span class="font-mono text-[11px] uppercase tracking-[0.07em] text-ok">✓ Approved</span>`
+              : `<button type="button" class="${button("primary", "sm")}" data-eng-approve="${esc(a.id)}">Approve</button>`
+          }
+        </div>
+      </div>`
+    )
+    .join("");
+
+  const hist = eng.graph_history || [];
+  const histRows = hist
+    .slice()
+    .reverse()
+    .slice(0, 8)
+    .map(
+      (h) => `<li class="flex flex-wrap gap-x-3 gap-y-0.5 border-t border-line/70 py-1.5 text-[12px] first:border-0 first:pt-0">
+        <code class="font-mono text-[11px] text-ink">${esc(h.version || "")}</code>
+        <span class="text-muted">${esc(h.at || "")}</span>
+        <span class="text-ink">${esc(h.by || "")}</span>
+        <span class="min-w-0 flex-1 text-muted">${esc(h.note || "")}${(h.changed || []).length ? ` · ${esc((h.changed || []).slice(0, 6).join(", "))}${(h.changed || []).length > 6 ? "…" : ""}` : ""}</span>
+      </li>`
+    )
+    .join("");
+
+  return `
+    <div class="space-y-4">
+      <div class="rounded-card border border-line bg-soft p-4">
+        <div class="mb-2 flex flex-wrap items-center gap-2">
+          <span class="font-mono text-[11px] uppercase tracking-[0.08em] text-muted">Plant topology — design engine</span>
+          <span class="rounded-pill border border-line px-2 py-0.5 font-mono text-[10px] text-muted">graph ${esc(eng.graph_version)}</span>
+          ${hist.length ? `<span class="rounded-pill border border-line px-2 py-0.5 font-mono text-[10px] text-muted">${hist.length} version${hist.length === 1 ? "" : "s"}</span>` : ""}
+        </div>
+        <p class="break-words font-mono text-[11.5px] leading-relaxed text-ink">${esc(eng.topology)}</p>
+        <div class="mt-3 grid grid-cols-3 gap-2 sm:grid-cols-5">${chips}</div>
+      </div>
+
+      <div class="rounded-card border border-line bg-white p-3">
+        <div class="mb-2 flex flex-wrap items-center justify-between gap-2">
+          <span class="font-mono text-[11px] uppercase tracking-[0.08em] text-muted">Single-line diagram — generated from the project graph</span>
+        </div>
+        <div class="max-h-[420px] overflow-auto rounded-input border border-line">${eng.sld_svg || ""}</div>
+      </div>
+
+      <div class="grid grid-cols-1 gap-3 md:grid-cols-2">
+        <div class="rounded-card border border-line bg-soft p-4">
+          <div class="mb-2 flex items-center justify-between gap-2">
+            <span class="font-mono text-[11px] uppercase tracking-[0.08em] text-muted">Load flow (solved)</span>
+            ${engStatusPill(lf.converged, `converged · ${lf.iterations} iter`, "not converged")}
+          </div>
+          <dl class="space-y-1 text-[12.5px]">
+            <div class="flex justify-between gap-2"><dt class="text-muted">Dispatch</dt><dd class="text-ink">PV ${esc(lf.p_pv_mw)} + BESS ${esc(lf.p_bess_mw)} − aux ${esc(lf.aux_mw)} MW</dd></div>
+            <div class="flex justify-between gap-2"><dt class="text-muted">Delivered at POI</dt><dd class="text-ink"><strong>${esc(lf.p_poi_mw)} MW</strong> / ${esc(lf.q_poi_mvar)} Mvar</dd></div>
+            <div class="flex justify-between gap-2"><dt class="text-muted">Losses computed</dt><dd class="text-ink">${esc(lf.losses_mw)} MW <span class="text-muted">(declared ${esc(lf.losses_declared_mw)})</span></dd></div>
+            <div class="flex justify-between gap-2"><dt class="text-muted">Worst branch loading</dt><dd class="text-ink">${esc(Math.max(...(lf.flows || []).map((f) => f.loading_pct || 0)).toFixed(1))}%</dd></div>
+          </dl>
+          ${lf.warnings?.length ? `<ul class="mt-2 space-y-1">${lf.warnings.map((w) => `<li class="text-[12px] text-danger">⚠ ${esc(w)}</li>`).join("")}</ul>` : ""}
+        </div>
+        <div class="rounded-card border border-line bg-soft p-4">
+          <div class="mb-2 flex items-center justify-between gap-2">
+            <span class="font-mono text-[11px] uppercase tracking-[0.08em] text-muted">Dynamics & short circuit</span>
+            ${engStatusPill(eng.dynamics?.all_pass, "bump tests pass", "bump tests failing")}
+          </div>
+          <dl class="space-y-1 text-[12.5px]">
+            ${(eng.short_circuit || [])
+              .map(
+                (s) => `<div class="flex justify-between gap-2"><dt class="text-muted">${esc(s.location)}</dt>
+                <dd class="text-ink">${esc(s.duty_ka)} kA <span class="text-muted">(${esc(s.breaker_class)})</span></dd></div>`
+              )
+              .join("")}
+          </dl>
+          <ul class="mt-2 space-y-1">
+            ${(eng.dynamics?.checks || [])
+              .slice(0, 6)
+              .map(
+                (c) => `<li class="flex gap-2 text-[12px]"><span class="font-mono ${c.pass ? "text-ok" : "text-danger"}">${c.pass ? "✓" : "✕"}</span><span class="text-muted">${esc(c.name)}</span></li>`
+              )
+              .join("")}
+          </ul>
+        </div>
+      </div>
+
+      <div class="rounded-card border border-line bg-soft p-4">
+        <span class="mb-2 block font-mono text-[11px] uppercase tracking-[0.08em] text-muted">Equipment schedule</span>
+        <div class="overflow-x-auto">
+          <table class="${table.wrap}">
+            <thead><tr>
+              <th class="${table.th}">Item</th><th class="${table.th}">Make / model</th>
+              <th class="${table.th}">Qty</th><th class="${table.th}">Rating</th><th class="${table.th}">Data</th>
+            </tr></thead>
+            <tbody>${scheduleRows}</tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="rounded-card border border-line bg-soft p-4">
+        <span class="mb-2 block font-mono text-[11px] uppercase tracking-[0.08em] text-muted">Consistency checks</span>
+        <ul class="space-y-1.5">${checkRows}</ul>
+        ${missing ? `<span class="mb-1.5 mt-3 block font-mono text-[11px] uppercase tracking-[0.08em] text-muted">Missing engineering inputs</span><ul class="space-y-1.5">${missing}</ul>` : ""}
+      </div>
+
+      <div class="rounded-card border ${ap.all_approved ? "border-ok/25" : "border-warn/30"} bg-white p-4">
+        <div class="mb-3 flex flex-wrap items-center justify-between gap-2">
+          <div>
+            <strong class="block text-[14px] tracking-tightish">Engineering assumptions — approval required</strong>
+            <p class="text-[12px] text-muted">Defaults applied where the intake had no data. The engineer of record signs off before the packet is generated.</p>
+          </div>
+          <div class="flex items-center gap-2">
+            ${engStatusPill(ap.all_approved, "all approved", `${ap.pending} pending`, true)}
+            ${ap.pending ? `<button type="button" class="${button("ghost", "sm")}" id="eng-approve-all">Approve all</button>` : ""}
+          </div>
+        </div>
+        <div class="space-y-2">${approvalRows || '<p class="text-[13px] text-muted">No assumptions — every value came from the intake or an OEM datasheet.</p>'}</div>
+      </div>
+
+      ${
+        histRows
+          ? `<div class="rounded-card border border-line bg-soft p-4">
+        <span class="mb-2 block font-mono text-[11px] uppercase tracking-[0.08em] text-muted">Graph version history</span>
+        <ul>${histRows}</ul>
+      </div>`
+          : ""
+      }
+    </div>`;
+}
+
+function bindEngineeringApprovals({ getIntake, persist, afterChange }) {
+  const approve = (ids) => {
+    const intake = getIntake();
+    const rec = {
+      by: state.me?.user?.name || "Engineer of record",
+      at: new Date().toISOString().slice(0, 10),
+    };
+    intake.approvals = { ...(intake.approvals || {}) };
+    for (const id of ids) intake.approvals[id] = rec;
+    persist(intake);
+    afterChange();
+  };
+  document.querySelectorAll("[data-eng-approve]").forEach((btn) => {
+    btn.addEventListener("click", () => approve([btn.getAttribute("data-eng-approve")]));
+  });
+  document.getElementById("eng-approve-all")?.addEventListener("click", () => {
+    const pending = [...document.querySelectorAll("[data-eng-approve]")].map((b) =>
+      b.getAttribute("data-eng-approve")
+    );
+    if (pending.length) approve(pending);
+  });
+}
+
+/* ---------- Datasheet ingestion (equipment library, review-and-confirm) ---------- */
+
+/**
+ * Bind the "Add equipment from a datasheet" buttons on the intake form.
+ * ctx: { getIntake, persist, repaint, real } — `real` sends the file bytes for
+ * AI extraction; the demo sends metadata for a deterministic draft. Either way
+ * the draft is reviewed in a drawer before it joins intake.custom_equipment.
+ */
+function bindDatasheetIngest(ctx) {
+  document.querySelectorAll("[data-ingest]").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      const fieldKey = btn.getAttribute("data-ingest");
+      const kind = btn.getAttribute("data-ingest-kind") || "pv_inverter";
+      const inp = document.createElement("input");
+      inp.type = "file";
+      inp.accept = ".pdf,.xlsx,.xls,.csv,.txt";
+      inp.addEventListener("change", async () => {
+        const f = inp.files?.[0];
+        if (!f) return;
+        toast(`Reading ${f.name}…`);
+        try {
+          let body;
+          if (ctx.real) {
+            body = new FormData();
+            body.append("file", f);
+            body.append("kind", kind);
+          } else {
+            body = { name: f.name, size: f.size, kind };
+          }
+          const res = await api.caisoIngestDatasheet(body);
+          openIngestReview(res.draft || {}, f.name, fieldKey, kind, ctx);
+        } catch (err) {
+          toast(err.message);
+        }
+      });
+      inp.click();
+    });
+  });
+}
+
+function openIngestReview(draft, filename, fieldKey, kind, ctx) {
+  const isBess = kind === "bess";
+  const row = (key, label, value, type = "text") => `
+    <div>
+      <label class="mb-1 block text-[11px] font-medium uppercase tracking-[0.08em] text-muted">${esc(label)}</label>
+      <input class="w-full rounded-card border border-line bg-white px-3 py-2 text-[13.5px]" data-ingest-field="${key}"
+        type="${type}" ${type === "number" ? 'step="any"' : ""} value="${esc(value ?? "")}" />
+    </div>`;
+  openDrawer({
+    title: "Review datasheet extraction",
+    file: filename,
+    html: `
+      <div class="max-w-xl space-y-4">
+        <p class="text-[13.5px] leading-relaxed text-muted">
+          Candidate ratings extracted from <strong class="text-ink">${esc(filename)}</strong>.
+          Review and correct every value — on confirm this becomes an
+          <strong class="text-ink">unverified</strong> equipment record: the design engine will use
+          these ratings, keep generic WECC dynamic models, and add an engineer sign-off item.
+        </p>
+        ${draft.notes ? `<p class="rounded-card border border-focus/30 bg-info-soft px-3 py-2 text-[12px] leading-snug">${esc(draft.notes)}</p>` : ""}
+        <div class="grid grid-cols-1 gap-3 sm:grid-cols-2">
+          ${row("vendor", "Manufacturer", draft.vendor)}
+          ${row("model", "Model", draft.model)}
+          ${row("mva", "Rating (MVA)", draft.mva, "number")}
+          ${row("mw", "Active power (MW)", draft.mw, "number")}
+          ${isBess ? row("mwh", "Energy (MWh)", draft.mwh, "number") : ""}
+          ${row("ac_kv", "AC output voltage (kV)", draft.ac_kv, "number")}
+          ${row("pf_range", "PF range at rated output", draft.pf_range, "number")}
+        </div>
+        <div class="flex flex-wrap justify-end gap-2 border-t border-line pt-4">
+          <button type="button" class="${button("ghost")}" data-drawer-dismiss>Cancel</button>
+          <button type="button" class="${button("primary")}" id="ingest-confirm">Add unverified entry</button>
+        </div>
+      </div>`,
+  });
+  document.getElementById("ingest-confirm")?.addEventListener("click", () => {
+    const get = (key) => document.querySelector(`[data-ingest-field="${key}"]`)?.value ?? "";
+    const num = (key) => (get(key) === "" ? null : Number(get(key)));
+    const entry = {
+      kind,
+      vendor: get("vendor").trim() || "OEM",
+      model: get("model").trim() || "Custom unit",
+      mva: num("mva"),
+      mw: num("mw"),
+      ...(isBess ? { mwh: num("mwh") } : {}),
+      ac_kv: num("ac_kv"),
+      pf_range: num("pf_range"),
+      source: filename,
+      verified: false,
+    };
+    if (!entry.mva && !entry.mw) {
+      toast("Enter at least the MVA or MW rating");
+      return;
+    }
+    const intake = ctx.getIntake();
+    const list = Array.isArray(intake.custom_equipment) ? intake.custom_equipment : [];
+    intake.custom_equipment = [
+      ...list.filter((e) => !(e.vendor === entry.vendor && e.model === entry.model)),
+      entry,
+    ];
+    intake[fieldKey] = `${entry.vendor} ${entry.model}`;
+    ctx.persist(intake);
+    closeDrawer();
+    toast(`${entry.vendor} ${entry.model} added — unverified until engineer sign-off`);
+    ctx.repaint();
+  });
+}
+
 /* ---------- Real-app CAISO request wizard (per project, real AI extraction) ----------
  * User flow: project → upload kickoff documents → AI extraction (Grok reads the
  * actual files) → editable intake → validation against CAISO rules → packet
@@ -1908,7 +2358,8 @@ const REQ_META = [
   { n: 1, label: "Documents" },
   { n: 2, label: "Intake" },
   { n: 3, label: "Validate" },
-  { n: 4, label: "Packet" },
+  { n: 4, label: "Design" },
+  { n: 5, label: "Packet" },
 ];
 const reqFiles = {}; // slot -> File (bytes live only in this browser session)
 
@@ -2016,13 +2467,18 @@ async function renderRequest(projectId) {
   await ensureCaisoSchema(iso);
 
   const req = loadReq(projectId);
-  const step = Math.min(4, Math.max(1, Number(req.step || 1)));
+  let step = Math.min(5, Math.max(1, Number(req.step || 1)));
+  // Sessions saved before the design step existed: step 4 used to be the packet.
+  if (step === 4 && req.packetId && !req.designSeen) step = 5;
   const intake = { ...blankIntake(project), ...(req.intake || {}) };
   const prov = req.prov || {};
   // Arriving at Validate without a result (e.g. after a refresh) — validate now.
   if (step === 3 && !state.reqValidation && !state.reqBusy) {
     try {
       state.reqValidation = await api.caisoValidate(intake, iso);
+      if (applyGraphHistory(intake, state.reqValidation)) {
+        saveReq(projectId, { intake });
+      }
     } catch {
       state.reqValidation = null;
     }
@@ -2056,7 +2512,7 @@ async function renderRequest(projectId) {
     const profile = state.caisoSchema?.profile;
     body = `
       <div class="flex-1 p-5 sm:p-7">
-        <p class="mb-2 font-mono text-[12px] uppercase tracking-[0.12em] text-muted">Step 1 of 4</p>
+        <p class="mb-2 font-mono text-[12px] uppercase tracking-[0.12em] text-muted">Step 1 of 5</p>
         <h2 class="mb-3 text-2xl tracking-tightish">Kickoff documents</h2>
         ${
           profile
@@ -2087,7 +2543,7 @@ async function renderRequest(projectId) {
     for (const e of v?.errors || []) if (e.field) errs[e.field] = e.title;
     body = `
       <div class="flex-1 p-5 sm:p-7">
-        <p class="mb-2 font-mono text-[12px] uppercase tracking-[0.12em] text-muted">Step 2 of 4</p>
+        <p class="mb-2 font-mono text-[12px] uppercase tracking-[0.12em] text-muted">Step 2 of 5</p>
         <h2 class="mb-3 text-2xl tracking-tightish">Intake</h2>
         <p class="mb-5 max-w-2xl text-[15px] leading-relaxed text-muted">
           Fields marked <span class="rounded-pill border border-focus/30 bg-info-soft px-1.5 font-mono text-[10px] uppercase tracking-[0.06em] text-focus">AI</span>
@@ -2148,7 +2604,7 @@ async function renderRequest(projectId) {
       .join("");
     body = `
       <div class="flex-1 p-5 sm:p-7">
-        <p class="mb-2 font-mono text-[12px] uppercase tracking-[0.12em] text-muted">Step 3 of 4</p>
+        <p class="mb-2 font-mono text-[12px] uppercase tracking-[0.12em] text-muted">Step 3 of 5</p>
         <h2 class="mb-3 text-2xl tracking-tightish">Validation</h2>
         ${
           errCount
@@ -2162,10 +2618,30 @@ async function renderRequest(projectId) {
          <button type="button" class="${button("ghost")}" id="req-back-1">Documents</button>`,
         errCount
           ? `<button type="button" class="${button("primary")}" id="req-back-2b">Fix intake</button>`
-          : `<button type="button" class="${button("primary")}" id="req-generate">Generate packet</button>`
+          : `<button type="button" class="${button("primary")}" id="req-design">Review engineering design</button>`
+      )}`;
+  } else if (step === 4) {
+    const eng = state.reqEng;
+    const ready = !!eng?.ready;
+    body = `
+      <div class="flex-1 p-5 sm:p-7">
+        <p class="mb-2 font-mono text-[12px] uppercase tracking-[0.12em] text-muted">Step 4 of 5</p>
+        <h2 class="mb-3 text-2xl tracking-tightish">Engineering design review</h2>
+        <p class="mb-4 max-w-2xl text-[15px] leading-relaxed text-muted">
+          The deterministic engine sized the plant, drew the single-line diagram, and solved
+          the load flow from your intake. Review the design and approve the engineering
+          assumptions — every packet document is generated from this graph.
+        </p>
+        ${engineeringPanelHtml(eng)}
+      </div>
+      ${footer(
+        `<button type="button" class="${button("ghost")}" id="req-back-3">Back to validation</button>`,
+        `<button type="button" class="${button("primary")}" id="req-generate" ${ready ? "" : "disabled"}>
+           ${ready ? "Generate packet" : eng ? `Approve ${eng.approvals?.pending ?? ""} assumption(s) to continue` : "Running engineering…"}
+         </button>`
       )}`;
   } else {
-    // Step 4 — packet
+    // Step 5 — packet
     let p = state.reqPacket;
     if (!p && req.packetId) {
       try {
@@ -2181,15 +2657,16 @@ async function renderRequest(projectId) {
           <p class="mb-5 max-w-xl text-[15px] text-muted">Regenerate the packet from the saved intake.</p>
         </div>
         ${footer(
-          `<button type="button" class="${button("ghost")}" id="req-back-3">Back</button>`,
+          `<button type="button" class="${button("ghost")}" id="req-back-4">Back</button>`,
           `<button type="button" class="${button("primary")}" id="req-generate">Regenerate packet</button>`
         )}`;
     } else {
       const qs = req.packetD ? `?d=${req.packetD}${iso !== "CAISO" ? `&i=${encodeURIComponent(iso)}` : ""}` : "";
       const zipUrl = `/api/caiso/packets/${esc(p.id)}/files/${encodeURIComponent(p.zip_file)}${qs}`;
+      const engM = p.engineering;
       body = `
         <div class="flex-1 p-5 sm:p-7">
-          <p class="mb-2 font-mono text-[12px] uppercase tracking-[0.12em] text-muted">Step 4 of 4</p>
+          <p class="mb-2 font-mono text-[12px] uppercase tracking-[0.12em] text-muted">Step 5 of 5</p>
           <h2 class="mb-3 text-2xl tracking-tightish">${esc(p.iso || iso)} submission packet — ${esc(p.project_name)}</h2>
           <div class="mb-5 grid grid-cols-2 gap-3 sm:grid-cols-4">
             <div class="rounded-card border border-line bg-soft p-4"><span class="font-mono text-[11px] uppercase tracking-[0.08em] text-muted">Net at POI</span><strong class="mt-1 block">${esc(p.net_mw)} MW</strong></div>
@@ -2197,6 +2674,19 @@ async function renderRequest(projectId) {
             <div class="rounded-card border border-line bg-soft p-4"><span class="font-mono text-[11px] uppercase tracking-[0.08em] text-muted">Track</span><strong class="mt-1 block text-[13px]">${esc(p.track)}</strong></div>
             <div class="rounded-card border border-line bg-soft p-4"><span class="font-mono text-[11px] uppercase tracking-[0.08em] text-muted">Deposit</span><strong class="mt-1 block text-[13px]">${esc(p.deposit)}</strong></div>
           </div>
+          ${
+            engM
+              ? `<div class="mb-5 rounded-card border border-ok/25 bg-ok-soft p-4">
+                   <strong class="mb-1 block text-ok">Engineering — computed & approved</strong>
+                   <p class="text-[13px] text-muted">${esc(engM.topology)}</p>
+                   <p class="mt-1.5 font-mono text-[11.5px] text-muted">Load flow: ${engM.loadflow.converged ? "converged" : "NOT CONVERGED"} ·
+                   ${esc(engM.loadflow.p_poi_mw)} MW at POI · losses ${esc(engM.loadflow.losses_mw)} MW ·
+                   dynamics ${engM.dynamics_pass ? "pass" : "FAIL"} ·
+                   approvals ${esc(engM.approvals.total - engM.approvals.pending)}/${esc(engM.approvals.total)} ·
+                   graph ${esc(engM.graph_version)}</p>
+                 </div>`
+              : ""
+          }
           ${PACKET_CATEGORIES.map(([key, title]) => {
             const docs = p.documents.filter((doc) => doc.category === key);
             if (!docs.length) return "";
@@ -2255,6 +2745,7 @@ async function reqRunExtraction(projectId, intake) {
       merged[slot] = { name: file.name, size: file.size };
     }
     saveReq(projectId, { intake: merged, prov: res.provenance || {}, step: 2 });
+    state.reqEng = null;
     state.reqBusy = null;
     toast(res.summary || "Extraction complete");
   } catch (err) {
@@ -2273,16 +2764,18 @@ async function reqRunGeneration(projectId, intake) {
   reqRepaint(projectId);
   try {
     const res = await api.caisoGenerate(intake, state.reqIso);
+    applyGraphHistory(intake, res);
     if (!res?.ok) {
       state.reqBusy = null;
       state.reqValidation = res?.validation || null;
-      saveReq(projectId, { step: 3 });
+      saveReq(projectId, { step: 3, intake });
       toast("Intake has blocking issues — fix and retry");
     } else {
       state.reqBusy = null;
       state.reqPacket = res.packet;
       saveReq(projectId, {
-        step: 4,
+        step: 5,
+        intake,
         packetId: res.packet.id,
         packetD: encodeIntakeParam(intake),
       });
@@ -2302,6 +2795,7 @@ function collectReqIntake(projectId, intake) {
     values[key] = el.type === "number" ? (el.value === "" ? "" : Number(el.value)) : el.value;
   });
   saveReq(projectId, { intake: values });
+  state.reqEng = null; // intake changed — the design review must re-run
   return values;
 }
 
@@ -2357,11 +2851,23 @@ function bindRequest(projectId, step, intake) {
       const values = collectReqIntake(projectId, intake);
       try {
         state.reqValidation = await api.caisoValidate(values, state.reqIso);
-        saveReq(projectId, { step: 3 });
+        applyGraphHistory(values, state.reqValidation);
+        Object.assign(intake, values);
+        saveReq(projectId, { step: 3, intake: values });
       } catch (err) {
         toast(err.message);
       }
       repaint();
+    });
+    bindDatasheetIngest({
+      getIntake: () => collectReqIntake(projectId, intake),
+      persist: (next) => {
+        Object.assign(intake, next);
+        saveReq(projectId, { intake: next });
+        state.reqEng = null;
+      },
+      repaint,
+      real: true,
     });
   }
 
@@ -2376,18 +2882,60 @@ function bindRequest(projectId, step, intake) {
       saveReq(projectId, { step: 1 });
       repaint();
     });
-    document.getElementById("req-generate")?.addEventListener("click", () => {
-      reqRunGeneration(projectId, intake);
+    document.getElementById("req-design")?.addEventListener("click", () => {
+      state.reqEng = null;
+      saveReq(projectId, { step: 4, designSeen: true });
+      repaint();
     });
   }
 
   if (step === 4) {
+    if (!state.reqEng && !state.reqEngLoading) {
+      state.reqEngLoading = true;
+      const req = loadReq(projectId);
+      api
+        .caisoEngineering(intake, req.prov || null, state.reqIso)
+        .then((eng) => {
+          state.reqEng = eng;
+          if (applyGraphHistory(intake, eng)) {
+            saveReq(projectId, { intake });
+          }
+        })
+        .catch((err) => toast(`Engineering pass failed: ${err.message}`))
+        .finally(() => {
+          state.reqEngLoading = false;
+          repaint();
+        });
+    }
+    bindEngineeringApprovals({
+      getIntake: () => ({ ...intake }),
+      persist: (next) => {
+        Object.assign(intake, next);
+        saveReq(projectId, { intake: next });
+      },
+      afterChange: () => {
+        state.reqEng = null;
+        repaint();
+      },
+    });
+    document.getElementById("req-back-3")?.addEventListener("click", () => {
+      saveReq(projectId, { step: 3 });
+      repaint();
+    });
+    document.getElementById("req-generate")?.addEventListener("click", () => {
+      state.reqPacket = null;
+      reqRunGeneration(projectId, intake);
+    });
+  }
+
+  if (step === 5) {
     document.getElementById("req-back-2")?.addEventListener("click", () => {
       saveReq(projectId, { step: 2 });
       repaint();
     });
-    document.getElementById("req-back-3")?.addEventListener("click", () => {
-      saveReq(projectId, { step: 3 });
+    document.getElementById("req-back-4")?.addEventListener("click", () => {
+      state.reqEng = null;
+      saveReq(projectId, { step: 4 });
       repaint();
     });
     document.getElementById("req-generate")?.addEventListener("click", () => {

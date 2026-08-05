@@ -94,7 +94,16 @@ const clean = (await page.locator("text=Intake is clean").count()) > 0;
 console.log("validation clean after fixes:", clean);
 await page.screenshot({ path: shots + "/5_validate_clean.png", fullPage: true });
 
-// ---- 6. Generate packet ----
+// ---- 6. Design review, then generate packet ----
+await page.click("#req-design");
+await page.waitForSelector("h2:has-text('Engineering design review')", { timeout: 20000 });
+await page.waitForSelector("[data-eng-approve], #req-generate:not([disabled])", { timeout: 30000 });
+if (await page.locator("#eng-approve-all").count()) {
+  await page.click("#eng-approve-all");
+  await page.waitForSelector("text=all approved", { timeout: 20000 });
+}
+await page.waitForSelector("#req-generate:not([disabled])", { timeout: 20000 });
+console.log("design review approved: ok");
 await page.click("#req-generate");
 await page.waitForSelector("text=CAISO submission packet", { timeout: 120000 });
 const docRows = await page.locator("[data-drawer-url]").count();

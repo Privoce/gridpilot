@@ -1,4 +1,4 @@
-// Headless smoke test for the CAISO guided demo wizard.
+// Headless smoke test for the CAISO guided demo wizard (6-step flow).
 // Usage: node scripts/ui_smoke_test.mjs  (server must be running on :8000)
 import { chromium } from "playwright-core";
 import { mkdirSync } from "fs";
@@ -25,49 +25,63 @@ await page.goto(BASE + "/app#/demo");
 await page.waitForSelector("#start-demo-btn", { timeout: 10000 });
 await page.screenshot({ path: shots + "/1_demo_entry.png" });
 
-// Start demo → step 1
+// Start demo → step 1 scenario
 await page.click("#start-demo-btn");
 await page.waitForSelector("#wiz-next", { timeout: 15000 });
 await page.screenshot({ path: shots + "/2_step1_scenario.png" });
 
-// Step 2 intake
+// Step 2 documents — submit the staged examples
 await page.click("#wiz-next");
-await page.waitForSelector("#intake-form", { timeout: 10000 });
-await page.screenshot({ path: shots + "/3_step2_intake.png", fullPage: true });
+await page.waitForSelector("#wiz-extract", { timeout: 10000 });
+await page.screenshot({ path: shots + "/3_step2_documents.png", fullPage: true });
+while ((await page.locator("[data-file-submit]").count()) > 0) {
+  await page.locator("[data-file-submit]").first().click();
+  await page.waitForTimeout(250);
+}
 
-// Step 3 validate (clean)
+// Extract → step 3 intake
+await page.click("#wiz-extract");
+await page.waitForSelector("#intake-form", { timeout: 25000 });
+await page.screenshot({ path: shots + "/4_step3_intake.png", fullPage: true });
+
+// Step 4 validate — seeded defects make it red
 await page.click("#wiz-validate");
-await page.waitForSelector("#wiz-generate, #wiz-back-2", { timeout: 10000 });
-await page.screenshot({ path: shots + "/4_step3_validate.png", fullPage: true });
+await page.waitForSelector("#wiz-back-2", { timeout: 15000 });
+await page.screenshot({ path: shots + "/5_step4_errors.png", fullPage: true });
 
-// Break the MW chain to test the error path
-await page.click("#wiz-back");
-await page.waitForSelector("#intake-form", { timeout: 10000 });
-await page.fill('[data-intake="net_mw_poi"]', "200");
-await page.click("#wiz-validate");
-await page.waitForSelector("#wiz-back-2", { timeout: 10000 });
-await page.screenshot({ path: shots + "/5_step3_errors.png", fullPage: true });
-
-// Fix and continue
+// Fix the defects in the intake and revalidate clean
 await page.click("#wiz-back-2");
 await page.waitForSelector("#intake-form", { timeout: 10000 });
 await page.fill('[data-intake="net_mw_poi"]', "125");
+await page.fill('[data-intake="bess_mwh"]', "200");
 await page.click("#wiz-validate");
-await page.waitForSelector("#wiz-generate", { timeout: 10000 });
+await page.waitForSelector("#wiz-next", { timeout: 15000 });
+await page.screenshot({ path: shots + "/6_step4_clean.png", fullPage: true });
+
+// Step 5 design review — approve engineering assumptions
+await page.click("#wiz-next");
+await page.waitForSelector("h2:has-text('Engineering design review')", { timeout: 20000 });
+await page.waitForSelector("[data-eng-approve], #wiz-generate:not([disabled])", { timeout: 20000 });
+await page.screenshot({ path: shots + "/7_step5_design.png", fullPage: true });
+if (await page.locator("#eng-approve-all").count()) {
+  await page.click("#eng-approve-all");
+  await page.waitForSelector("text=all approved", { timeout: 20000 });
+}
+await page.waitForSelector("#wiz-generate:not([disabled])", { timeout: 20000 });
 
 // Generate → animation
 await page.click("#wiz-generate");
 await page.waitForTimeout(2500);
-await page.screenshot({ path: shots + "/6_step4_generating.png" });
+await page.screenshot({ path: shots + "/8_step6_generating.png" });
 
-// Wait for the packet review screen
+// Packet review screen
 await page.waitForSelector("#wiz-finish", { timeout: 30000 });
-await page.screenshot({ path: shots + "/7_step5_packet.png", fullPage: true });
+await page.screenshot({ path: shots + "/9_step6_packet.png", fullPage: true });
 
 // Finish → workspace dashboard
 await page.click("#wiz-finish");
 await page.waitForTimeout(1500);
-await page.screenshot({ path: shots + "/8_dashboard.png" });
+await page.screenshot({ path: shots + "/10_dashboard.png" });
 
 console.log("UI TEST DONE");
 await browser.close();

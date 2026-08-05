@@ -23,6 +23,13 @@ import fitz
 
 from backend.app.config import DATA_ROOT
 from backend.app.services.iso_profiles import get_profile, localize
+from backend.app.engine.consistency import run_engineering
+from backend.app.engine.models_out import dyd_text, dyr_text, epc_text, raw_text
+from backend.app.engine.reports import (
+    gen_assumptions_log, gen_dynamics_report, gen_equipment_schedule,
+    gen_loadflow_report, gen_missing_data, gen_portal_fields, gen_source_trace,
+)
+from backend.app.engine.sld import build_sld, to_dxf, to_pdf as sld_to_pdf
 
 PACKETS_DIR = DATA_ROOT / "packets"
 
@@ -79,6 +86,14 @@ INTAKE_SECTIONS: list[dict[str, Any]] = [
              "options": ["Full Capacity", "Partial Deliverability", "Energy Only"]},
             {"key": "cod", "label": "Target COD (YYYY-MM-DD)", "type": "text", "required": True,
              "hint": "Must be within 7 years of the application"},
+            {"key": "gentie_mi", "label": "Gen-tie route length (mi)", "type": "number",
+             "hint": "Blank — GridPilot assumes a 5.0 mi route, flagged for engineer approval"},
+            {"key": "shared_facilities", "label": "Shared facilities", "type": "select",
+             "options": ["No shared facilities", "Shared gen-tie", "Shared substation",
+                          "Shared gen-tie + substation"],
+             "hint": "Whether the gen-tie, substation, or POI is shared with another project"},
+            {"key": "queue_ref", "label": "Prior queue / study reference", "type": "text",
+             "hint": "Existing queue position or prior study number, if any"},
         ],
     },
     {
@@ -107,9 +122,13 @@ INTAKE_SECTIONS: list[dict[str, Any]] = [
         "hint": "Vendor .dyd dynamic model files are the most common schedule risk — request them on day one.",
         "fields": [
             {"key": "inverter", "label": "Inverter manufacturer / model / qty", "type": "text",
-             "hint": "Enter TBD if not selected — generic PSLF models will be used"},
+             "suggest": "inverters",
+             "hint": "Pick from the equipment library or type freely — enter TBD if not "
+                     "selected (generic PSLF models will be used)"},
             {"key": "module", "label": "PV module / turbine model", "type": "text"},
-            {"key": "bess_vendor", "label": "BESS manufacturer / model", "type": "text"},
+            {"key": "bess_vendor", "label": "BESS manufacturer / model", "type": "text",
+             "suggest": "bess",
+             "hint": "Pick from the equipment library or type freely"},
             {"key": "dyd_status", "label": "Vendor .dyd model files", "type": "select", "required": True,
              "options": ["Received from vendor", "Requested — pending", "Equipment not selected"],
              "hint": "PSLF dynamic models from the equipment vendor"},
@@ -119,8 +138,23 @@ INTAKE_SECTIONS: list[dict[str, Any]] = [
         ],
     },
     {
+        "id": "preferences",
+        "title": "6 · Design Preferences",
+        "hint": "Optional constraints the design engine honors when feasible; everything is "
+                "recorded in the source trace.",
+        "fields": [
+            {"key": "substation_arrangement", "label": "Substation arrangement", "type": "select",
+             "options": ["Engine recommendation", "Single main transformer",
+                          "Two main transformers (N-1)"],
+             "hint": "Overrides the GSU count when a standard family unit can cover the rating"},
+            {"key": "site_constraints", "label": "Site constraints", "type": "text",
+             "hint": "Setbacks, wetlands, easements, shared-fence lines — recorded for the "
+                     "engineer of record"},
+        ],
+    },
+    {
         "id": "documents",
-        "title": "6 · Kickoff Documents",
+        "title": "7 · Kickoff Documents",
         "hint": "The files a consulting firm collects at the kickoff meeting. Example files are preloaded "
                 "and may be replaced or removed; validation reflects any change.",
         "fields": [
@@ -147,6 +181,11 @@ INTAKE_SECTIONS: list[dict[str, Any]] = [
             {"key": "file_boundary", "label": "Project boundary (KMZ / parcel map)", "type": "file",
              "accept": ".kmz,.kml,.pdf",
              "hint": "Optional — without it, GridPilot derives the boundary from GPS + acreage."},
+            {"key": "file_base_case", "label": "ISO base case extract (customer-supplied)",
+             "type": "file", "accept": ".epc,.raw,.sav,.zip",
+             "hint": "Optional — ISO base cases are confidential and stay in the customer's "
+                     "authorized environment. GridPilot never fabricates one; without it the "
+                     "plant model is validated against a flat system equivalent."},
         ],
     },
 ]
@@ -171,6 +210,11 @@ DEFAULT_INTAKE: dict[str, Any] = {
     "track": "Independent Study Process",
     "deliverability": "Full Capacity",
     "cod": "2028-06-30",
+    # Gen-tie route left blank on purpose: the demo shows the engine carrying it
+    # as an approvable routing assumption until the developer provides the fact.
+    "gentie_mi": None,
+    "shared_facilities": "No shared facilities",
+    "queue_ref": "",
     "project_type": "Solar PV + BESS (AC-coupled)",
     "gross_mva": 132.0,
     "gross_mw": 128.0,
@@ -185,9 +229,11 @@ DEFAULT_INTAKE: dict[str, Any] = {
     "inverter": "Sungrow SG4400UD-MV, qty 18",
     "module": "JinkoSolar Tiger Neo 620W bifacial",
     "bess_vendor": "Tesla Megapack 2XL, qty 50",
-    "dyd_status": "Requested — pending",
+    "dyd_status": "Received from vendor",
     "transformer": "140 MVA, 34.5/230 kV, Z = 8.5% @ ONAF, YNd1",
     "collector_kv": 34.5,
+    "substation_arrangement": "Engine recommendation",
+    "site_constraints": "",
     # Kickoff document uploads: {name, size} metadata; "example" marks preloaded demo
     # files. All examples start staged (uploaded, not yet submitted) so the demo walks
     # the full choose → upload → preview → submit interaction.
@@ -199,9 +245,14 @@ DEFAULT_INTAKE: dict[str, Any] = {
                   "example": True, "staged": True},
     "file_signatory": {"name": "Ravenwood_OfficerCertificate_RYang.pdf", "size": 184_230,
                        "example": True, "staged": True},
-    "file_dyd": None,  # pending from vendor — matches dyd_status default
+    "file_dyd": {"name": "Sungrow_SG4400UD_PSLF_Models.dyd", "size": 18_240,
+                 "example": True, "staged": True},
     "file_boundary": {"name": "Ravenwood_ParcelBoundary_KernCounty.kmz", "size": 46_210,
                       "example": True, "staged": True},
+    # Demo stand-in for a customer-supplied POI-area extract. Not a real ISO
+    # base case — those stay confidential and are never fabricated by GridPilot.
+    "file_base_case": {"name": "Whirlwind_230kV_Area_Extract_DEMO.epc", "size": 42_880,
+                       "example": True, "staged": True},
 }
 
 
@@ -437,6 +488,37 @@ REQUIREMENTS: dict[str, dict[str, Any]] = {
 }
 
 
+def demo_datasheet_draft(name: str, kind: str) -> dict[str, Any]:
+    """Deterministic datasheet 'extraction' for the guided demo (metadata only).
+
+    The demo never reads file bytes; the draft is parsed from the filename so
+    the review-and-confirm workflow is exercised end to end.
+    """
+    is_bess = kind == "bess"
+    stem = re.sub(r"\.[A-Za-z0-9]+$", "", name or "datasheet")
+    tokens = [t for t in re.split(r"[_\-\s]+", stem) if t]
+    m = re.search(r"(\d+(?:\.\d+)?)\s*(mva|kva|mw)", name or "", re.IGNORECASE)
+    if m:
+        mva = float(m.group(1)) / (1000.0 if m.group(2).lower() == "kva" else 1.0)
+    else:
+        mva = 2.0 if is_bess else 3.6
+    vendor = tokens[0] if tokens else "OEM"
+    if not any(c.isupper() for c in vendor):
+        vendor = vendor.title()
+    return {
+        "kind": kind if kind in ("pv_inverter", "bess") else "pv_inverter",
+        "vendor": vendor,
+        "model": " ".join(tokens[1:3]) if len(tokens) > 1 else "Custom Unit",
+        "mva": round(mva, 3), "mw": round(mva, 3),
+        "mwh": round(mva * 2, 3) if is_bess else None,
+        "ac_kv": 0.48 if is_bess else 0.69,
+        "pf_range": 0.95 if is_bess else 0.9,
+        "notes": "Demo extraction — draft parsed from the filename; review every value "
+                 "before confirming",
+        "source": name,
+    }
+
+
 def extract_from_documents(files: dict[str, Any]) -> dict[str, Any]:
     """Simulated AI extraction: map attached kickoff documents to intake fields.
 
@@ -463,6 +545,21 @@ def extract_from_documents(files: dict[str, Any]) -> dict[str, Any]:
                 continue
             fields[fk] = value
             provenance[fk] = {"source": key, "source_label": source_label, "file": str(meta["name"])}
+
+    # Vendor .dyd: parse OEM parameter blocks so the engine integrates them
+    # (demo files carry the matched inverter's OEM package — same parser as
+    # the real upload path).
+    dyd_meta = _file_meta(files.get("file_dyd"))
+    if dyd_meta is not None:
+        from backend.app.engine.vendor_models import demo_vendor_dyd_text, vendor_overrides
+
+        ov = vendor_overrides(demo_vendor_dyd_text({**DEFAULT_INTAKE, **fields}),
+                              str(dyd_meta["name"]))
+        if ov:
+            fields["vendor_dyd"] = ov
+            provenance["vendor_dyd"] = {"source": "file_dyd",
+                                        "source_label": "Vendor dynamic model",
+                                        "file": str(dyd_meta["name"])}
     return {
         "fields": fields,
         "provenance": provenance,
@@ -1642,6 +1739,10 @@ def generate_packet(intake: dict[str, Any], org_id: str, iso: str | None = None)
     pdir.mkdir(parents=True, exist_ok=True)
     slug = _slug(str(intake.get("project_name")))
 
+    # Full deterministic engineering pass: graph -> design -> load flow ->
+    # short circuit -> dynamic validation -> consistency + approvals.
+    eng = run_engineering(intake, profile["iso"])
+
     docs: list[dict[str, Any]] = []
 
     def add(n: str, key: str, title: str, filename: str, category: str, status: str,
@@ -1669,32 +1770,58 @@ def generate_packet(intake: dict[str, Any], org_id: str, iso: str | None = None)
             "Narrative pre-filled; attach supporting evidence for each item."))
 
     raw_ext, dyn_ext = profile["raw_ext"], profile["dyn_ext"]
-    _gen_epc(intake, d, add(
+    pf = eng["powerflow"]
+    lf_path = add(
         "10", "epc", f"Load Flow Model (.{raw_ext})", f"10_LoadFlowModel_{slug}.{raw_ext}",
-        "models", "generated", loc("GENERATED — validate in GE PSLF vs CAISO base case"), "GridPilot",
-        "Steady-state model of generator, GSU, collector, and interconnection to the POI."))
-    _gen_dyd(intake, d, add(
+        "models", "generated",
+        f"SOLVED — {pf['iterations']} iterations, losses {pf['losses_mw']:g} MW",
+        "GridPilot",
+        loc("Solved plant equivalent from the project graph; validate against the CAISO base case "
+            "(obtained under NDA) before submission."))
+    lf_text = epc_text(eng["design"], pf, intake, profile) if raw_ext == "epc" \
+        else raw_text(eng["design"], pf, intake, profile)
+    lf_path.write_text(lf_text, encoding="utf-8")
+
+    dyn_path = add(
         "11", "dyd", f"Dynamic Model (.{dyn_ext})", f"11_DynamicModel_{slug}.{dyn_ext}",
         "models", "generated",
-        loc("GENERATED — WECC standard models") + ("" if intake.get("dyd_status") == "Received from vendor"
-                                                   else "; swap in vendor UDM"),
-        "GridPilot", "REGC_A / REEC_A / REPC_A; vendor MOD-026/027 parameters when received."))
+        ("OEM PARAMETERS — " + eng["design"]["inverter"]["vendor"]
+         if eng["design"]["inverter"]["verified"] else "GENERIC WECC — swap in vendor UDM"),
+        "GridPilot",
+        f"{'/'.join(eng['design']['inverter']['wecc_models'].values())} with equipment-library "
+        "parameter sets; vendor MOD-026/027 data supersedes when received.")
+    dyn_text_out = dyd_text(eng["design"], intake, profile) if dyn_ext == "dyd" \
+        else dyr_text(eng["design"], intake, profile)
+    dyn_path.write_text(dyn_text_out, encoding="utf-8")
+
     _gen_reactive_curve(intake, d, add(
         "12", "reactive", "Reactive Power Capability Curve", f"12_ReactivePowerCurve_{slug}.pdf",
         "models", "generated", "GENERATED — ±0.95 PF envelope at POI", "GridPilot"))
 
-    _gen_flat_bump(intake, d, add(
-        "13", "flat_bump", "Flat Run + Bump Test Plots", f"13_FlatRun_BumpTest_{slug}.pdf",
-        "simulations", "generated", loc("ILLUSTRATIVE — regenerate from PSLF runs"), "GridPilot",
-        loc("CAISO accepts screenshots; final plots must come from validated PSLF runs.")))
-    _gen_mw_poi_plot(intake, d, add(
-        "14", "mw_poi", "Requested MW at POI Plot", f"14_MW_at_POI_{slug}.pdf",
-        "simulations", "generated", loc("ILLUSTRATIVE — regenerate from PSLF runs"), "GridPilot"))
+    gen_dynamics_report(eng, intake, add(
+        "13", "flat_bump", "Dynamic Validation — Flat Start & Bump Tests",
+        f"13_DynamicValidation_{slug}.pdf",
+        "simulations", "generated",
+        "COMPUTED — " + ("all checks pass" if eng["bump"]["all_pass"] else "CHECKS FAILING"),
+        "GridPilot",
+        loc("Plant-level RMS response; final certification plots come from validated PSLF runs "
+            "with the OEM model.")))
+    gen_loadflow_report(eng, intake, add(
+        "14", "mw_poi", "Load Flow & Short-Circuit Validation",
+        f"14_LoadFlowValidation_{slug}.pdf",
+        "simulations", "generated",
+        "COMPUTED — solved case, convergence log, fault duties", "GridPilot"))
 
-    _gen_sld(intake, d, add(
+    sld_prims = build_sld(eng["graph"], eng["design"], intake)
+    sld_to_pdf(sld_prims, add(
         "09", "sld", "Single-Line Diagram", f"09_SingleLineDiagram_{slug}.pdf",
-        "drawings", "generated", "GENERATED — PE review recommended", "GridPilot",
-        "Generator terminals to POI: GSU, breakers, metering, protection, ownership demarcation."))
+        "drawings", "generated", "GENERATED FROM TOPOLOGY — PE review recommended", "GridPilot",
+        "Derived from the project graph: metering, protection, ownership demarcation, "
+        "typical-of inverter block detail."))
+    add("09b", "sld_dxf", "Single-Line Diagram (DXF)", f"09_SingleLineDiagram_{slug}.dxf",
+        "drawings", "generated", "EDITABLE — CAD import (R12)", "GridPilot",
+        "Same drawing as the PDF, exported for AutoCAD-class tools."
+        ).write_text(to_dxf(sld_prims), encoding="utf-8")
     _gen_site_drawing(intake, d, add(
         "07", "site_drawing", "Site Drawing to Scale", f"07_SiteDrawing_{slug}.pdf",
         "drawings", "generated", "GENERATED — replace with survey-based drawing for construction", "GridPilot"))
@@ -1702,6 +1829,34 @@ def generate_packet(intake: dict[str, Any], org_id: str, iso: str | None = None)
         "08", "kmz", "Project Boundary (KMZ)", f"08_ProjectBoundary_{slug}.kmz",
         "drawings", "generated", "GENERATED — opens in Google Earth", "GridPilot",
         f"Boundary polygon (~{_fmt(d['acres'])} ac) centered on {d['lat']}, {d['lon']}."))
+
+    gen_equipment_schedule(eng, intake, add(
+        "15", "equipment_schedule", "Equipment Schedule", f"15_EquipmentSchedule_{slug}.xlsx",
+        "models", "generated",
+        "GENERATED — design engine sizing with OEM sources", "GridPilot",
+        f"Topology: {eng['design']['topology']}"))
+    gen_assumptions_log(eng, intake, add(
+        "16", "assumptions", "Assumptions & Approvals Log", f"16_AssumptionsApprovals_{slug}.pdf",
+        "reference", "generated",
+        ("APPROVED — all items signed off" if eng["approvals"]["all_approved"]
+         else f"PENDING — {eng['approvals']['pending']} of {eng['approvals']['total']} awaiting approval"),
+        "GridPilot",
+        "Every engineering default requiring engineer-of-record confirmation, with sign-off state."))
+    gen_source_trace(eng, intake, add(
+        "17", "source_trace", "Source Trace Appendix", f"17_SourceTrace_{slug}.md",
+        "reference", "generated", "GENERATED — full parameter provenance", "GridPilot",
+        "Every value in this packet traced to developer input, OEM datasheet, ISO rule, "
+        "calculation, or approved assumption."))
+    gen_portal_fields(eng, intake, profile, add(
+        "18", "portal_fields", "Portal Field Export (JSON)", f"18_PortalFields_{slug}.json",
+        "reference", "generated", f"READY — paste into {profile['portal']}", "GridPilot",
+        "Machine-readable field values for the ISO portal entry."))
+    if eng["design"]["missing"]:
+        gen_missing_data(eng, intake, add(
+            "19", "missing_data", "Missing Data List", f"19_MissingData_{slug}.md",
+            "reference", "action",
+            f"ACTION — {len(eng['design']['missing'])} item(s) for the developer", "Developer",
+            "Facts the engine needed but could not find; assumptions stand in until provided."))
 
     _gen_sos_instructions(intake, add(
         "04", "sos", "Secretary of State Certification", f"04_SecretaryOfState_{slug}.pdf",
@@ -1779,6 +1934,27 @@ def generate_packet(intake: dict[str, Any], org_id: str, iso: str | None = None)
                    f"{d['trial_op'].strftime('%m/%d/%Y')} → COD {d['cod'].strftime('%m/%d/%Y')} (within 7 years)."},
     ]
 
+    engineering = {
+        "graph_version": eng["graph"].get("version", ""),
+        "topology": eng["design"]["topology"],
+        "counts": eng["design"]["counts"],
+        "loadflow": {
+            "converged": pf["converged"], "iterations": pf["iterations"],
+            "p_poi_mw": pf["p_poi_mw"], "q_poi_mvar": pf["q_poi_mvar"],
+            "losses_mw": pf["losses_mw"], "p_pv_mw": pf["p_pv_mw"],
+            "p_bess_mw": pf["p_bess_mw"], "warnings": pf["warnings"],
+        },
+        "short_circuit": eng["short_circuit"]["results"],
+        "dynamics_pass": eng["bump"]["all_pass"],
+        "checks": eng["checks"],
+        "approvals": {
+            "total": eng["approvals"]["total"],
+            "pending": eng["approvals"]["pending"],
+            "all_approved": eng["approvals"]["all_approved"],
+        },
+        "missing": eng["graph"].get("missing", []),
+    }
+
     manifest = {
         "id": pid,
         "org_id": org_id,
@@ -1793,6 +1969,7 @@ def generate_packet(intake: dict[str, Any], org_id: str, iso: str | None = None)
         "intake": intake,
         "validation": validation,
         "consistency": consistency,
+        "engineering": engineering,
         "actions": actions,
         "documents": sorted(docs, key=lambda x: x["n"]),
         "zip_file": zip_path.name,
