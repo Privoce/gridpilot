@@ -1,1 +1,1 @@
-"""Haraton, Inc. / GridPilot backend."""
+"""Faradon, Inc. / GridPilot backend."""
