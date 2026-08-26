@@ -7,6 +7,7 @@ plots, and legal drafts — as a downloadable submission packet.
 
 from __future__ import annotations
 
+import base64
 import hashlib
 import json
 import math
@@ -1861,10 +1862,205 @@ def _gen_site_exclusivity(intake: dict, d: dict, path: Path) -> None:
 
 
 
+# In-process cache for AI-generated aerial base images, keyed by site
+# coordinates so packet regeneration doesn't re-hit the API.
+_AERIAL_CACHE: dict[str, bytes] = {}
+
+
+def _site_aerial_image(d: dict) -> bytes | None:
+    """Satellite-style aerial base image for the conceptual site layout.
+
+    Grok Imagine renders the orthophoto for now (a stand-in for a GIS/satellite
+    screenshot of the actual parcel); the engineering overlays are drawn
+    deterministically on top. Cached in memory and on disk per site so repeated
+    generations reuse the same base. Returns None when no API key is configured
+    or the call fails — the caller falls back to the schematic plan drawing.
+    """
+    from backend.app.config import settings
+
+    key = f"{d['lat']:.3f}_{d['lon']:.3f}_{d['acres']:.0f}"
+    if key in _AERIAL_CACHE:
+        return _AERIAL_CACHE[key]
+    # Bundled asset for the demo site — no API call, instant on serverless.
+    bundled = CAISO_LOGO.parent / f"aerial_{key}.jpg"
+    if bundled.exists():
+        data = bundled.read_bytes()
+        _AERIAL_CACHE[key] = data
+        return data
+    if not settings.xai_api_key:
+        return None
+    cache_file = PACKETS_DIR / f"aerial_{key}.jpg"
+    if cache_file.exists():
+        data = cache_file.read_bytes()
+        _AERIAL_CACHE[key] = data
+        return data
+    prompt = (
+        "Straight-down satellite orthophoto of undeveloped arid ranch land in Kern County, "
+        "California, as seen in GIS mapping software. Flat semi-desert terrain with sparse "
+        "scrub vegetation, dry dirt fields with faint parcel boundaries, a few unpaved ranch "
+        "roads, and one two-lane rural road crossing near the bottom edge. Muted natural earth "
+        "tones, uniform overhead perspective, consistent scale, photorealistic aerial imagery. "
+        "Strictly top-down orthographic view. No buildings, no solar panels, no text, no "
+        "labels, no markers, no watermark, no map UI."
+    )
+    try:
+        import httpx
+
+        resp = httpx.post(
+            f"{settings.xai_base_url.rstrip('/')}/images/generations",
+            headers={"Authorization": f"Bearer {settings.xai_api_key}"},
+            json={"model": "grok-imagine-image", "prompt": prompt,
+                  "aspect_ratio": "1:1", "response_format": "b64_json"},
+            timeout=90.0,
+        )
+        resp.raise_for_status()
+        data = base64.b64decode(resp.json()["data"][0]["b64_json"])
+    except Exception:
+        return None
+    PACKETS_DIR.mkdir(parents=True, exist_ok=True)
+    cache_file.write_bytes(data)
+    _AERIAL_CACHE[key] = data
+    return data
+
+
 def _gen_site_drawing(intake: dict, d: dict, eng: dict, path: Path) -> None:
-    """Checklist item 9 — site drawing showing the POI, requested MW, and the
-    gen-tie route with voltage and length (per the CAISO example layout), on a
-    to-scale plan with the site map reference for aerial imagery."""
+    """Checklist item 9 — conceptual site layout drawn over aerial imagery,
+    matching the CAISO example: satellite base, red land-under-site-control
+    boundary, yellow new switchyard, white proposed facility footprint, POI /
+    gen-tie callouts, north arrow, and an engineering title block."""
+    aerial = _site_aerial_image(d)
+    if aerial is None:
+        _gen_site_drawing_schematic(intake, d, eng, path)
+        return
+
+    gentie_mi = eng["design"]["gentie_mi"]
+    poi_name = str(intake.get("poi_name") or "POI")
+    RED_B = (0.80, 0.08, 0.08)      # boundary
+    YEL = (0.93, 0.86, 0.05)        # switchyard
+    ORG = (0.95, 0.55, 0.05)        # POI callout
+    WHT = (1, 1, 1)
+
+    doc = fitz.open()
+    page = doc.new_page(width=792, height=612)
+
+    # Aerial base
+    M = fitz.Rect(60, 40, 620, 560)
+    page.insert_image(M, stream=aerial, keep_proportion=False)
+    page.draw_rect(M, color=INK, width=1)
+
+    # North arrow (outside the map, top-left, like the example)
+    page.draw_line(fitz.Point(42, 96), fitz.Point(42, 56), color=INK, width=1.6)
+    for dx in (-5, 5):
+        page.draw_line(fitz.Point(42, 56), fitz.Point(42 + dx, 66), color=INK, width=1.6)
+    page.insert_text((37, 110), "N", fontsize=12, fontname="hebo", color=INK)
+
+    def label_box(x: float, y: float, text: str, w: float, sub: str = "") -> None:
+        h = 26 if sub else 16
+        r = fitz.Rect(x, y, x + w, y + h)
+        page.draw_rect(r, color=INK, width=0.8, fill=WHT)
+        page.insert_text((x + 5, y + 11), text, fontsize=6.5, fontname="hebo", color=INK)
+        if sub:
+            page.insert_text((x + 5, y + 21), sub, fontsize=6, fontname="helv", color=INK)
+
+    def arrow(x0: float, y0: float, x1: float, y1: float) -> None:
+        page.draw_line(fitz.Point(x0, y0), fitz.Point(x1, y1), color=WHT, width=1.6)
+        ang = math.atan2(y1 - y0, x1 - x0)
+        for da in (2.6, -2.6):
+            page.draw_line(
+                fitz.Point(x1, y1),
+                fitz.Point(x1 - 9 * math.cos(ang + da), y1 - 9 * math.sin(ang + da)),
+                color=WHT, width=1.6)
+
+    # Land under site control — red boundary (slightly irregular quadrilateral)
+    bdy = [(200, 110), (560, 145), (520, 528), (168, 480), (200, 110)]
+    _polyline(page, bdy, RED_B, width=1.8)
+    label_box(455, 88, "LAND UNDER SITE CONTROL", 130)
+    arrow(520, 104, 480, 138)
+
+    # New switchyard — yellow
+    swy = [(165, 255), (315, 268), (300, 445), (150, 430), (165, 255)]
+    _polyline(page, swy, YEL, width=2.2)
+    label_box(66, 288, "NEW SWITCHYARD", 96, "(GIS coordination)")
+    arrow(162, 300, 218, 350)
+
+    # Proposed facility footprint — white compound outline
+    fp_outer = [(365, 300), (445, 300), (445, 262), (505, 262), (505, 300),
+                (545, 300), (545, 500), (365, 500), (365, 300)]
+    _polyline(page, fp_outer, WHT, width=2.4)
+    _polyline(page, [(385, 330), (450, 330), (450, 470), (385, 470), (385, 330)], WHT, width=2.4)
+    _polyline(page, [(465, 330), (528, 330), (528, 470), (465, 470), (465, 330)], WHT, width=2.4)
+    label_box(300, 520, "PROPOSED FACILITY", 108, "FOOTPRINT")
+    arrow(360, 520, 390, 495)
+
+    # POI + gen-tie callout (orange, off-site indicator like the example).
+    # Dark translucent chips keep the colored text legible on bright terrain.
+    page.draw_rect(fitz.Rect(146, 66, 166, 92), color=ORG, width=2.5)
+    poi_label = f"POI at {poi_name.split(' (')[0][:26]}"
+    page.draw_rect(fitz.Rect(86, 118, 86 + 12 + 5.2 * len(poi_label), 162),
+                   color=None, fill=(0.12, 0.12, 0.12), fill_opacity=0.62)
+    page.insert_text((92, 130), poi_label, fontsize=9, fontname="hebo", color=ORG)
+    page.insert_text((92, 143), f"{_fmt(d['net'])} MW", fontsize=9, fontname="hebo", color=ORG)
+    page.insert_text((92, 156), f"{_fmt(d['kv'])} kV", fontsize=9, fontname="hebo", color=ORG)
+    page.draw_rect(fitz.Rect(86, 174, 152, 204), color=None,
+                   fill=(0.12, 0.12, 0.12), fill_opacity=0.62)
+    page.insert_text((92, 186), "Gen-tie", fontsize=9, fontname="hebo", color=YEL)
+    page.insert_text((92, 198), f"{_fmt(gentie_mi)} miles", fontsize=9, fontname="hebo", color=YEL)
+    page.draw_line(fitz.Point(156, 92), fitz.Point(230, 330), color=RED_B, width=1.2)
+
+    # Scale bar (bottom-right of the map)
+    page.draw_rect(fitz.Rect(494, 528, 566, 550), color=None,
+                   fill=(0.12, 0.12, 0.12), fill_opacity=0.62)
+    page.draw_line(fitz.Point(500, 545), fitz.Point(560, 545), color=WHT, width=2)
+    page.insert_text((502, 540), "0        1,000 ft", fontsize=6, fontname="hebo", color=WHT)
+
+    # Disclaimer under the map
+    page.insert_text(
+        (60, 574),
+        "Aerial base image AI-generated (Grok Imagine) for conceptual layout — replace with a "
+        "survey/GIS orthophoto of the parcel before construction. Boundary geometry per the "
+        "Project Boundary KMZ.",
+        fontsize=6.5, fontname="helv", color=MUT)
+
+    # Title block column (right, like the example's engineering frame)
+    tb = fitz.Rect(632, 40, 762, 560)
+    page.draw_rect(tb, color=INK, width=1.2)
+    rows = [96, 150, 250, 340, 470, 515]
+    for ry in rows:
+        page.draw_line(fitz.Point(tb.x0, ry), fitz.Point(tb.x1, ry), color=INK, width=0.7)
+    page.insert_text((tb.x0 + 24, 66), "GridPilot", fontsize=13, fontname="hebo", color=INK)
+    page.insert_text((tb.x0 + 12, 82), "INTERCONNECTION ENGINEERING", fontsize=5.6,
+                     fontname="helv", color=MUT)
+    page.insert_text((tb.x0 + 8, 112), "Date Issued", fontsize=6, fontname="helv", color=MUT)
+    page.insert_text((tb.x0 + 8, 128), date.today().strftime("%m/%d/%Y"), fontsize=8,
+                     fontname="hebo", color=INK)
+    page.insert_text((tb.x0 + 8, 166), "Issued For", fontsize=6, fontname="helv", color=MUT)
+    page.insert_text((tb.x0 + 8, 182), "Preliminary tie-line", fontsize=7.5, fontname="hebo", color=INK)
+    page.insert_text((tb.x0 + 8, 193), "layout", fontsize=7.5, fontname="hebo", color=INK)
+    page.insert_text((tb.x0 + 8, 216), "Rev 0", fontsize=7.5, fontname="hebo", color=INK)
+    page.insert_text((tb.x0 + 8, 266), "Project", fontsize=6, fontname="helv", color=MUT)
+    page.insert_text((tb.x0 + 8, 282), str(intake.get("project_name") or "")[:18], fontsize=8.5,
+                     fontname="hebo", color=INK)
+    page.insert_text((tb.x0 + 8, 295), f"{intake.get('county')} County, {intake.get('state') or 'CA'}",
+                     fontsize=6.5, fontname="helv", color=INK)
+    page.insert_text((tb.x0 + 8, 306), f"GPS {d['lat']}, {d['lon']}", fontsize=6, fontname="helv",
+                     color=MUT)
+    page.insert_text((tb.x0 + 8, 356), "Drawing Title", fontsize=6, fontname="helv", color=MUT)
+    page.insert_text((tb.x0 + 8, 374), "CONCEPTUAL", fontsize=9, fontname="hebo", color=INK)
+    page.insert_text((tb.x0 + 8, 386), "SITE LAYOUT", fontsize=9, fontname="hebo", color=INK)
+    page.insert_text((tb.x0 + 8, 406), f"{_fmt(d['net'])} MW at POI", fontsize=7, fontname="helv", color=INK)
+    page.insert_text((tb.x0 + 8, 418), f"~{_fmt(d['acres'])} acres", fontsize=7, fontname="helv", color=INK)
+    page.insert_text((tb.x0 + 8, 486), "Drawn by", fontsize=6, fontname="helv", color=MUT)
+    page.insert_text((tb.x0 + 8, 500), "GridPilot engineering engine", fontsize=6.5,
+                     fontname="hebo", color=INK)
+    page.insert_text((tb.x0 + 8, 531), "Revision: 0", fontsize=7, fontname="helv", color=INK)
+    page.insert_text((tb.x0 + 8, 545), "Page: 1 of 1", fontsize=7, fontname="helv", color=INK)
+    doc.save(path)
+    doc.close()
+
+
+def _gen_site_drawing_schematic(intake: dict, d: dict, eng: dict, path: Path) -> None:
+    """Fallback plan-view schematic (no AI imagery available): POI, requested
+    MW, and the gen-tie route with voltage and length on a to-scale plan."""
     gentie_mi = eng["design"]["gentie_mi"]
     poi_name = str(intake.get("poi_name") or "POI")
 
@@ -2603,9 +2799,9 @@ def generate_packet(intake: dict[str, Any], org_id: str, iso: str | None = None)
         "static (C) and dynamic (D) supply, surplus/(shortage).", 8))
     _gen_site_drawing(intake, d, eng, add(
         "09", "site_drawing", "Site Drawing", f"09_SiteDrawing_{slug}.pdf",
-        "checklist", "generated", "GENERATED — POI, MW, gen-tie route to scale", "GridPilot",
-        "Shows the POI, requested MW, and the gen-tie voltage/length; the KMZ boundary "
-        "(supporting) is the aerial-imagery site map.", 9))
+        "checklist", "generated", "GENERATED — CONCEPTUAL LAYOUT ON AERIAL IMAGERY", "GridPilot",
+        "Conceptual site layout drawn over satellite imagery: land under site control, new "
+        "switchyard, facility footprint, POI, MW, and gen-tie; boundary geometry in the KMZ.", 9))
 
     sld_prims = build_sld(eng["graph"], eng["design"], intake)
     sld_to_pdf(sld_prims, add(
