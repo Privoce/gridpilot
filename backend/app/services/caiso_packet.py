@@ -1098,9 +1098,29 @@ def _gen_appendix1(intake: dict, d: dict, path: Path) -> None:
 
 def _fill_appendix1_docx(intake: dict, d: dict, path: Path) -> None:
     import docx
+    from docx.oxml import OxmlElement
+    from docx.oxml.ns import qn
 
     doc = docx.Document(str(APPENDIX1_TEMPLATE))
     paras = doc.paragraphs
+
+    def _box(run) -> None:
+        """Draw a single-line border around the run so the entry reads as a
+        form cell (matches how the blanks render in Word)."""
+        rPr = run._element.get_or_add_rPr()
+        if rPr.find(qn("w:bdr")) is not None:
+            return
+        bdr = OxmlElement("w:bdr")
+        bdr.set(qn("w:val"), "single")
+        bdr.set(qn("w:sz"), "4")
+        bdr.set(qn("w:space"), "2")
+        bdr.set(qn("w:color"), "000000")
+        # Keep schema order: w:bdr belongs before w:rtl.
+        rtl = rPr.find(qn("w:rtl"))
+        if rtl is not None:
+            rtl.addprevious(bdr)
+        else:
+            rPr.append(bdr)
 
     def find(prefix: str, nth: int = 1, exact: bool = False):
         # Whitespace-normalized matching: the form mixes tabs/spaces after "☐".
@@ -1115,16 +1135,33 @@ def _fill_appendix1_docx(intake: dict, d: dict, path: Path) -> None:
         raise KeyError(prefix)
 
     def fill(par, *values) -> None:
-        """Replace successive en-space blank runs with values (None skips a
-        blank, leaving it empty); run formatting is preserved."""
+        """Replace successive en-space blanks with values inside a bordered
+        form cell. The run is split so the border wraps only the entry (not
+        unit text like " (MW)" that shares the run); formatting is preserved.
+        None keeps the blank as an empty cell."""
+        from docx.text.run import Run
+
         vals = list(values)
-        for run in par.runs:
+        for run in list(par.runs):
             if not vals:
                 return
-            if "\u2002" in run.text:
-                v = vals.pop(0)
-                if v is not None:
-                    run.text = _BLANK_RE.sub(str(v), run.text, count=1)
+            m = _BLANK_RE.search(run.text)
+            if m is None:
+                continue
+            v = vals.pop(0)
+            before, after = run.text[:m.start()], run.text[m.end():]
+            cell_text = "\u00a0" * 5 if v is None else f"\u00a0{v}\u00a0"
+            el = run._element
+            val_el = copy.deepcopy(el)
+            el.addnext(val_el)
+            val_run = Run(val_el, par)
+            val_run.text = cell_text
+            _box(val_run)
+            if after:
+                after_el = copy.deepcopy(el)
+                val_el.addnext(after_el)
+                Run(after_el, par).text = after
+            run.text = before
 
     def tick(par) -> None:
         for run in par.runs:
@@ -1252,6 +1289,37 @@ def _fill_appendix1_docx(intake: dict, d: dict, path: Path) -> None:
     fill(find("Last Name:", 3), last)
     fill(find("Title:", 3), intake.get("signatory_title"))
     fill(find("Date (MM/DD/YYYY):"), today)
+
+    # Any blanks the intake cannot answer become empty form cells — same
+    # boxed look as the filled entries (they're tracked in the Missing Data
+    # Report), so no cell disappears from the original form.
+    all_pars = list(doc.paragraphs)
+    for tbl in doc.tables:
+        for row in tbl.rows:
+            for cell in row.cells:
+                all_pars.extend(cell.paragraphs)
+    for par in all_pars:
+        guard = 0
+        while any("\u2002" in r.text for r in par.runs) and guard < 12:
+            fill(par, None)
+            guard += 1
+
+    # The template opens with an empty paragraph carrying a section break,
+    # which renders as a blank first page — drop it, moving its header/footer
+    # references onto the remaining section so the CAISO header survives.
+    first_par = doc.paragraphs[0]
+    if not first_par.text.strip():
+        pPr = first_par._element.find(qn("w:pPr"))
+        sect = pPr.find(qn("w:sectPr")) if pPr is not None else None
+        if sect is not None:
+            body_sect = doc.element.body.find(qn("w:sectPr"))
+            for tag in ("w:headerReference", "w:footerReference", "w:titlePg"):
+                for el in sect.findall(qn(tag)):
+                    t = el.get(qn("w:type"))
+                    if not any(e.get(qn("w:type")) == t
+                               for e in body_sect.findall(qn(tag))):
+                        body_sect.insert(0, copy.deepcopy(el))
+        first_par._element.getparent().remove(first_par._element)
 
     doc.save(str(path))
 

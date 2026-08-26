@@ -91,6 +91,8 @@ PAGE = """<!DOCTYPE html>
   .docx .cbx.on {{ color: var(--ok); font-weight: 700; }}
   .docx .fillin {{ color: var(--accent); font-weight: 600; text-decoration: underline;
     text-underline-offset: 3px; }}
+  .docx .cell {{ display: inline-block; min-width: 46px; padding: 0 4px;
+    border: 1px solid #3a3f3c; line-height: 1.35; text-align: center; }}
   .docx table {{ margin: 10px 0 14px; border-radius: 0; }}
   .docx td, .docx th {{ border: 1px solid var(--line); font-size: 12px; }}
   .docx .hd {{ display: flex; align-items: center; justify-content: space-between;
@@ -205,6 +207,8 @@ def _docx_body(path: Path) -> str:
 
     doc = docx.Document(str(path))
 
+    from docx.oxml.ns import qn as _qn
+
     def para_html(par) -> str:
         runs = []
         for r in par.runs:
@@ -215,6 +219,9 @@ def _docx_body(path: Path) -> str:
                 t = f'<span class="fillin">{t}</span>'
             if r.bold:
                 t = f"<b>{t}</b>"
+            rpr = r._element.find(_qn("w:rPr"))
+            if rpr is not None and rpr.find(_qn("w:bdr")) is not None:
+                t = f'<span class="cell">{t}</span>'
             runs.append(t)
         return "".join(runs)
 
