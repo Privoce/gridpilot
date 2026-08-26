@@ -93,6 +93,12 @@ PAGE = """<!DOCTYPE html>
     text-underline-offset: 3px; }}
   .docx table {{ margin: 10px 0 14px; border-radius: 0; }}
   .docx td, .docx th {{ border: 1px solid var(--line); font-size: 12px; }}
+  .docx .hd {{ display: flex; align-items: center; justify-content: space-between;
+    gap: 16px; margin: 0 0 22px; padding-bottom: 14px; border-bottom: 1px solid var(--line); }}
+  .docx .hd img {{ height: 34px; width: auto; }}
+  .docx .hd .t {{ text-align: right; font-size: 12.5px; font-weight: 700; line-height: 1.45; }}
+  .docx .ft {{ margin-top: 26px; padding-top: 10px; border-top: 1px solid var(--line);
+    font-size: 11px; color: var(--muted); }}
   .sum .card span {{ font-family: "JetBrains Mono", monospace; font-size: 10px;
     text-transform: uppercase; letter-spacing: 0.07em; color: var(--muted); }}
   figure.sld {{ margin: 0 0 18px; padding: 16px; background: #fff;
@@ -212,7 +218,42 @@ def _docx_body(path: Path) -> str:
             runs.append(t)
         return "".join(runs)
 
-    parts: list[str] = ['<div class="docx">']
+    def _header_html() -> str:
+        """Section header: text lines plus any embedded image (CAISO logo),
+        rendered as a page-top strip like Word shows it."""
+        import base64 as b64mod
+
+        from docx.oxml.ns import qn
+
+        hdr = doc.sections[0].header
+        img_html = ""
+        blips = hdr._element.findall(".//" + qn("a:blip"))
+        if blips:
+            rid = blips[0].get(qn("r:embed"))
+            part = hdr.part.related_parts.get(rid)
+            if part is not None:
+                data = b64mod.b64encode(part.blob).decode()
+                img_html = f'<img src="data:{part.content_type};base64,{data}" alt="">'
+        lines = [para_html(p) for p in hdr.paragraphs if p.text.strip()]
+        if not (lines or img_html):
+            return ""
+        return (f'<div class="hd">{img_html}<div class="t">'
+                + "<br>".join(lines) + "</div></div>")
+
+    def _footer_html() -> str:
+        ftr = doc.sections[0].footer
+        lines = []
+        for p in ftr.paragraphs:
+            t = " ".join(p.text.split())
+            if not t:
+                continue
+            # Page-number fields are computed by Word; show a static stand-in.
+            if t.startswith("Page"):
+                t = "Page 1"
+            lines.append(_e(t))
+        return f'<div class="ft">{" · ".join(lines)}</div>' if lines else ""
+
+    parts: list[str] = ['<div class="docx">', _header_html()]
     try:
         blocks = list(doc.iter_inner_content())
     except AttributeError:
@@ -234,6 +275,7 @@ def _docx_body(path: Path) -> str:
                     for c in row.cells)
                 rows_html.append(f"<tr>{cells}</tr>")
             parts.append(f"<table>{''.join(rows_html)}</table>")
+    parts.append(_footer_html())
     parts.append("</div>")
     parts.append(
         '<p class="note" style="margin-top:16px">This is the official CAISO Appendix 1 Word form '
