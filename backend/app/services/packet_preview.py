@@ -209,21 +209,37 @@ def _docx_body(path: Path) -> str:
 
     from docx.oxml.ns import qn as _qn
 
+    from docx.text.run import Run
+
+    def _run_html(r) -> str:
+        rpr = r._element.find(_qn("w:rPr"))
+        style = rpr.find(_qn("w:rStyle")) if rpr is not None else None
+        if style is not None and style.get(_qn("w:val")) == "PlaceholderText":
+            # Unfilled content control — show an empty form cell.
+            return '<span class="cell">&nbsp;&nbsp;&nbsp;&nbsp;</span>'
+        t = _e(r.text).replace("\t", '<span class="tab"></span>')
+        t = t.replace("☒", '<span class="cbx on">☒</span>')
+        t = t.replace("☐", '<span class="cbx">☐</span>')
+        if r.underline:
+            t = f'<span class="fillin">{t}</span>'
+        if r.bold:
+            t = f"<b>{t}</b>"
+        if rpr is not None and rpr.find(_qn("w:bdr")) is not None:
+            t = f'<span class="cell">{t}</span>'
+        return t
+
     def para_html(par) -> str:
-        runs = []
-        for r in par.runs:
-            t = _e(r.text).replace("\t", '<span class="tab"></span>')
-            t = t.replace("☒", '<span class="cbx on">☒</span>')
-            t = t.replace("☐", '<span class="cbx">☐</span>')
-            if r.underline:
-                t = f'<span class="fillin">{t}</span>'
-            if r.bold:
-                t = f"<b>{t}</b>"
-            rpr = r._element.find(_qn("w:rPr"))
-            if rpr is not None and rpr.find(_qn("w:bdr")) is not None:
-                t = f'<span class="cell">{t}</span>'
-            runs.append(t)
-        return "".join(runs)
+        out = []
+        for child in par._element:
+            if child.tag == _qn("w:r"):
+                out.append(_run_html(Run(child, par)))
+            elif child.tag == _qn("w:sdt"):
+                # Content controls: render the sdtContent runs inline.
+                content = child.find(_qn("w:sdtContent"))
+                if content is not None:
+                    out.extend(_run_html(Run(rl, par))
+                               for rl in content.findall(_qn("w:r")))
+        return "".join(out)
 
     def _header_html() -> str:
         """Section header: text lines plus any embedded image (CAISO logo),
@@ -285,7 +301,7 @@ def _docx_body(path: Path) -> str:
     parts.append(_footer_html())
     parts.append("</div>")
     parts.append(
-        '<p class="note" style="margin-top:16px">This is the official CAISO Appendix 1 Word form '
+        '<p class="note" style="margin-top:16px">This is the official CAISO Word form '
         "filled in place — download the .docx for the submission copy and execute it "
         "electronically in RIMS5.</p>"
     )

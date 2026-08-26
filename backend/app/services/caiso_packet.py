@@ -1885,13 +1885,158 @@ def _gen_signatory(intake: dict, path: Path) -> None:
     pdf.save(path)
 
 
+SITE_EXCL_TEMPLATE = Path(__file__).resolve().parents[1] / "assets" / "site_exclusivity_template.docx"
+
+
 def _gen_site_exclusivity(intake: dict, d: dict, path: Path) -> None:
     """Checklist item 4 — Site Exclusivity/Control Demonstration Form.
 
-    Mirrors the official CAISO form: project header block, generation/fuel
-    type + MW, acreage, land-use election (private/public), documentation
-    type, and the option-term citation table.
+    For CAISO this fills the official Word form in place (content controls,
+    checkbox controls, the Documentation Type dropdown, and the legacy
+    FORMTEXT table fields) — wording and layout untouched. Other ISOs get
+    the generic PDF rendition.
     """
+    p = d.get("profile") or get_profile(None)
+    if p["iso"] != "CAISO":
+        _gen_site_exclusivity_pdf(intake, d, path)
+        return
+    _fill_site_exclusivity_docx(intake, d, path)
+
+
+def _fill_site_exclusivity_docx(intake: dict, d: dict, path: Path) -> None:
+    import docx
+    from docx.oxml import OxmlElement
+    from docx.oxml.ns import qn
+
+    W14 = "{http://schemas.microsoft.com/office/word/2010/wordml}"
+    doc = docx.Document(str(SITE_EXCL_TEMPLATE))
+
+    def _box_el(run_el) -> None:
+        """Border the run so the entry reads as a form cell (same look as the
+        filled Appendix 1)."""
+        rpr = run_el.find(qn("w:rPr"))
+        if rpr is None:
+            rpr = OxmlElement("w:rPr")
+            run_el.insert(0, rpr)
+        if rpr.find(qn("w:bdr")) is None:
+            bdr = OxmlElement("w:bdr")
+            bdr.set(qn("w:val"), "single")
+            bdr.set(qn("w:sz"), "4")
+            bdr.set(qn("w:space"), "2")
+            bdr.set(qn("w:color"), "000000")
+            rpr.append(bdr)
+
+    def _set_run_text(run_el, value: str) -> None:
+        for t in run_el.findall(qn("w:t")):
+            run_el.remove(t)
+        t = OxmlElement("w:t")
+        t.set(qn("xml:space"), "preserve")
+        t.text = value
+        run_el.append(t)
+
+    # Content controls in paragraph order (fixed template, stable indexes).
+    sdts = [child for par in doc.paragraphs for child in par._element
+            if child.tag == qn("w:sdt")]
+
+    def sdt_text(idx: int, value) -> None:
+        sdt = sdts[idx]
+        pr = sdt.find(qn("w:sdtPr"))
+        ph = pr.find(qn("w:showingPlcHdr")) if pr is not None else None
+        if ph is not None:
+            pr.remove(ph)
+        content = sdt.find(qn("w:sdtContent"))
+        runs = content.findall(qn("w:r"))
+        first = runs[0]
+        rpr = first.find(qn("w:rPr"))
+        style = rpr.find(qn("w:rStyle")) if rpr is not None else None
+        if style is not None:
+            rpr.remove(style)  # drop the gray placeholder style
+        _set_run_text(first, f"\u00a0{value}\u00a0")
+        _box_el(first)
+        for extra in runs[1:]:
+            content.remove(extra)
+
+    def sdt_check(idx: int) -> None:
+        sdt = sdts[idx]
+        checked = sdt.find(qn("w:sdtPr") + "/" + W14 + "checkbox/" + W14 + "checked")
+        if checked is not None:
+            checked.set(W14 + "val", "1")
+        for t in sdt.findall(".//" + qn("w:t")):
+            if t.text and "☐" in t.text:
+                t.text = t.text.replace("☐", "☒")
+
+    def fld_fill(par, value) -> None:
+        """Fill a legacy FORMTEXT field: replace the display run between the
+        'separate' and 'end' field chars, boxed as a form cell."""
+        state, placed = 0, False
+        for run_el in par._element.findall(qn("w:r")):
+            fc = run_el.find(qn("w:fldChar"))
+            if fc is not None:
+                tp = fc.get(qn("w:fldCharType"))
+                if tp == "separate":
+                    state = 1
+                elif tp == "end" and state == 1:
+                    return
+                continue
+            if state == 1:
+                _set_run_text(run_el, f"\u00a0{value}\u00a0" if not placed else "")
+                if not placed:
+                    _box_el(run_el)
+                placed = True
+
+    today = date.today().strftime("%m/%d/%Y")
+    cod = d["cod"]
+    lease_years = 40
+    expiry = cod.replace(year=cod.year + lease_years)
+    sc = str(intake.get("site_control") or "Lease Agreement")
+    site_file = _file_meta(intake.get("file_site_control"))
+    evidence = site_file["name"] if site_file else f"Executed {sc} (attached)"
+
+    # Header block — control indexes follow the template's document order:
+    # 0 queue#, 1 project, 2 cluster#, 3 submission date, 4 current COD,
+    # 5-8 process checkboxes, 9 total acreage, 10 acreage necessary,
+    # 11 private land, 12 documentation-type dropdown, 13 "changed: yes",
+    # 14 nearest expiration, 15 lease term, 16 public land.
+    sdt_text(0, str(intake.get("queue_ref") or "Not yet assigned"))
+    sdt_text(1, str(intake.get("project_name") or ""))
+    sdt_text(2, "N/A — Independent Study / Fast Track"
+             if d["is_isp"] or d["track"] == "Fast Track" else "Per cluster window")
+    sdt_text(3, today)
+    sdt_text(4, cod.strftime("%m/%d/%Y"))
+    sdt_check(5)   # Process: IR Application Submittal
+    sdt_text(9, f"~{_fmt(d['acres'])}")
+    sdt_text(10, f"~{_fmt(round(d['acres'] * 0.9))}")
+    sdt_check(11)  # Private Land
+    sdt_text(12, sc)  # Documentation Type dropdown
+    sdt_text(14, expiry.strftime("%m/%d/%Y"))
+    sdt_text(15, f"{lease_years} years from COD")
+
+    # Generation / fuel type table: total in the header field, one row per
+    # generation type (gross MW, matching the Appendix 1 table).
+    t0 = doc.tables[0]
+    fld_fill(t0.rows[0].cells[1].paragraphs[0], f"{_fmt(d['net'])} MW at POI")
+    pv_mw = d["gross"] - (d["bess_mw"] or 0)
+    fld_fill(t0.rows[1].cells[0].paragraphs[0], "Solar Photovoltaic")
+    fld_fill(t0.rows[1].cells[1].paragraphs[0], _fmt(pv_mw))
+    if d["has_bess"]:
+        fld_fill(t0.rows[2].cells[0].paragraphs[0], "Battery Energy Storage")
+        fld_fill(t0.rows[2].cells[1].paragraphs[0], _fmt(d["bess_mw"]))
+
+    # Option-term citation table: original term + the renewal options.
+    t1 = doc.tables[1]
+    fld_fill(t1.rows[1].cells[1].paragraphs[0], expiry.strftime("%m/%d/%Y"))
+    fld_fill(t1.rows[1].cells[2].paragraphs[0], f"{lease_years}-year term from COD")
+    fld_fill(t1.rows[1].cells[3].paragraphs[0], f"{evidence}, §2.1 (Term), p. 3")
+    fld_fill(t1.rows[2].cells[1].paragraphs[0],
+             expiry.replace(year=expiry.year + 10).strftime("%m/%d/%Y"))
+    fld_fill(t1.rows[2].cells[2].paragraphs[0], "Two 5-year renewals at lessee's option")
+    fld_fill(t1.rows[2].cells[3].paragraphs[0], f"{evidence}, §2.3 (Renewals), p. 4")
+
+    doc.save(str(path))
+
+
+def _gen_site_exclusivity_pdf(intake: dict, d: dict, path: Path) -> None:
+    """Generic PDF rendition of the site exclusivity demonstration (non-CAISO)."""
     proj = str(intake.get("project_name") or "")
     slug = _slug(proj).lower()
     cod = d["cod"]
@@ -2860,10 +3005,10 @@ def generate_packet(intake: dict[str, Any], org_id: str, iso: str | None = None)
         loc("Official sheet structure: I. Project Configuration, I-a. Short Circuit Data, "
             "II. Technical Validation, V. IR Validation & Comments (all Yes/N-A)."), 3))
     _gen_site_exclusivity(intake, d, add(
-        "04", "exclusivity", "Evidence of Site Exclusivity", f"04_SiteExclusivity_{slug}.pdf",
+        "04", "exclusivity", "Evidence of Site Exclusivity", f"04_SiteExclusivity_{slug}.{form_ext}",
         "checklist", "generated", "FORM COMPLETE — attach the executed agreement", "GridPilot",
-        "Site Exclusivity/Control Demonstration Form — LOIs are not accepted; include the "
-        "executed lease/option/deed.", 4))
+        "Official Site Exclusivity/Control Demonstration Form, filled — LOIs are not accepted; "
+        "include the executed lease/option/deed.", 4))
 
     raw_ext, dyn_ext = profile["raw_ext"], profile["dyn_ext"]
     pf = eng["powerflow"]

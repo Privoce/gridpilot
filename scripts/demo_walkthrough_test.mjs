@@ -91,6 +91,7 @@ check((await page.locator("text=CAISO minimum requirements —").count()) >= 1,
 // Preview drawers open for the three most complex docs
 for (const [frag, name] of [
   ["Appendix1", "appendix1"],
+  ["SiteExclusivity", "site_exclusivity"],
   ["AttachmentA", "attachment_a"],
   ["ReactivePowerCapability", "reactive"],
   ["SiteDrawing", "site_drawing"],
