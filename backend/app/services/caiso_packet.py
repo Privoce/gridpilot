@@ -2565,40 +2565,91 @@ def _gen_site_drawing(intake: dict, d: dict, eng: dict, path: Path) -> None:
         "Project Boundary KMZ.",
         fontsize=6.5, fontname="helv", color=MUT)
 
-    # Title block column (right, like the example's engineering frame)
+    # Title block column (right) — rendered like the official example: the
+    # block is laid out horizontally, rasterized, then placed rotated 90° so
+    # the text reads vertically (bottom-to-top) along the sheet edge.
     tb = fitz.Rect(632, 40, 762, 560)
     page.draw_rect(tb, color=INK, width=1.2)
-    rows = [96, 150, 250, 340, 470, 515]
-    for ry in rows:
-        page.draw_line(fitz.Point(tb.x0, ry), fitz.Point(tb.x1, ry), color=INK, width=0.7)
-    page.insert_text((tb.x0 + 8, 66), "INTERCONNECTION", fontsize=9, fontname="hebo", color=INK)
-    page.insert_text((tb.x0 + 8, 80), "ENGINEERING", fontsize=9, fontname="hebo", color=INK)
-    page.insert_text((tb.x0 + 8, 112), "Date Issued", fontsize=6, fontname="helv", color=MUT)
-    page.insert_text((tb.x0 + 8, 128), date.today().strftime("%m/%d/%Y"), fontsize=8,
-                     fontname="hebo", color=INK)
-    page.insert_text((tb.x0 + 8, 166), "Issued For", fontsize=6, fontname="helv", color=MUT)
-    page.insert_text((tb.x0 + 8, 182), "Preliminary tie-line", fontsize=7.5, fontname="hebo", color=INK)
-    page.insert_text((tb.x0 + 8, 193), "layout", fontsize=7.5, fontname="hebo", color=INK)
-    page.insert_text((tb.x0 + 8, 216), "Rev 0", fontsize=7.5, fontname="hebo", color=INK)
-    page.insert_text((tb.x0 + 8, 266), "Project", fontsize=6, fontname="helv", color=MUT)
-    page.insert_text((tb.x0 + 8, 282), str(intake.get("project_name") or "")[:18], fontsize=8.5,
-                     fontname="hebo", color=INK)
-    page.insert_text((tb.x0 + 8, 295), f"{intake.get('county')} County, {intake.get('state') or 'CA'}",
-                     fontsize=6.5, fontname="helv", color=INK)
-    page.insert_text((tb.x0 + 8, 306), f"GPS {d['lat']}, {d['lon']}", fontsize=6, fontname="helv",
-                     color=MUT)
-    page.insert_text((tb.x0 + 8, 356), "Drawing Title", fontsize=6, fontname="helv", color=MUT)
-    page.insert_text((tb.x0 + 8, 374), "CONCEPTUAL", fontsize=9, fontname="hebo", color=INK)
-    page.insert_text((tb.x0 + 8, 386), "SITE LAYOUT", fontsize=9, fontname="hebo", color=INK)
-    page.insert_text((tb.x0 + 8, 406), f"{_fmt(d['net'])} MW at POI", fontsize=7, fontname="helv", color=INK)
-    page.insert_text((tb.x0 + 8, 418), f"~{_fmt(d['acres'])} acres", fontsize=7, fontname="helv", color=INK)
-    page.insert_text((tb.x0 + 8, 486), "Drawn by", fontsize=6, fontname="helv", color=MUT)
-    page.insert_text((tb.x0 + 8, 500), "Automated design engine", fontsize=6.5,
-                     fontname="hebo", color=INK)
-    page.insert_text((tb.x0 + 8, 531), "Revision: 0", fontsize=7, fontname="helv", color=INK)
-    page.insert_text((tb.x0 + 8, 545), "Page: 1 of 1", fontsize=7, fontname="helv", color=INK)
+    strip = fitz.Rect(tb.x0, tb.y0, tb.x1, 515)
+    page.insert_image(strip, stream=_title_block_strip(intake, d),
+                      rotate=90, keep_proportion=False)
+    # Bottom cells stay horizontal, exactly like the example sheet.
+    page.draw_line(fitz.Point(tb.x0, 515), fitz.Point(tb.x1, 515), color=INK, width=0.9)
+    page.draw_line(fitz.Point(697, 515), fitz.Point(697, tb.y1), color=INK, width=0.7)
+    page.insert_text((tb.x0 + 6, 528), "Revision:", fontsize=6, fontname="helv", color=MUT)
+    page.insert_text((tb.x0 + 6, 548), "0", fontsize=10, fontname="hebo", color=INK)
+    page.insert_text((703, 528), "Page:", fontsize=6, fontname="helv", color=MUT)
+    page.insert_text((703, 548), "1 of 1", fontsize=10, fontname="hebo", color=INK)
     doc.save(path)
     doc.close()
+
+
+def _title_block_strip(intake: dict, d: dict) -> bytes:
+    """Engineering title block drawn horizontally, returned as a PNG.
+
+    The caller inserts it with rotate=90 (counter-clockwise), which maps the
+    left end of this strip to the bottom of the vertical column — so cells run
+    left-to-right here in bottom-to-top order: Drawn by, Drawing Title,
+    Project, Issued For, Date Issued, firm header. Deterministic PyMuPDF
+    raster at 4x for crisp text at print size.
+    """
+    W, H = 475.0, 130.0
+    tdoc = fitz.open()
+    p = tdoc.new_page(width=W, height=H)
+
+    def t(x: float, y: float, s: str, size: float, bold: bool = False,
+          mut: bool = False) -> None:
+        p.insert_text((x, y), s, fontsize=size,
+                      fontname="hebo" if bold else "helv",
+                      color=MUT if mut else INK)
+
+    # Cell boundaries left→right (become horizontal dividers after rotation).
+    xs = [0, 60, 170, 263, 349, 395, 475]
+    for x in xs[1:-1]:
+        p.draw_line(fitz.Point(x, 0), fitz.Point(x, H), color=INK, width=0.8)
+
+    # Drawn by (bottom of the final column)
+    t(xs[0] + 6, 18, "Drawn by", 6, mut=True)
+    t(xs[0] + 6, 36, "Automated", 6.5, bold=True)
+    t(xs[0] + 6, 46, "design engine", 6.5, bold=True)
+
+    # Drawing Title
+    t(xs[1] + 6, 18, "Drawing Title:", 6, mut=True)
+    t(xs[1] + 6, 44, "CONCEPTUAL SITE", 9.5, bold=True)
+    t(xs[1] + 6, 58, "LAYOUT", 9.5, bold=True)
+    t(xs[1] + 6, 80, f"{_fmt(d['net'])} MW at POI", 7)
+    t(xs[1] + 6, 92, f"~{_fmt(d['acres'])} acres", 7)
+
+    # Project
+    t(xs[2] + 6, 18, "Project:", 6, mut=True)
+    t(xs[2] + 6, 40, str(intake.get("project_name") or "")[:20], 8.5, bold=True)
+    t(xs[2] + 6, 54, f"{intake.get('county')} County, {intake.get('state') or 'CA'}", 6.5)
+    t(xs[2] + 6, 66, f"(GPS {d['lat']}, {d['lon']})", 6, mut=True)
+
+    # Issued For + revision table
+    t(xs[3] + 6, 18, "Issued For", 6, mut=True)
+    t(xs[3] + 24, 40, "Preliminary tie-line", 6.5, bold=True)
+    t(xs[3] + 24, 49, "layout", 6.5, bold=True)
+    t(xs[3] + 8, 40, "0", 7, bold=True)
+    p.draw_line(fitz.Point(xs[3] + 20, 24), fitz.Point(xs[3] + 20, H - 8), color=INK, width=0.5)
+    t(xs[3] + 8, 30, "Rev", 5.5, mut=True)
+    for ly in (46, 60, 74, 88, 102):
+        p.draw_line(fitz.Point(xs[3] + 4, ly), fitz.Point(xs[4] - 4, ly),
+                    color=MUT, width=0.4)
+
+    # Date Issued
+    t(xs[4] + 6, 18, "Date Issued", 6, mut=True)
+    t(xs[4] + 6, 36, date.today().strftime("%m/%d/%Y"), 7.5, bold=True)
+    p.draw_line(fitz.Point(xs[4] + 4, 44), fitz.Point(xs[5] - 4, 44), color=MUT, width=0.4)
+
+    # Firm header (top of the final column, where the example has the logo)
+    t(xs[5] + 6, 56, "INTERCONNECTION", 7.5, bold=True)
+    t(xs[5] + 6, 68, "ENGINEERING", 7.5, bold=True)
+
+    pix = p.get_pixmap(matrix=fitz.Matrix(4, 4), alpha=False)
+    data = pix.tobytes("png")
+    tdoc.close()
+    return data
 
 
 def _gen_site_drawing_schematic(intake: dict, d: dict, eng: dict, path: Path) -> None:
