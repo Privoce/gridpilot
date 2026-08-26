@@ -93,6 +93,7 @@ for (const [frag, name] of [
   ["Appendix1", "appendix1"],
   ["AttachmentA", "attachment_a"],
   ["ReactivePowerCapability", "reactive"],
+  ["SiteDrawing", "site_drawing"],
 ]) {
   await page.locator(`[data-drawer-url*="${frag}"]`).first().click();
   await page.waitForSelector("#gp-drawer iframe", { timeout: 15000 });
