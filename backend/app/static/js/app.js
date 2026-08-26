@@ -581,14 +581,22 @@ async function renderOnboarding() {
 
   let step = getWizardStep();
 
-  // Step 4 needs a fresh validation of the current intake.
+  // Step 4 needs a fresh validation of the current intake. The checks are a
+  // server round-trip that can take seconds on a serverless cold start, so
+  // when there's no result yet (the Validate click clears it), paint a
+  // running state immediately instead of freezing on the previous step.
   if (step === 4) {
+    if (!state.validation) {
+      state.wizValidating = true;
+      paintOnboarding(4);
+    }
     try {
       state.validation = await api.caisoValidate(loadIntake());
       mergeGraphHistory(state.validation);
     } catch {
       state.validation = null;
     }
+    state.wizValidating = false;
     if (state.genUi?.running) {
       paintGenRunningNow();
       return;
@@ -1126,6 +1134,23 @@ function renderWizardStep(step) {
 
   if (step === 4) {
     const v = state.validation;
+    if (!v && state.wizValidating) {
+      return `
+        <div class="flex-1 p-5 sm:p-7">
+          <p class="mb-2 font-mono text-[12px] uppercase tracking-[0.12em] text-muted">Step 4 of ${WIZARD_LAST}</p>
+          <h2 class="mb-3 text-2xl tracking-tightish">Kickoff data validation</h2>
+          <p class="mb-5 max-w-2xl text-[15px] leading-relaxed text-muted">
+            The intake is checked against the consistency rules that most commonly trigger CAISO
+            deficiency review. Each check cites the CAISO requirement it enforces and the document
+            it examined.
+          </p>
+          <div class="flex max-w-2xl items-center gap-2.5 rounded-card border border-focus/20 bg-info-soft px-3.5 py-3">
+            <div class="gp-spin h-3.5 w-3.5 shrink-0 rounded-full border-2 border-focus/30 border-t-focus"></div>
+            <span class="font-mono text-[11px] uppercase tracking-[0.07em] text-ink">Running validation checks…</span>
+          </div>
+        </div>
+        ${footer(`<button type="button" class="${button("ghost")}" id="wiz-back" disabled>Back to intake</button>`, "")}`;
+    }
     if (!v) {
       return `
         <div class="flex-1 p-5 sm:p-7">
@@ -1289,6 +1314,12 @@ function renderWizardStep(step) {
     if (ui?.running) {
       const stageIdx = ui.stage ?? 0;
       const stageLabel = GEN_STAGES[Math.min(stageIdx, GEN_STAGES.length - 1)].label;
+      // Past the scripted stages the server is still working — show honest
+      // elapsed time so the final stage never looks frozen.
+      const genElapsed = Math.floor((Date.now() - (state.genUi?.startedAt || Date.now())) / 1000);
+      const overtime = genElapsed * 1000 > GEN_MIN_MS + 2000
+        ? `<p class="mt-2 font-mono text-[11px] text-muted">Still working — ${genElapsed}s elapsed (a cold serverless start can add time)</p>`
+        : "";
       return `
         <div class="flex-1 p-5 sm:p-7">
           <p class="mb-2 font-mono text-[12px] uppercase tracking-[0.12em] text-muted">Step 5 of ${WIZARD_LAST}</p>
@@ -1303,6 +1334,7 @@ function renderWizardStep(step) {
               <div>
                 <strong class="block text-ink">Generating submission packet</strong>
                 <p class="mt-1 font-mono text-[12px] text-muted">${esc(stageLabel)}</p>
+                ${overtime}
               </div>
             </div>
             <div class="gp-audit-progress" aria-hidden="true"><span></span></div>
@@ -1443,8 +1475,12 @@ async function startWizardGeneration() {
     for (let i = 0; i < GEN_STAGES.length; i++) {
       if (elapsed >= GEN_STAGES[i].at) stage = i;
     }
-    if (stage !== ui.stage) {
+    // Repaint on stage change; past the scripted stages, repaint every second
+    // so the elapsed-time counter stays live.
+    const overtime = elapsed > GEN_MIN_MS + 2000 && elapsed - (ui.lastPaint || 0) >= 1000;
+    if (stage !== ui.stage || overtime) {
       ui.stage = stage;
+      ui.lastPaint = elapsed;
       if (route().name === "onboarding" && getWizardStep() === 5) {
         paintGenRunningNow();
       }
@@ -2880,7 +2916,12 @@ function bindRequest(projectId, step, intake) {
       saveReq(projectId, { step: 1 });
       repaint();
     });
-    document.getElementById("req-validate")?.addEventListener("click", async () => {
+    document.getElementById("req-validate")?.addEventListener("click", async (e) => {
+      // Instant feedback — the checks are a server round-trip that can take
+      // a few seconds on a cold start.
+      const btn = e.currentTarget;
+      btn.disabled = true;
+      btn.innerHTML = `<span class="gp-spin mr-2 inline-block h-3 w-3 rounded-full border-2 border-white/30 border-t-white align-[-1px]"></span>Running checks…`;
       const values = collectReqIntake(projectId, intake);
       try {
         state.reqValidation = await api.caisoValidate(values, state.reqIso);

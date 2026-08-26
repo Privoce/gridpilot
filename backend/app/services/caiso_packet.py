@@ -864,19 +864,39 @@ LINE = (0.80, 0.82, 0.80)
 
 PAGE_W, PAGE_H = 612, 792  # portrait letter
 
+# California ISO logo extracted from the official RIMS Appendix 1 Word template,
+# used to reproduce that template's header on the generated form.
+CAISO_LOGO = Path(__file__).resolve().parents[1] / "assets" / "caiso_logo.jpg"
+
 
 class _Pdf:
-    def __init__(self, title: str, subtitle: str, banner: str = "GENERATED DRAFT — GridPilot"):
+    def __init__(self, title: str, subtitle: str, banner: str = "GENERATED DRAFT — GridPilot",
+                 official: dict | None = None):
+        """`official` switches the page chrome to the CAISO form template style:
+        logo top-left, right-aligned title/subtitle header, and a right-aligned
+        footer with page number plus the form's effective date and version."""
         self.doc = fitz.open()
         self.title = title
         self.subtitle = subtitle
         self.banner = banner
+        self.official = official
         self.page: fitz.Page | None = None
         self.y = 0.0
         self._new_page()
 
     def _new_page(self) -> None:
         self.page = self.doc.new_page(width=PAGE_W, height=PAGE_H)
+        if self.official is not None:
+            if CAISO_LOGO.exists():
+                self.page.insert_image(fitz.Rect(36, 22, 198, 52), filename=str(CAISO_LOGO))
+            y = 34.0
+            for line in (self.title, self.subtitle):
+                w = fitz.get_text_length(line, fontname="helv", fontsize=11.5)
+                self.page.insert_text((PAGE_W - 36 - w, y), line,
+                                      fontsize=11.5, fontname="helv", color=INK)
+                y += 15
+            self.y = 84
+            return
         self.page.draw_rect(fitz.Rect(0, 0, PAGE_W, 6), color=ACC, fill=ACC)
         self.page.insert_text((36, 34), self.banner, fontsize=7.5, fontname="cour", color=RED)
         self.page.insert_text((36, 56), self.title, fontsize=15, fontname="hebo", color=INK)
@@ -890,7 +910,8 @@ class _Pdf:
         self.y = 100
 
     def _ensure(self, needed: float) -> None:
-        if self.y + needed > PAGE_H - 48:
+        bottom = PAGE_H - (64 if self.official is not None else 48)
+        if self.y + needed > bottom:
             self._new_page()
 
     def section(self, text: str) -> None:
@@ -962,6 +983,20 @@ class _Pdf:
         self.y += 16
 
     def save(self, path: Path) -> None:
+        if self.official is not None:
+            # "Page X of Y" needs the final page count, so the footer is
+            # stamped at save time on every page.
+            total = self.doc.page_count
+            for i in range(total):
+                page = self.doc[i]
+                y = PAGE_H - 44.0
+                for text, size in ((f"Page {i + 1} of {total}", 8.0),
+                                   (f"Effective:  {self.official['effective']}", 7.0),
+                                   (f"Version: {self.official['version']}", 7.0)):
+                    w = fitz.get_text_length(text, fontname="hebo", fontsize=size)
+                    page.insert_text((PAGE_W - 36 - w, y), text,
+                                     fontsize=size, fontname="hebo", color=INK)
+                    y += size + 3
         self.doc.save(path)
         self.doc.close()
 
@@ -975,8 +1010,12 @@ def _axes(page: fitz.Page, rect: fitz.Rect, title: str, xlabel: str, ylabel: str
 
 
 def _polyline(page: fitz.Page, pts: list[tuple[float, float]], color, width=1.4) -> None:
-    for a, b in zip(pts, pts[1:]):
-        page.draw_line(fitz.Point(*a), fitz.Point(*b), color=color, width=width)
+    if len(pts) < 2:
+        return
+    shape = page.new_shape()
+    shape.draw_polyline([fitz.Point(*p) for p in pts])
+    shape.finish(color=color, width=width, closePath=False)
+    shape.commit()
 
 
 # ---------------------------------------------------------------------------
@@ -1045,9 +1084,19 @@ def _gen_appendix1(intake: dict, d: dict, path: Path) -> None:
     is_hybrid = d["has_bess"] and "BESS" in str(intake.get("project_type") or "")
 
     pdf = _Pdf(
-        "Appendix 1 — Interconnection Request",
-        "CAISO Tariff Appendix DD (GIDAP) — no hard copy required for submissions via RIMS5",
+        "Appendix 1 Interconnection Request",
+        "For Non-Cluster, Independent Study / Fast Track",
+        official={"effective": "June 2024", "version": "RIMS-IR-NON-CLUSTER-V03"},
     )
+
+    # Opening title block of the official form.
+    for text, size in (("INTERCONNECTION REQUEST", 12.5),
+                       ("NO HARD COPY REQUIRED FOR INTERCONNECTION REQUESTS "
+                        "SUBMITTED ELECTRONICALLY VIA RIMS 5", 8.0)):
+        w = fitz.get_text_length(text, fontname="hebo", fontsize=size)
+        pdf.page.insert_text(((PAGE_W - w) / 2, pdf.y), text,
+                             fontsize=size, fontname="hebo", color=INK)
+        pdf.y += size + 8
 
     pdf.section("1 · Process (check only one)")
     pdf.checkbox(d["track"] == "Fast Track", "Fast Track Process")
@@ -2088,13 +2137,16 @@ class _Chart:
 
     def series(self, pts: list[tuple[float, float]], color=BLUE,
                width: float = 1.8, dashes: str | None = None) -> None:
-        prev = None
-        for x, y in pts:
-            cur = self._xy(x, max(min(y, self.ymax), self.ymin))
-            if prev is not None:
-                self.page.draw_line(fitz.Point(*prev), fitz.Point(*cur),
-                                    color=color, width=width, dashes=dashes)
-            prev = cur
+        # One batched shape per curve: per-segment page.draw_line re-parses the
+        # page content stream on every call, which is quadratic in point count.
+        if len(pts) < 2:
+            return
+        mapped = [fitz.Point(*self._xy(x, max(min(y, self.ymax), self.ymin)))
+                  for x, y in pts]
+        shape = self.page.new_shape()
+        shape.draw_polyline(mapped)
+        shape.finish(color=color, width=width, dashes=dashes, closePath=False)
+        shape.commit()
 
     def hline(self, y: float, color=RED, dashes: str | None = "[5 4] 0") -> None:
         _, py = self._xy(self.xmin, y)
