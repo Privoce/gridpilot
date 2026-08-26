@@ -98,9 +98,15 @@ for (const [frag, name] of [
   await page.waitForSelector("#gp-drawer iframe", { timeout: 15000 });
   await page.waitForTimeout(2000);
   await page.screenshot({ path: `${shots}/10_preview_${name}.png` });
+  // Verify the preview endpoint actually serves content (not just that the
+  // drawer opened) — this is what regenerates the packet on a cold instance.
+  const prevSrc = await page.getAttribute("#gp-drawer iframe", "src");
+  const prevRes = await page.request.get(prevSrc.startsWith("http") ? prevSrc : BASE + prevSrc);
+  const prevBody = await prevRes.text();
+  check(prevRes.status() === 200 && prevBody.length > 500,
+    `preview renders content: ${name} (${prevRes.status()}, ${prevBody.length} bytes)`);
   await page.keyboard.press("Escape");
   await page.waitForTimeout(400);
-  check(true, `preview opens: ${name}`);
 }
 
 // Download the zip
