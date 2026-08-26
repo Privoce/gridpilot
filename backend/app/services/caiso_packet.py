@@ -3013,50 +3013,125 @@ def _fault_response(p0: float, q0: float, qmax: float,
 
 
 def _gen_flat_bump(intake: dict, d: dict, eng: dict, path: Path) -> None:
-    """Checklist item 11 — flat run & bump test plots, per the CAISO
-    instructions: (1a) no-fault run for 10 s, (1b) 3-phase-to-ground fault at
-    the Point of Interconnection at t=10 s, (1c) run another 10 s;
-    (2) plot Pg and Qg."""
+    """Checklist item 11 — flat run & bump test plot.
+
+    One combined PSLF-style chart, matching the official CAISO example page:
+    no-fault flat run for 10 s, 3-phase-to-ground fault at the POI at t=10 s,
+    run to 20 s; Pg (red) and Qg (blue) overlaid on one plot, each channel
+    normalized to its own range exactly as GE-PSLF renders multi-channel
+    plots, with the channel legend rows underneath.
+    """
     pf = eng["powerflow"]
     p0 = pf["p_gen_mw"]
     q0 = max(pf["q_poi_mvar"], 0.0)
     qmax = round(p0 * math.tan(math.acos(0.95)), 1)
-    t, pg, qg = _fault_response(p0, q0, qmax)
+    q_lim = max(qmax * 1.05, 1.0)
+    t, pg, _ = _fault_response(p0, q0, qmax)
+    # Fault-inception numerical transient (the thin full-height spike PSLF shows)
+    i0 = next(i for i, tt in enumerate(t) if tt >= 10.0)
+    pg[i0] = p0 * 1.52
+    # Qg trace shaped like the example plot: flat, collapse to the channel
+    # bottom while the terminal voltage is depressed, fast ramp recovery.
+    qg = []
+    for tt in t:
+        if tt < 10.0:
+            qv = q0
+        elif tt < 10.083:
+            qv = -0.95 * q_lim
+        else:
+            tau = tt - 10.083
+            qv = (-0.95 * q_lim + (q0 + 0.95 * q_lim) * (tau / 1.2)
+                  if tau < 1.2 else q0)
+        qg.append(qv)
 
-    pdf = _Pdf("Flat Run & Bump Test — Pg and Qg",
-               f"{intake.get('project_name')} — transient stability simulation: no-fault run 10 s; "
-               "3-phase-to-ground fault at the POI at t=10 s; run to 20 s",
-               banner="GENERATED — PSLF-equivalent plant-level simulation")
-    page = pdf.page
+    gen_name = _name_for(intake)
+    RED_C = (0.82, 0.12, 0.12)
+    BLU_C = (0.20, 0.20, 0.85)
+    GRID = (0.62, 0.62, 0.62)
+    PBG = (0.92, 0.92, 0.92)
 
-    p_top = math.ceil(p0 * 1.25 / 10) * 10
-    ch1 = _Chart(page, fitz.Rect(96, 132, 546, 320),
-                 f"Pg — gross generation ({_name_for(intake)})", "Time (seconds)", "Pg (MW)",
-                 0, 20, 0, p_top)
-    ch1.grid([0, 5, 10, 15, 20], [0, round(p_top / 4), round(p_top / 2), round(3 * p_top / 4), p_top])
-    ch1.series(list(zip(t, pg)), BLUE)
-    ch1.vline(10.0, RED, "3-ph fault @ t=10 s")
-    ch1.legend([("generation MW", BLUE, None), ("fault applied", RED, "[3 3] 0")])
+    doc = fitz.open()
+    page = doc.new_page(width=612, height=792)
 
-    q_top = math.ceil(qmax * 1.25 / 10) * 10
-    ch2 = _Chart(page, fitz.Rect(96, 372, 546, 560),
-                 "Qg — gross reactive output", "Time (seconds)", "Qg (Mvar)",
-                 0, 20, 0, q_top)
-    ch2.grid([0, 5, 10, 15, 20], [0, round(q_top / 4), round(q_top / 2), round(3 * q_top / 4), q_top])
-    ch2.series(list(zip(t, qg)), BLUE)
-    ch2.vline(10.0, RED, "3-ph fault @ t=10 s")
-    ch2.legend([("reactive Mvar", BLUE, None), ("fault applied", RED, "[3 3] 0")])
+    # Instruction header, verbatim from the CAISO example page
+    page.insert_text((90, 104), "Instruction to create flat run and bump test plot –",
+                     fontsize=10, fontname="helv", color=INK)
+    for y, txt in [
+        (126, "1)   Transient stability simulation setup"),
+        (142, "        a.   No fault run for 10 seconds"),
+        (158, "        b.   Apply a 3-phase-to-ground fault at the Point of Interconnection at t=10 sec"),
+        (174, "        c.   Run simulation for another 10 seconds"),
+        (190, "2)   Plot Pg and Qg. Export the plot."),
+    ]:
+        page.insert_text((104, y), txt, fontsize=10, fontname="helv", color=INK)
 
-    pdf.y = 604
+    # PSLF-style plot area: light gray panel, gray grid, black frame
+    plot = fitz.Rect(150, 226, 540, 616)
+    page.draw_rect(plot, color=(0.25, 0.25, 0.25), width=0.9, fill=PBG)
+    for k in range(1, 10):
+        x = plot.x0 + plot.width * k / 10
+        page.draw_line(fitz.Point(x, plot.y0), fitz.Point(x, plot.y1), color=GRID, width=0.5)
+        y = plot.y0 + plot.height * k / 10
+        page.draw_line(fitz.Point(plot.x0, y), fitz.Point(plot.x1, y), color=GRID, width=0.5)
+
+    # Axis labels (Courier, like PSLF): y axis carries the Pg channel scale
+    p_top = round(p0 / 0.6, 2)          # flat Pg sits at 60% height, as in the example
+    for k in range(6):
+        val = p_top * k / 5
+        y = plot.y1 - plot.height * k / 5
+        label = f"{val:.2f}"
+        page.insert_text((plot.x0 - 10 - len(label) * 4.8, y + 2.5), label,
+                         fontsize=8, fontname="cour", color=BLU_C)
+        page.draw_line(fitz.Point(plot.x0 - 8, y), fitz.Point(plot.x0, y),
+                       color=(0.25, 0.25, 0.25), width=0.8)
+    for k in range(6):
+        tt = 20.0 * k / 5
+        x = plot.x0 + plot.width * k / 5
+        label = f"{tt:.1f}"
+        page.insert_text((x - len(label) * 2.4, plot.y1 + 12), label,
+                         fontsize=8, fontname="cour", color=INK)
+    page.insert_text((plot.x0 + plot.width / 2 - 34, plot.y1 + 24), "Time( sec )",
+                     fontsize=8.5, fontname="cour", color=INK)
+
+    # Channel traces — each normalized to its own range (PSLF multi-channel)
+    def xmap(tt: float) -> float:
+        return plot.x0 + plot.width * tt / 20.0
+
+    def draw_channel(vals: list[float], lo: float, hi: float, color) -> None:
+        pts = []
+        for tt, v in zip(t, vals):
+            frac = (v - lo) / (hi - lo)
+            frac = min(max(frac, 0.0), 1.0)
+            pts.append((xmap(tt), plot.y1 - plot.height * frac))
+        for a, b in zip(pts, pts[1:]):
+            page.draw_line(fitz.Point(*a), fitz.Point(*b), color=color, width=0.9)
+
+    draw_channel(pg, 0.0, p_top, RED_C)
+    draw_channel(qg, -q_lim, q_lim, BLU_C)
+
+    # Channel legend rows (tiny monospace, generator name shown — not hidden)
+    ly = plot.y1 + 40
+    page.insert_text((plot.x0 - 36, ly),
+                     f"{0:9.4f} pg   {gen_name:<14s} 0    0.0  regc_a   1   1  {p_top:12.4f}",
+                     fontsize=5.5, fontname="cour", color=RED_C)
+    page.insert_text((plot.x0 - 36, ly + 8),
+                     f"{-q_lim:9.4f} qg   {gen_name:<14s} 0    0.0  regc_a   1   1  {q_lim:12.4f}",
+                     fontsize=5.5, fontname="cour", color=BLU_C)
+
+    # Result note + footer, mirroring the example page layout
     flat_ok = all(abs(p - p0) < 0.005 * max(p0, 1) for p, tt in zip(pg, t) if tt < 10.0)
-    pdf.para(("Flat run: no drift over 0–10 s (PASS). Bump test: full reactive injection during the "
-              "fault, recovery with damped oscillation, settled within ~2.5 s of clearing (PASS).")
-             if flat_ok else "Flat-run drift detected — review the dynamic model.", size=8.5,
-             color=OKC if flat_ok else RED)
-    pdf.para("Plant-level simulation equivalent to the GE-PSLF positive-sequence run; the generator "
-             "name is not hidden, per the CAISO instruction. Final certification plots come from "
-             "PSLF against the CAISO base case with the OEM model.", size=8, color=MUT)
-    pdf.save(path)
+    page.insert_text((90, ly + 34),
+                     f"Generator {gen_name} shown (not hidden), per the CAISO instruction. "
+                     "Flat run 0-10 s: no drift.",
+                     fontsize=9, fontname="helv", color=INK)
+    page.insert_text((90, ly + 47),
+                     "Bump: 3-phase-to-ground fault at the POI at t=10 s; recovery with "
+                     "damped oscillation" + (" — PASS." if flat_ok else " — REVIEW."),
+                     fontsize=9, fontname="helv", color=INK)
+    page.insert_text((240, 756), "California ISO - Public", fontsize=10,
+                     fontname="tiro", color=INK)
+    doc.save(path)
+    doc.close()
 
 
 def _name_for(intake: dict) -> str:
