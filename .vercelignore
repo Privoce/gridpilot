@@ -1,0 +1,15 @@
+.venv
+node_modules
+packets
+uploads
+reports
+data
+demo_source
+docs
+CAISO
+scripts
+tests
+gridpilot.db
+*.log
+.pytest_cache
+__pycache__
