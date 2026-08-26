@@ -81,6 +81,18 @@ PAGE = """<!DOCTYPE html>
   .sum .card {{ flex: 1 1 150px; padding: 10px 14px; background: #fff;
     border: 1px solid var(--line); border-radius: 10px; }}
   .sum .card b {{ display: block; font-size: 16px; letter-spacing: -0.01em; }}
+  .docx {{ background: #fff; border: 1px solid var(--line); border-radius: 10px;
+    padding: 46px 54px; max-width: 860px; margin: 0 auto;
+    font: 13.5px/1.6 Arial, Helvetica, sans-serif; }}
+  .docx p {{ margin: 0 0 8px; white-space: pre-wrap; }}
+  .docx p.gap {{ margin: 0 0 4px; }}
+  .docx .tab {{ display: inline-block; width: 28px; }}
+  .docx .cbx {{ color: var(--muted); }}
+  .docx .cbx.on {{ color: var(--ok); font-weight: 700; }}
+  .docx .fillin {{ color: var(--accent); font-weight: 600; text-decoration: underline;
+    text-underline-offset: 3px; }}
+  .docx table {{ margin: 10px 0 14px; border-radius: 0; }}
+  .docx td, .docx th {{ border: 1px solid var(--line); font-size: 12px; }}
   .sum .card span {{ font-family: "JetBrains Mono", monospace; font-size: 10px;
     text-transform: uppercase; letter-spacing: 0.07em; color: var(--muted); }}
   figure.sld {{ margin: 0 0 18px; padding: 16px; background: #fff;
@@ -173,6 +185,60 @@ def _xlsx_body(path: Path) -> str:
     parts.append(
         '<p class="note" style="margin-top:16px">Transfer this data into CAISO\'s official '
         "Attachment A (.xlsm macro workbook) and run its validation to zero errors before submission.</p>"
+    )
+    return "".join(parts)
+
+
+def _docx_body(path: Path) -> str:
+    """Word-form preview: renders the filled document faithfully — paragraphs
+    and tables in original order, with checked boxes and filled entries
+    highlighted."""
+    import docx
+    from docx.table import Table
+    from docx.text.paragraph import Paragraph
+
+    doc = docx.Document(str(path))
+
+    def para_html(par) -> str:
+        runs = []
+        for r in par.runs:
+            t = _e(r.text).replace("\t", '<span class="tab"></span>')
+            t = t.replace("☒", '<span class="cbx on">☒</span>')
+            t = t.replace("☐", '<span class="cbx">☐</span>')
+            if r.underline:
+                t = f'<span class="fillin">{t}</span>'
+            if r.bold:
+                t = f"<b>{t}</b>"
+            runs.append(t)
+        return "".join(runs)
+
+    parts: list[str] = ['<div class="docx">']
+    try:
+        blocks = list(doc.iter_inner_content())
+    except AttributeError:
+        blocks = list(doc.paragraphs) + list(doc.tables)
+    for block in blocks:
+        if isinstance(block, Paragraph):
+            html = para_html(block)
+            if html.strip():
+                cls = ' class="head"' if (block.style and "Heading" in (block.style.name or "")) else ""
+                parts.append(f"<p{cls}>{html}</p>")
+            else:
+                parts.append('<p class="gap"></p>')
+        elif isinstance(block, Table):
+            rows_html = []
+            for ri, row in enumerate(block.rows):
+                tag = "th" if ri == 0 else "td"
+                cells = "".join(
+                    f"<{tag}>{'<br>'.join(para_html(cp) for cp in c.paragraphs if cp.text.strip() or cp.runs)}</{tag}>"
+                    for c in row.cells)
+                rows_html.append(f"<tr>{cells}</tr>")
+            parts.append(f"<table>{''.join(rows_html)}</table>")
+    parts.append("</div>")
+    parts.append(
+        '<p class="note" style="margin-top:16px">This is the official CAISO Appendix 1 Word form '
+        "filled in place — download the .docx for the submission copy and execute it "
+        "electronically in RIMS5.</p>"
     )
     return "".join(parts)
 
@@ -813,6 +879,8 @@ def render_preview(manifest: dict, doc: dict, path: Path, download_url: str) -> 
         body = _pdf_body(download_url)
     elif suffix == ".xlsx":
         body = _xlsx_body(path)
+    elif suffix == ".docx":
+        body = _docx_body(path)
     elif suffix == ".dxf":
         body = _dxf_body(path.read_text(encoding="utf-8"))
     elif suffix == ".epc":

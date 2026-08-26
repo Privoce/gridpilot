@@ -33,7 +33,7 @@ const targets = [
   ["06_LoadFlowModel_Ravenwood.epc", "epc"],
   ["07_DynamicModel_Ravenwood.dyd", "dyd"],
   ["00_SubmissionChecklist_Ravenwood.md", "md"],
-  ["02_Appendix1_Ravenwood.pdf", "pdf"],
+  ["02_Appendix1_Ravenwood.docx", "docx"],
 ];
 for (const [file, tag] of targets) {
   await page.goto(`${BASE}/api/caiso/packets/${pid}/preview/${file}`);

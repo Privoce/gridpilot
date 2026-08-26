@@ -1076,164 +1076,184 @@ def _split_name(full: str) -> tuple[str, str]:
     return parts[0], " ".join(parts[1:])
 
 
+APPENDIX1_TEMPLATE = Path(__file__).resolve().parents[1] / "assets" / "appendix1_template.docx"
+_BLANK_RE = re.compile("\u2002+")
+
+
 def _gen_appendix1(intake: dict, d: dict, path: Path) -> None:
     """Checklist item 2 — Appendix 1 Interconnection Request.
 
-    Mirrors the official CAISO form ("Appendix 1 Interconnection Request",
-    Independent Study / Fast Track) section by section, auto-filled from the
-    intake. The official submission is executed electronically in RIMS5.
+    For CAISO this fills the official Appendix 1 Word form in place: the
+    original document (wording, layout, header/footer) is untouched — only
+    the blank fields (en-space runs) and checkboxes are filled from the
+    intake. Fields the intake cannot answer are left blank and surfaced in
+    the Missing Data Report.
     """
     p = d.get("profile") or get_profile(None)
     if p["iso"] != "CAISO":
         _gen_ir_generic(intake, d, p, path)
         return
+    _fill_appendix1_docx(intake, d, path)
+
+
+def _fill_appendix1_docx(intake: dict, d: dict, path: Path) -> None:
+    import docx
+
+    doc = docx.Document(str(APPENDIX1_TEMPLATE))
+    paras = doc.paragraphs
+
+    def find(prefix: str, nth: int = 1, exact: bool = False):
+        # Whitespace-normalized matching: the form mixes tabs/spaces after "☐".
+        norm = " ".join(prefix.split())
+        n = 0
+        for par in paras:
+            t = " ".join(par.text.split())
+            if (t == norm) if exact else t.startswith(norm):
+                n += 1
+                if n == nth:
+                    return par
+        raise KeyError(prefix)
+
+    def fill(par, *values) -> None:
+        """Replace successive en-space blank runs with values (None skips a
+        blank, leaving it empty); run formatting is preserved."""
+        vals = list(values)
+        for run in par.runs:
+            if not vals:
+                return
+            if "\u2002" in run.text:
+                v = vals.pop(0)
+                if v is not None:
+                    run.text = _BLANK_RE.sub(str(v), run.text, count=1)
+
+    def tick(par) -> None:
+        for run in par.runs:
+            if "☐" in run.text:
+                run.text = run.text.replace("☐", "☒", 1)
+                return
 
     first, last = _split_name(intake.get("signatory_name"))
+    deliv = str(intake.get("deliverability") or "Full Capacity")
     is_solar_or_wind = any(k in str(intake.get("project_type") or "")
                            for k in ("Solar", "Wind"))
+    is_hybrid = d["has_bess"] and "BESS" in str(intake.get("project_type") or "")
     bess_hours = (d["bess_mw"] and _num(intake.get("bess_mwh"))
                   and round(_num(intake.get("bess_mwh")) / d["bess_mw"], 1))
-    is_hybrid = d["has_bess"] and "BESS" in str(intake.get("project_type") or "")
+    today = date.today().strftime("%m/%d/%Y")
 
-    pdf = _Pdf(
-        "Appendix 1 Interconnection Request",
-        "For Non-Cluster, Independent Study / Fast Track",
-        official={"effective": "June 2024", "version": "RIMS-IR-NON-CLUSTER-V03"},
-    )
-
-    # Opening title block of the official form.
-    for text, size in (("INTERCONNECTION REQUEST", 12.5),
-                       ("NO HARD COPY REQUIRED FOR INTERCONNECTION REQUESTS "
-                        "SUBMITTED ELECTRONICALLY VIA RIMS 5", 8.0)):
-        w = fitz.get_text_length(text, fontname="hebo", fontsize=size)
-        pdf.page.insert_text(((PAGE_W - w) / 2, pdf.y), text,
-                             fontsize=size, fontname="hebo", color=INK)
-        pdf.y += size + 8
-
-    pdf.section("1 · Process (check only one)")
-    pdf.checkbox(d["track"] == "Fast Track", "Fast Track Process")
-    pdf.checkbox(d["is_isp"], "Independent Study Process")
-
-    pdf.section("2 · This Interconnection Request is for (check only one)")
-    pdf.checkbox(True, "A proposed new Generating Facility")
-    pdf.checkbox(False, "An increase in the generating capacity to an existing Generating Facility")
-
-    pdf.section("3 · Requested deliverability status (Independent Study Process only)")
-    deliv = str(intake.get("deliverability") or "Full Capacity")
-    pdf.para("On-Peak (for purposes of Net Qualifying Capacity — check one):", size=8.5, color=MUT)
-    pdf.checkbox(deliv == "Full Capacity", "Full Capacity (Independent Study Process only)")
-    pdf.checkbox(deliv == "Partial Deliverability", "Partial Deliverability for ___% of electrical output")
-    pdf.checkbox(deliv == "Energy Only", "Energy Only")
+    # 1. Process (check only one)
+    tick(find("☐  Fast Track Process") if d["track"] == "Fast Track"
+         else find("☐  Independent Study Process"))
+    # 2. Request type
+    tick(find("☐  A proposed new Generating Facility"))
+    # 3. Deliverability (on-peak / off-peak)
+    if deliv == "Full Capacity":
+        tick(find("☐  Full Capacity"))
+    elif deliv == "Energy Only":
+        tick(find("☐  Energy Only"))
+    else:
+        par = find("☐  Partial Deliverability for")
+        tick(par)
+        fill(par, intake.get("partial_pct") or "")
     if is_solar_or_wind:
-        pdf.para("Off-Peak (projects containing wind or solar — check one):", size=8.5, color=MUT)
-        pdf.checkbox(deliv != "Energy Only", "Off-Peak Deliverability")
-        pdf.checkbox(deliv == "Energy Only", "Economic Only")
-    pdf.para("Note: deliverability analysis for the Independent Study Process is conducted with the "
-             "next annual Cluster Study — GIDAP Section 4.6.", size=7.5, color=MUT)
+        if deliv != "Energy Only":
+            tick(find("☐ Off-Peak Deliverability"))
+        else:
+            tick(find("☐ Economic Only"))
+    # 4a. Project name & location (street address / city / zip are not in the
+    # intake — left blank on purpose; see the Missing Data Report)
+    fill(find("Project Name:"), intake.get("project_name"))
+    fill(find("County:"), intake.get("county"))
+    fill(find("State:"), intake.get("state") or "CA")
+    fill(find("Latitude:"), d["lat"], d["lon"])
+    # 4b. Megawatt values
+    fill(find("Total Generating Facility Gross Capacity:"), _fmt(_num(intake.get("gross_mva"))))
+    fill(find("Total Generating Facility Gross Output:"), _fmt(d["gross"]))
+    fill(find("Generating Facility Auxiliary Load:"), _fmt(d["aux"]))
+    fill(find("Maximum Net Megawatt Electrical Output:"), _fmt(d["max_net"]))
+    fill(find("Anticipated losses between the Generating Facility and POI:"), _fmt(d["losses"]))
+    fill(find("Requested Interconnection Service Capacity"), _fmt(d["net"]))
+    fill(find("Provide a description of any automatic control scheme"),
+         f"A plant-level Power Plant Controller (PPC) monitors POI revenue metering and limits "
+         f"aggregate export to {_fmt(d['net'])} MW via real-time inverter setpoint dispatch; "
+         "inverter-level curtailment provides backup limitation.")
+    # 4c. Technology + equipment configuration
+    tech_par = find("Technology", exact=True)
+    tech_par.runs[-1].text = "\t" + str(intake.get("project_type") or "")
+    fill(find("Technology Comments:"),
+         f"{intake.get('inverter') or 'Inverters TBD'}; {intake.get('module') or 'modules TBD'}"
+         + (f"; {intake.get('bess_vendor') or 'BESS TBD'}" if d["has_bess"] else ""))
+    conf_par = find("General description of the equipment configuration")
+    conf_par.runs[-1].text = (
+        f"  GSU {intake.get('transformer') or 'TBD'}; {_fmt(d['col_kv'])} kV collector system; "
+        f"gross {_fmt(d['gross'])} MW, net {_fmt(d['net'])} MW at POI.")
+    # Generation-type table: row 1 = PV, row 3 = storage (entry rows)
+    tbl = doc.tables[0]
 
-    pdf.section("4a · Project name & location")
-    pdf.kv("Project name", str(intake.get("project_name") or ""))
-    pdf.kv("County", str(intake.get("county") or "—"))
-    pdf.kv("State", str(intake.get("state") or "—"))
-    pdf.kv("GPS coordinates (decimal)", f"Latitude {d['lat']}   Longitude {d['lon']}")
+    def fill_row(row, gen_type: str, fuel: str, mw, mwh=None, hours=None, hybrid=False):
+        row.cells[0].paragraphs[0].runs[0].text = gen_type
+        row.cells[1].paragraphs[0].runs[0].text = fuel
+        fill(row.cells[2].paragraphs[0], _fmt(mw))
+        if mwh is not None:
+            fill(row.cells[3].paragraphs[0], _fmt(mwh))
+        if hours is not None:
+            fill(row.cells[4].paragraphs[0], _fmt(hours))
+        tick(row.cells[6].paragraphs[0] if hybrid else row.cells[5].paragraphs[0])
 
-    pdf.section("4b · Project megawatt values")
-    pdf.kv("Total Generating Facility Gross Capacity", f"{_fmt(_num(intake.get('gross_mva')))} MVA",
-           "Total installed MW capacity at unity power factor")
-    pdf.kv("Total Generating Facility Gross Output", f"{_fmt(d['gross'])} MW",
-           "Gross output achieving desired net MW at POI")
-    pdf.kv("Generating Facility Auxiliary Load", f"{_fmt(d['aux'])} MW")
-    pdf.kv("Maximum Net Megawatt Electrical Output", f"{_fmt(d['max_net'])} MW",
-           "Gross output less auxiliary load")
-    pdf.kv("Anticipated losses to POI", f"{_fmt(d['losses'])} MW",
-           "All transformer and line losses between the generating units and the POI")
-    pdf.kv("Requested Interconnection Service Capacity", f"{_fmt(d['net'])} MW (desired net MW at POI)",
-           "Appears in the CAISO queue report; TP Deliverability allocations cannot exceed this value")
-    pdf.para(
-        "Automatic control scheme: a plant-level Power Plant Controller (PPC) monitors POI revenue "
-        f"metering and limits aggregate export to {_fmt(d['net'])} MW via real-time inverter setpoint "
-        "dispatch; inverter-level curtailment provides backup limitation.", size=8.5, color=MUT)
-
-    pdf.section("4c · Type of project & equipment configuration")
-    pdf.kv("Generation type / fuel", str(intake.get("project_type") or ""))
+    pv_mw = d["gross"] - (d["bess_mw"] or 0)
+    fill_row(tbl.rows[1], "Solar Photovoltaic", "Solar", pv_mw, hybrid=is_hybrid)
     if d["has_bess"]:
-        pdf.kv("Storage", f"{_fmt(d['bess_mw'])} MW / {_fmt(_num(intake.get('bess_mwh')))} MWh"
-               + (f" ({_fmt(bess_hours)} hour(s))" if bess_hours else ""))
-        pdf.checkbox(not is_hybrid, "Co-Located")
-        pdf.checkbox(is_hybrid, "Hybrid")
-    conf = f"{intake.get('inverter') or 'Inverters TBD'}; {intake.get('module') or 'modules TBD'}"
-    if d["has_bess"]:
-        conf += f"; {intake.get('bess_vendor') or 'BESS TBD'}"
-    conf += f"; GSU {intake.get('transformer') or 'TBD'}; {_fmt(d['col_kv'])} kV collector system."
-    pdf.para("General description of the equipment configuration:", size=8.5, color=MUT)
-    pdf.para(conf, size=8.5)
-
-    pdf.section("4d · Dates (sequential; COD within 7 years of application)")
-    pdf.kv("Proposed In-Service Date", d["in_service"].strftime("%m/%d/%Y"),
-           "First date transmission is needed to the facility")
-    pdf.kv("Proposed Trial Operation Commencement Date", d["trial_op"].strftime("%m/%d/%Y"))
-    pdf.kv("Proposed Commercial Operation Date", d["cod"].strftime("%m/%d/%Y"))
-    pdf.kv("Proposed Term of Service", "40 years")
-
-    pdf.section("4e · Interconnection Customer contact person")
-    pdf.kv("First / Last name", f"{first} / {last}")
-    pdf.kv("Title", str(intake.get("signatory_title") or "—"))
-    pdf.kv("Company name", str(intake.get("legal_name") or ""))
-    pdf.kv("Phone number", str(intake.get("contact_phone") or "—"))
-    pdf.kv("Email address", str(intake.get("contact_email") or "—"))
-
-    pdf.section("4f · Point of Interconnection")
-    pdf.kv("Substation or transmission line name", str(intake.get("poi_name") or ""))
-    pdf.kv("Voltage level", f"{_fmt(d['kv'])} kV")
+        fill_row(tbl.rows[3], "Battery Energy Storage", "Battery", d["bess_mw"],
+                 _num(intake.get("bess_mwh")), bess_hours, hybrid=is_hybrid)
+    # 4d. Dates
+    fill(find("Proposed In-Service Date:"), d["in_service"].strftime("%m/%d/%Y"))
+    fill(find("Proposed Trial Operation Commencement Date:"), d["trial_op"].strftime("%m/%d/%Y"))
+    fill(find("Proposed Commercial Operation Date:"), d["cod"].strftime("%m/%d/%Y"))
+    fill(find("Proposed Term of Service (years):"), "40")
+    # 4e. Contact person (company street address is not in the intake)
+    fill(find("First Name:", 1), first)
+    fill(find("Last Name:", 1), last)
+    fill(find("Title:", 1), intake.get("signatory_title"))
+    fill(find("Company Name:", 1), intake.get("legal_name"))
+    fill(find("Phone Number:", 1), intake.get("contact_phone"))
+    fill(find("Email Address:", 1), intake.get("contact_email"))
+    # 4f. Point of Interconnection
+    fill(find("Substation or Transmission Line Name:"), intake.get("poi_name"), _fmt(d["kv"]))
     shared = str(intake.get("shared_facilities") or "No shared facilities")
-    pdf.kv("Third-party shared gen-tie", "Yes — " + shared if "gen-tie" in shared.lower() else "No")
-
-    pdf.section("4g · Interconnection Customer data (Attachment A)")
-    pdf.para("The technical data called for in GIDAP Appendix 1, Attachment A is submitted via "
-             f"{RIMS5_URL} as a separate Excel workbook (see checklist item 3).", size=8.5)
-
-    pdf.section("5 · Study deposit")
-    pdf.kv("Applicable deposit", d["deposit"])
-    pdf.para("Wire funds to CAISO: Wells Fargo Bank (LGIP), ABA 121000248, Acct 4122041825, "
-             "Federal Tax ID 94-3274043. Reference the project name in the notes area of the "
-             "wire transfer.", size=8.5, color=MUT)
-
-    pdf.section("6 · Evidence of site exclusivity")
-    pdf.checkbox(True, "Is attached to this Interconnection Request")
+    gt_par = find("Third-party Shared Gen-tie:")
+    gt_par.runs[-1].text = "Yes — " + shared if "gen-tie" in shared.lower() else "No"
+    # 6. Site exclusivity
+    tick(find("☐ Is attached to this Interconnection Request"))
     sc = str(intake.get("site_control") or "")
-    pdf.para("Type of site exclusivity provided (letters of intent are not acceptable):", size=8.5, color=MUT)
-    pdf.checkbox("Deed" in sc, "Proof of Ownership (Deed)")
-    pdf.checkbox(sc == "Lease Agreement", "Lease Agreement")
-    pdf.checkbox(sc == "Option to Purchase", "Option to Purchase")
-    pdf.checkbox("Option to Lease" in sc, "Option to Lease")
-    pdf.kv("Granted to the same entity as Section 9?", "Yes",
-           f"Site owner / lessor: {intake.get('site_owner') or '—'}")
-    pdf.kv("Acreage acquired or reserved", f"~{_fmt(d['acres'])} acres")
+    for label, match in (("☐ Proof of Ownership (Deed)", "Deed" in sc),
+                         ("☐ Lease Agreement", sc == "Lease Agreement"),
+                         ("☐ Option to Purchase", sc == "Option to Purchase"),
+                         ("☐ Option to Lease", "Option to Lease" in sc)):
+        if match:
+            tick(find(label))
+    tick(find("☐ Yes", exact=True))
+    # 40-year lease from COD — matches the Site Exclusivity form (item 4).
+    fill(find("Term of Agreement?"), "40")
+    fill(find("Acreage acquired or reserved for project site?"), f"~{_fmt(d['acres'])}")
+    # 8. Representative to contact (same as the contact person)
+    fill(find("First Name:", 2), first)
+    fill(find("Last Name:", 2), last)
+    fill(find("Title:", 2), intake.get("signatory_title"))
+    fill(find("Company Name:", 2), intake.get("legal_name"))
+    fill(find("Phone Number:", 2), intake.get("contact_phone"))
+    fill(find("Email Address:", 2), intake.get("contact_email"))
+    # 9. Submitted by + consent + e-signature
+    fill(find("Legal name of the Interconnection Customer:"), intake.get("legal_name"))
+    fill(find("State of Origin for Secretary of State Document:"), intake.get("state_of_origin"))
+    fill(find("Name of Parent Company (if applicable):"), "N/A")
+    tick(find("☐ By executing this Interconnection Request"))
+    tick(find("☐ Your electronic signature below"))
+    fill(find("First Name:", 3), first)
+    fill(find("Last Name:", 3), last)
+    fill(find("Title:", 3), intake.get("signatory_title"))
+    fill(find("Date (MM/DD/YYYY):"), today)
 
-    pdf.section("7 · Submission")
-    pdf.para(f"This Interconnection Request is submitted to CAISO via {RIMS5_URL}. "
-             "Non-electronic submissions: California ISO, Attn: Grid Assets, P.O. Box 639014, "
-             "Folsom, CA 95763-9014.", size=8.5)
-
-    pdf.section("8 · Representative of the Interconnection Customer to contact")
-    pdf.kv("Name / Title", f"{intake.get('signatory_name') or ''}, {intake.get('signatory_title') or ''}")
-    pdf.kv("Company", str(intake.get("legal_name") or ""))
-    pdf.kv("Phone / Email", f"{intake.get('contact_phone') or '—'} / {intake.get('contact_email') or '—'}")
-
-    pdf.section("9 · Submitted by")
-    pdf.kv("Legal name of the Interconnection Customer", str(intake.get("legal_name") or ""),
-           "Punctuation and spelling must match the Secretary of State document exactly")
-    pdf.kv("State of origin (Secretary of State)", str(intake.get("state_of_origin") or "—"))
-    pdf.kv("Parent company (if applicable)", "N/A")
-    pdf.checkbox(True, "Consents to CAISO's disclosure of confidential information to Affected "
-                       "Systems under NDA (Tariff Appendix DD, Sections 3.7 and 15.1.2)")
-    pdf.checkbox(True, "Electronic signature: the information contained in this Interconnection "
-                       "Request is true and correct to the best of the Customer's knowledge")
-    pdf.kv("First / Last name", f"{first} / {last}")
-    pdf.kv("Title", str(intake.get("signatory_title") or "—"))
-    pdf.kv("Date", date.today().strftime("%m/%d/%Y"),
-           "Execute electronically in RIMS5 — this draft mirrors the official form")
-    pdf.save(path)
+    doc.save(str(path))
 
 
 def _gen_ir_generic(intake: dict, d: dict, p: dict, path: Path) -> None:
@@ -2750,11 +2770,13 @@ def generate_packet(intake: dict[str, Any], org_id: str, iso: str | None = None)
     # actions, not documents.
     form_file = "Appendix1" if profile["iso"] == "CAISO" else "InterconnectionRequest"
     tech_file = "AttachmentA" if profile["iso"] == "CAISO" else "TechnicalData"
+    form_ext = "docx" if profile["iso"] == "CAISO" else "pdf"
     _gen_appendix1(intake, d, add(
-        "02", "appendix1", profile["form_name"], f"02_{form_file}_{slug}.pdf",
-        "checklist", "generated", loc("AUTO-FILLED — e-sign in RIMS5"), "GridPilot",
-        loc("Mirrors the official form section by section (process, deliverability, 4a–4g, deposit, "
-            "site exclusivity, signature). Execute electronically in RIMS5."), 2))
+        "02", "appendix1", profile["form_name"], f"02_{form_file}_{slug}.{form_ext}",
+        "checklist", "generated", loc("OFFICIAL FORM AUTO-FILLED — e-sign in RIMS5"), "GridPilot",
+        loc("The official CAISO Appendix 1 Word form, filled in place — original wording, layout, "
+            "and checkboxes untouched; blanks the intake cannot answer stay empty (see Missing "
+            "Data Report). Execute electronically in RIMS5."), 2))
     _gen_attachment_a(intake, d, eng, add(
         "03", "attachment_a", profile["tech_form"], f"03_{tech_file}_{slug}.xlsx",
         "checklist", "generated", loc("DATA READY — transfer into official .xlsm"), "GridPilot",
