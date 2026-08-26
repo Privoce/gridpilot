@@ -2415,26 +2415,44 @@ def _site_aerial_image(d: dict) -> bytes | None:
     if key in _AERIAL_CACHE:
         return _AERIAL_CACHE[key]
     # Bundled asset for the demo site — no API call, instant on serverless.
-    bundled = CAISO_LOGO.parent / f"aerial_{key}.jpg"
+    bundled = CAISO_LOGO.parent / f"aerial2_{key}.jpg"
     if bundled.exists():
         data = bundled.read_bytes()
         _AERIAL_CACHE[key] = data
         return data
     if not settings.xai_api_key:
         return None
-    cache_file = PACKETS_DIR / f"aerial_{key}.jpg"
+    cache_file = PACKETS_DIR / f"aerial2_{key}.jpg"
     if cache_file.exists():
         data = cache_file.read_bytes()
         _AERIAL_CACHE[key] = data
         return data
+    # The exhibit linework rides in the AI image itself so the boundary follows
+    # the terrain (on open ground, off the roads) instead of being stamped at
+    # fixed coordinates. Text stays out of the image — every label, callout,
+    # and the technical panel is drawn deterministically in the PDF layer.
     prompt = (
         "Straight-down satellite orthophoto of undeveloped arid ranch land in Kern County, "
-        "California, as seen in GIS mapping software. Flat semi-desert terrain with sparse "
-        "scrub vegetation, dry dirt fields with faint parcel boundaries, a few unpaved ranch "
-        "roads, and one two-lane rural road crossing near the bottom edge. Muted natural earth "
-        "tones, uniform overhead perspective, consistent scale, photorealistic aerial imagery. "
-        "Strictly top-down orthographic view. No buildings, no solar panels, no text, no "
-        "labels, no markers, no watermark, no map UI."
+        "California, annotated as a GIS site-control exhibit for a power plant "
+        "interconnection filing. Base terrain: flat semi-desert with sparse scrub "
+        "vegetation, dry dirt fields, muted natural earth tones, photorealistic aerial "
+        "imagery, uniform overhead scale, strictly top-down orthographic view. One "
+        "two-lane rural road runs along the bottom edge of the frame and one faint "
+        "unpaved ranch road near the left edge; everywhere else is open ground. "
+        "Map-overlay annotations drawn on the photo in clean solid linework, with NO "
+        "text anywhere: "
+        "(1) One thick bright RED boundary polygon — a slightly irregular quadrilateral "
+        "centered in the frame covering about sixty percent of the image. The red line "
+        "lies entirely on open ground and never touches or crosses any road; all roads "
+        "stay outside the red polygon. "
+        "(2) Strictly inside the red polygon, in its left-center area: one YELLOW "
+        "rectangular outline marking an electrical switchyard pad. "
+        "(3) Strictly inside the red polygon, in its right-center area: a cluster of "
+        "WHITE rectangular outlines marking the proposed facility footprint, not "
+        "overlapping the yellow rectangle. "
+        "Nothing yellow or white appears outside the red polygon. No text, no numbers, "
+        "no labels, no arrows, no legend, no watermark, no map UI, no buildings, "
+        "no solar panels."
     )
     try:
         import httpx
@@ -2504,26 +2522,19 @@ def _gen_site_drawing(intake: dict, d: dict, eng: dict, path: Path) -> None:
                 fitz.Point(x1 - 9 * math.cos(ang + da), y1 - 9 * math.sin(ang + da)),
                 color=WHT, width=1.6)
 
-    # Land under site control — red boundary (slightly irregular quadrilateral)
-    bdy = [(200, 110), (560, 145), (520, 528), (168, 480), (200, 110)]
-    _polyline(page, bdy, RED_B, width=1.8)
-    label_box(455, 88, "LAND UNDER SITE CONTROL", 130)
-    arrow(520, 104, 480, 138)
+    # The red site-control boundary, yellow switchyard, and white footprint
+    # linework live in the AI aerial exhibit itself (drawn on open ground,
+    # off the roads). The PDF layer adds the callouts pointing at the regions
+    # the prompt pins down: boundary centered, switchyard left-center inside,
+    # footprint right-center inside.
+    label_box(455, 60, "LAND UNDER SITE CONTROL", 130)
+    arrow(520, 76, 490, 122)
 
-    # New switchyard — yellow
-    swy = [(165, 255), (315, 268), (300, 445), (150, 430), (165, 255)]
-    _polyline(page, swy, YEL, width=2.2)
     label_box(66, 288, "NEW SWITCHYARD", 96, "(GIS coordination)")
-    arrow(162, 300, 218, 350)
+    arrow(162, 300, 250, 295)
 
-    # Proposed facility footprint — white compound outline
-    fp_outer = [(365, 300), (445, 300), (445, 262), (505, 262), (505, 300),
-                (545, 300), (545, 500), (365, 500), (365, 300)]
-    _polyline(page, fp_outer, WHT, width=2.4)
-    _polyline(page, [(385, 330), (450, 330), (450, 470), (385, 470), (385, 330)], WHT, width=2.4)
-    _polyline(page, [(465, 330), (528, 330), (528, 470), (465, 470), (465, 330)], WHT, width=2.4)
     label_box(300, 520, "PROPOSED FACILITY", 108, "FOOTPRINT")
-    arrow(360, 520, 390, 495)
+    arrow(360, 520, 410, 372)
 
     # POI + gen-tie callout (orange, off-site indicator like the example).
     # Dark translucent chips keep the colored text legible on bright terrain.
@@ -2538,7 +2549,7 @@ def _gen_site_drawing(intake: dict, d: dict, eng: dict, path: Path) -> None:
                    fill=(0.12, 0.12, 0.12), fill_opacity=0.62)
     page.insert_text((92, 186), "Gen-tie", fontsize=9, fontname="hebo", color=YEL)
     page.insert_text((92, 198), f"{_fmt(gentie_mi)} miles", fontsize=9, fontname="hebo", color=YEL)
-    page.draw_line(fitz.Point(156, 92), fitz.Point(230, 330), color=RED_B, width=1.2)
+    page.draw_line(fitz.Point(156, 92), fitz.Point(255, 290), color=RED_B, width=1.2)
 
     # Scale bar (bottom-right of the map)
     page.draw_rect(fitz.Rect(494, 528, 566, 550), color=None,
