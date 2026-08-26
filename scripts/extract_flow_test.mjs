@@ -38,12 +38,12 @@ await page.click("#wiz-extract");
 await page.waitForTimeout(500);
 console.log("extract blocked while staged:", (await page.locator("#intake-form").count()) === 0);
 
-// Preview staged files — each carries its own seeded defect
+// Preview staged files — the BESS sheet carries the seeded defect
 await page.click('[data-file-preview="file_technical"]');
 await page.waitForSelector("#gp-drawer iframe", { timeout: 8000 });
 const wbSrc = await page.getAttribute("#gp-drawer iframe", "src");
 const wbHtml = await (await page.request.get(BASE + wbSrc)).text();
-console.log("staged workbook shows MW defect (128):", />128</.test(wbHtml));
+console.log("staged workbook shows reconciled net MW (125):", />125</.test(wbHtml));
 await page.keyboard.press("Escape");
 await page.waitForTimeout(400);
 await page.click('[data-file-preview="file_bess"]');
@@ -65,44 +65,21 @@ await page.click("#wiz-extract");
 await page.waitForSelector("#intake-form", { timeout: 25000 });
 console.log("AI provenance badges:", await page.getByText("Extracted from").count());
 
-// Validate → red items in stable order
+// Validate → one red item (the seeded BESS defect); the MW chain reconciles
 await page.click("#wiz-validate");
 await page.waitForSelector("#wiz-back-2", { timeout: 10000 });
-console.log("blocking shown:", (await page.textContent("body")).includes("Blocking issues found"));
-const titlesBefore = await page.locator("article strong").allTextContents();
-const mwIdxBefore = titlesBefore.findIndex((t) => t.includes("MW chain"));
+const redBody = await page.textContent("body");
+console.log("blocking shown:", redBody.includes("Blocking issues found"));
+console.log("MW chain clean on first pass, BESS red:",
+  !redBody.includes("MW chain does not reconcile") && redBody.includes("BESS energy missing"));
 await page.screenshot({ path: shots + "/5_step4_red.png", fullPage: true });
 
-// Fix 1: corrected workbook → clears the MW chain finding only
-await page.locator('[data-fix-example="file_technical"]').first().click();
+// Fix: corrected BESS spec sheet → staged in-card, preview, submit & revalidate
+await page.locator('[data-fix-example="file_bess"]').first().click();
 await page.waitForTimeout(500);
 console.log("in-card upload progress:", (await page.content()).includes("Uploading…"));
-await page.waitForSelector('[data-fix-submit="file_technical"]', { timeout: 8000 });
-await page.screenshot({ path: shots + "/8a_staged_in_card.png", fullPage: true });
-
-// Preview the staged corrected workbook — corrected 125, no BESS rows here
-const stagedPrevUrl = await page
-  .locator('[data-drawer-url*="file_technical"][data-drawer-title*="review before submitting"]')
-  .first()
-  .getAttribute("data-drawer-url");
-const stagedHtml = await (await page.request.get(BASE + stagedPrevUrl)).text();
-console.log("staged workbook preview shows corrected 125:", />125</.test(stagedHtml));
-
-await page.locator('[data-fix-submit="file_technical"]').first().click();
-await page.waitForTimeout(700);
-console.log("in-card revalidate progress:", (await page.content()).includes("Re-running validation checks"));
-await page.waitForTimeout(3200);
-const afterFix1 = await page.textContent("body");
-console.log("MW chain fixed, BESS still red:",
-  !afterFix1.includes("MW chain does not reconcile") && afterFix1.includes("BESS energy missing"));
-const titlesAfter = await page.locator("article strong").allTextContents();
-const mwIdxAfter = titlesAfter.findIndex((t) => t.includes("MW chain"));
-console.log("MW chain position stable:", mwIdxBefore === mwIdxAfter, `(${mwIdxBefore} → ${mwIdxAfter})`);
-await page.screenshot({ path: shots + "/8b_one_fixed_one_red.png", fullPage: true });
-
-// Fix 2: corrected BESS spec sheet → clears the remaining finding
-await page.locator('[data-fix-example="file_bess"]').first().click();
 await page.waitForSelector('[data-fix-submit="file_bess"]', { timeout: 8000 });
+await page.screenshot({ path: shots + "/8a_staged_in_card.png", fullPage: true });
 const bessPrevUrl = await page
   .locator('[data-drawer-url*="file_bess"][data-drawer-title*="review before submitting"]')
   .first()
@@ -110,10 +87,33 @@ const bessPrevUrl = await page
 const bessFixedHtml = await (await page.request.get(BASE + bessPrevUrl)).text();
 console.log("staged BESS preview shows corrected 200:", />200</.test(bessFixedHtml));
 await page.locator('[data-fix-submit="file_bess"]').first().click();
-await page.waitForTimeout(3800);
-const afterFix2 = await page.textContent("body");
-console.log("revalidated clean:", afterFix2.includes("Intake is clean"));
+await page.waitForTimeout(700);
+console.log("in-card revalidate progress:", (await page.content()).includes("Re-running validation checks"));
+await page.waitForTimeout(3200);
+const afterFix = await page.textContent("body");
+console.log("revalidated clean:", afterFix.includes("Intake is clean"));
 await page.screenshot({ path: shots + "/8_step4_green.png", fullPage: true });
+
+// Regression: a manually entered wrong net MW re-opens the MW chain finding,
+// and a corrected workbook upload (example button) clears it
+await page.click("#wiz-back");
+await page.waitForSelector("#intake-form", { timeout: 10000 });
+await page.fill('[data-intake="net_mw_poi"]', "128");
+await page.click("#wiz-validate");
+await page.waitForSelector('[data-fix-example="file_technical"]', { timeout: 10000 });
+console.log("MW chain red after manual edit:",
+  (await page.textContent("body")).includes("MW chain does not reconcile"));
+await page.locator('[data-fix-example="file_technical"]').first().click();
+await page.waitForSelector('[data-fix-submit="file_technical"]', { timeout: 8000 });
+const stagedPrevUrl = await page
+  .locator('[data-drawer-url*="file_technical"][data-drawer-title*="review before submitting"]')
+  .first()
+  .getAttribute("data-drawer-url");
+const stagedHtml = await (await page.request.get(BASE + stagedPrevUrl)).text();
+console.log("staged workbook preview shows corrected 125:", />125</.test(stagedHtml));
+await page.locator('[data-fix-submit="file_technical"]').first().click();
+await page.waitForTimeout(3800);
+console.log("example fix revalidated clean:", (await page.textContent("body")).includes("Intake is clean"));
 
 // Regression: native picker path also goes upload → staged → submit
 await page.click("#wiz-back");

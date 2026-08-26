@@ -622,8 +622,8 @@ function fmtBytes(n) {
 }
 
 // Corrected example files the demo provides for one-click fixes on red validation
-// items. Each seeded defect lives in its own document, so each corrected revision
-// clears exactly one finding. No "example" flag → extraction returns corrected values.
+// items. Each finding maps to its own document, so each corrected revision clears
+// exactly one finding. No "example" flag → extraction returns corrected values.
 const FIX_EXAMPLES = {
   file_technical: {
     meta: { name: "Ravenwood_TechnicalData_Workbook_v2_CORRECTED.xlsx", size: 88_410 },

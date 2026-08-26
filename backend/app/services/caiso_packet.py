@@ -220,9 +220,10 @@ DEFAULT_INTAKE: dict[str, Any] = {
     "gross_mw": 128.0,
     "aux_mw": 2.5,
     "losses_mw": 0.5,
-    # Deliberate kickoff-data defects so the demo exercises the fix-and-revalidate
-    # loop: net at POI doesn't reconcile the MW chain, and BESS energy is missing.
-    "net_mw_poi": 128.0,
+    # Net reconciles the MW chain: gross 128 − aux 2.5 − losses 0.5 = 125 at POI.
+    # One deliberate kickoff defect remains so the demo exercises the
+    # fix-and-revalidate loop: BESS energy (MWh) is missing.
+    "net_mw_poi": 125.0,
     "bess_mw": 50.0,
     "bess_mwh": None,
     "bess_charging": "On-site generation only",
@@ -306,10 +307,10 @@ EXTRACTION_SOURCES: list[tuple[str, str, list[str]]] = [
     ("file_dyd", "Vendor dynamic model", ["dyd_status"]),
 ]
 
-# The example documents carry the seeded kickoff defects — one per file, so each
-# corrected upload clears exactly its own finding. A replacement upload represents
-# the developer's corrected revision; extraction from a non-example file returns
-# the reconciled values.
+# Values a corrected (non-example) replacement upload carries for its intake
+# fields, so a corrected revision clears exactly its own finding. The example
+# BESS sheet carries the seeded kickoff defect (missing MWh); the technical
+# workbook entry also lets a corrected upload repair a manually mistyped net MW.
 CORRECTED_EXTRACTIONS: dict[str, dict[str, Any]] = {
     "file_technical": {"net_mw_poi": 125.0},
     "file_bess": {"bess_mwh": 200.0},
