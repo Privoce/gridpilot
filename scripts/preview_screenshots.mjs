@@ -28,7 +28,7 @@ const pid = gen.packet.id;
 console.log("packet:", pid);
 
 const targets = [
-  ["03_AttachmentA_Ravenwood.xlsx", "xlsx"],
+  ["03_AttachmentA_Ravenwood.xlsm", "xlsx"],
   ["S1_ProjectBoundary_Ravenwood.kmz", "kmz"],
   ["06_LoadFlowModel_Ravenwood.epc", "epc"],
   ["07_DynamicModel_Ravenwood.dyd", "dyd"],

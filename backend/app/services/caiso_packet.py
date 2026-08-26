@@ -1370,16 +1370,306 @@ def _gen_ir_generic(intake: dict, d: dict, p: dict, path: Path) -> None:
     pdf.save(path)
 
 
+ATTACHMENT_A_TEMPLATE = Path(__file__).resolve().parents[1] / "assets" / "attachment_a_template.xlsm"
+
+
 def _gen_attachment_a(intake: dict, d: dict, eng: dict, path: Path) -> None:
     """Checklist item 3 — Attachment A to Appendix 1 (Generator Technical Data).
 
-    Mirrors the official CAISO macro workbook (v14.5) sheet structure —
-    Instructions, I. Project Configuration (with the official item numbers),
-    I-a. Short Circuit Data Table, II. Technical Validation, and
-    V. IR Validation & Comments — filled from the intake and the solved
-    engineering pass. Transfer into the official .xlsm before submission
-    (macros cannot ride in a generated file).
+    For CAISO this fills the official macro workbook (v14.5) in place —
+    values go into the real input cells, formulas / macros / formatting are
+    untouched. Other ISOs get the generated mirror workbook.
     """
+    p = d.get("profile") or get_profile(None)
+    if p["iso"] == "CAISO" and path.suffix == ".xlsm":
+        _fill_attachment_a_xlsm(intake, d, eng, path)
+        return
+    _gen_attachment_a_xlsx(intake, d, eng, path)
+
+
+def _fill_attachment_a_xlsm(intake: dict, d: dict, eng: dict, path: Path) -> None:
+    import math as _math
+    import warnings
+
+    import openpyxl
+    from openpyxl.utils import get_column_letter as _cl
+
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")  # unsupported-extension warnings from the official file
+        wb = openpyxl.load_workbook(str(ATTACHMENT_A_TEMPLATE), keep_vba=True)
+
+    def W(sheet, coord: str, value) -> None:
+        """Merged-range-aware cell write: values land on the range anchor."""
+        cell = sheet[coord]
+        for rng in sheet.merged_cells.ranges:
+            if cell.coordinate in rng:
+                cell = sheet.cell(rng.min_row, rng.min_col)
+                break
+        cell.value = value
+
+    design = eng["design"]
+    pf = eng["powerflow"]
+    inv = design["inverter"]
+    bess = design.get("bess_unit")
+    c = design["counts"]
+    has_bess = bool(bess and c["bess_units"])
+    proj = str(intake.get("project_name") or "")
+    pv_name = f"{proj} PV"
+    bess_name = f"{proj} BESS"
+    col_kv = _num(intake.get("collector_kv")) or 34.5
+    charging = str(intake.get("bess_charging") or "On-site generation only")
+    is_tracking = "Solar" in str(intake.get("project_type") or "")
+
+    # --- Instructions: project information block --------------------------
+    wsi = wb["Instructions"]
+    W(wsi, "C10", proj)
+    W(wsi, "C11", str(intake.get("queue_ref") or "Not yet assigned"))
+    W(wsi, "C12", str(intake.get("legal_name") or ""))
+    W(wsi, "C13", f"{intake.get('signatory_name') or ''} - {intake.get('contact_email') or ''}")
+    W(wsi, "C14", f"{intake.get('poi_name') or ''} - {_fmt(d['kv'])} kV")
+
+    # --- I. Project Configuration ------------------------------------------
+    ws = wb["I. Project Configuration"]
+
+    # Section I (column F holds the input; I.1/I.4/I.6 are workbook formulas
+    W(ws, "F5", d["gross"])
+    W(ws, "F6", d["aux"])
+    W(ws, "F8", d["losses"])
+    W(ws, "F10", round(d["aux"] * 0.2, 2))
+
+    # Section II — one column per generation type: F = PV, G = BESS
+    def gen_col(col: str, name: str, unit: dict, gtype: str, count: int) -> None:
+        for row_n, val in [
+            (15, name), (16, "DC With Inverter"), (17, gtype),
+            (18, unit["vendor"]), (19, unit["model"]), (23, count),
+            (24, unit["ac_kv"]), (25, 40), (26, unit["mva"]), (27, unit["mw"]),
+            (29, -0.95), (30, 0.95), (31, 5),
+            (32, "Three Phase"), (33, "Grounded WYE"),
+        ]:
+            W(ws, f"{col}{row_n}", val)
+
+    gen_col("F", pv_name, inv,
+            "33: photovoltaic (tracking)" if is_tracking else "32: photovoltaic (fixed)",
+            c["inverters"])
+    if has_bess:
+        gen_col("G", bess_name, bess, "42: energy storage - battery", c["bess_units"])
+
+    # Section V — inverter data in two-column blocks: F:G = PV, H:I = BESS
+    W(ws, "F147", "Yes" if is_tracking else "No")
+    W(ws, "F149", f"{inv['vendor']} {inv['model']}")
+    if has_bess:
+        W(ws, "H149", f"{bess['vendor']} {bess['model']}")
+        W(ws, "H168", "Yes")
+        W(ws, "H176", "No")
+        for i, (hz, sec) in enumerate([(57.0, 0.16), (58.4, 300), (61.2, 300), (61.8, 0.16)]):
+            W(ws, f"H{194 + i}", hz)
+            W(ws, f"I{194 + i}", sec)
+    W(ws, "F150", "OEM voltage/frequency protection settings per datasheet; adjustable via PPC")
+    W(ws, "F154", "IEEE 519 compliant per OEM certification; harmonic study at final design")
+    W(ws, "F158", "Self-start from grid; no external start-up power required")
+    W(ws, "F168", "Yes")  # negative sequence fault current (see I-a table)
+    W(ws, "F176", "No")   # momentary cessation
+    W(ws, "F184", "Continuous current injection through the ride-through envelope; "
+                  "reactive-priority K-factor response per IEEE 2800 and the OEM datasheet.")
+    W(ws, "F188", "No self-lockout; automatic restart after grid conditions normalize per OEM settings")
+    W(ws, "F192", f"{inv.get('dyd_params', {}).get('regc', {}).get('rrpwr', 10):g} pu/s on unit MVA base")
+    for i, (hz, sec) in enumerate([(57.0, 0.16), (58.4, 300), (61.2, 300), (61.8, 0.16)]):
+        W(ws, f"F{194 + i}", hz)   # frequency
+        W(ws, f"G{194 + i}", sec)  # time
+    W(ws, "F204", "Yes" if "DC-coupled" in str(intake.get("project_type") or "") else "No")
+
+    # Section VI — energy storage
+    if has_bess:
+        mwh = _num(intake.get("bess_mwh")) or 0
+        dur = round(mwh / d["bess_mw"], 1) if d["bess_mw"] else ""
+        W(ws, "F210", "transmission grid" if "Grid" in charging
+                      else "AC-side on-site generator only")
+        W(ws, "F212", "Follow ISO dispatch instructions")
+        W(ws, "F214", mwh)
+        W(ws, "F215", 87)
+        for r in (216, 218, 220, 222):   # rated/max discharge + charge power
+            W(ws, f"F{r}", d["bess_mw"])
+        for r in (217, 219, 221, 223):   # durations
+            W(ws, f"F{r}", dur)
+        W(ws, "F224", d["bess_mw"] if "Grid" in charging else 0)
+        W(ws, "F226", 5)
+        W(ws, "F227", 95)
+
+    # Section VII — reactive capability, frequency response, PPC
+    gross_mva = _num(intake.get("gross_mva")) or d["gross"] * 1.05
+    qmax = round(_math.sqrt(max(gross_mva ** 2 - d["gross"] ** 2, 0)), 2)
+    W(ws, "F240", qmax)
+    W(ws, "F241", -qmax)
+    W(ws, "F242", 40)
+    W(ws, "F260", 5)
+    W(ws, "F261", 5)
+    W(ws, "F262", d["net"])
+    W(ws, "F263", 0.036)
+    W(ws, "F265", "Yes")
+    W(ws, "F266", f"{inv['vendor']} (plant controller)")
+    W(ws, "F268", "Voltage Control Mode")
+    W(ws, "F269", "Voltage Control Mode")
+    W(ws, "F270", "No")
+    W(ws, "F272", "No")
+    W(ws, "F274", "Plant controller regulates voltage at the POI and dispatches Q "
+                  "proportionally to the inverter fleet; inverter local control follows "
+                  "the PPC setpoints with coordinated deadbands to prevent hunting.")
+    W(ws, "F278", "Yes")
+    W(ws, "F279", "No")
+    W(ws, "F280", f"PPC closed-loop control holds POI export at {_fmt(d['net'])} MW; "
+                  "frequency droop response per the settings above.")
+
+    # Section VIII — transformers: XFMR1 = GSU/MPT (F=H winding, G=X winding)
+    mpt, pad = design["mpt"], design["pad"]
+    W(ws, "F289", c["main_transformers"])
+    W(ws, "F290", "Three Phase")
+    W(ws, "F293", mpt["mva"])
+    W(ws, "F294", "Wye Grounded")
+    W(ws, "G294", "Delta")
+    W(ws, "F295", "ONAN/ONAF")
+    W(ws, "F297", d["kv"])
+    W(ws, "G297", col_kv)
+    W(ws, "F300", "Yes")
+    W(ws, "F304", mpt["z_pct"])
+    W(ws, "F305", mpt["mva"])
+    W(ws, "F309", mpt["xr"])
+    # XFMR4 = equivalent pad-mount
+    W(ws, "F323", c["blocks"])
+    W(ws, "F324", "Three Phase")
+    W(ws, "F327", pad["mva"])
+    W(ws, "F328", "Delta")
+    W(ws, "G328", "Wye Grounded")
+    W(ws, "F331", col_kv)
+    W(ws, "G331", inv["ac_kv"])
+    W(ws, "F334", "No")
+    W(ws, "F338", pad["z_pct"])
+    W(ws, "F339", pad["mva"])
+    W(ws, "F343", pad["xr"])
+
+    # Section IX — gen-tie line (Line1) and X — collector equivalent
+    z_base_hv = d["kv"] * d["kv"] / 100.0
+    line = design["line"]
+    W(ws, "F357", "No")
+    W(ws, "F362", "No")
+    W(ws, "F368", d["kv"])
+    W(ws, "F369", design["gentie_mi"])
+    W(ws, "F370", f"{proj} {_fmt(d['kv'])} kV substation")
+    W(ws, "F371", str(intake.get("poi_name") or ""))
+    if line.get("conductor"):
+        W(ws, "F373", line["conductor"])
+    W(ws, "F400", round(line["r_ohm_per_mi"] * design["gentie_mi"] / z_base_hv, 6))
+    W(ws, "F401", round(line["x_ohm_per_mi"] * design["gentie_mi"] / z_base_hv, 6))
+    z_base_col = col_kv * col_kv / 100.0
+    W(ws, "F411", col_kv)
+    W(ws, "F424", round(design["cable"]["r_ohm_per_mi"] * design["feeder_mi"] / z_base_col, 6))
+    W(ws, "F425", round(design["cable"]["x_ohm_per_mi"] * design["feeder_mi"] / z_base_col, 6))
+
+    # --- I-a. Short Circuit Data Table: identify the units; the per-voltage
+    # current characteristics are OEM data and stay blank until received.
+    ws1a = wb["I-a. Short Circuit Data Table"]
+    W(ws1a, "B2", pv_name)
+    W(ws1a, "E2", "3LG")
+    if has_bess:
+        W(ws1a, "I2", bess_name)
+        W(ws1a, "L2", "3LG")
+
+    # --- III. Power Flow Model: connectivity input tables -------------------
+    ws3 = wb["III. Power Flow Model"]
+    W(ws3, "C19", inv["ac_kv"])                 # EQ Gen 1 bus kV
+    W(ws3, "A35", "Line1")                      # gen-tie
+    W(ws3, "B35", "High Side of GSU")
+    W(ws3, "C35", "Point of Interconnection")
+    W(ws3, "E35", "XFMR1")                      # main GSU
+    W(ws3, "F35", "High Side of GSU")
+    W(ws3, "G35", "Low Side of GSU 1")
+    W(ws3, "A42", "Collector 1")
+    W(ws3, "B42", "Low Side of GSU 1")
+    W(ws3, "C42", "Feeder 1")
+    W(ws3, "E42", "XFMR4")                      # equivalent pad-mount
+    W(ws3, "F42", c["blocks"])
+    W(ws3, "G42", "Feeder 1")
+    W(ws3, "H42", "EQ Gen 1")
+    W(ws3, "A51", pv_name)
+    W(ws3, "B51", c["inverters"])
+    W(ws3, "C51", "EQ Gen 1")
+    if has_bess:
+        W(ws3, "C20", bess["ac_kv"])
+        W(ws3, "A52", bess_name)
+        W(ws3, "B52", c["bess_units"])
+        W(ws3, "C52", "EQ Gen 2")
+        W(ws3, "H43", "EQ Gen 2")
+    W(ws3, "F51", "Low Side of GSU 1")
+    W(ws3, "G51", d["aux"])
+
+    # --- IV. Dynamic Model: WECC parameter blocks (B = PV, C = BESS) --------
+    ws4 = wb["IV. Dynamic Model"]
+
+    def labels(top: int, bottom: int) -> dict[str, int]:
+        return {str(ws4.cell(r, 1).value).strip().lower(): r
+                for r in range(top, bottom + 1) if ws4.cell(r, 1).value}
+
+    def dyn_block(top: int, bottom: int, col: int, name: str, model: str,
+                  params: dict, extra: dict | None = None) -> None:
+        rows = labels(top, bottom)
+        W(ws4, f"{_cl(col)}{rows['generator']}", name)
+        W(ws4, f"{_cl(col)}{rows['model name']}", model)
+        for key, val in {**params, **(extra or {})}.items():
+            r = rows.get(key.lower())
+            if r:
+                W(ws4, f"{_cl(col)}{r}", val)
+
+    pv_mva_agg = round(inv["mva"] * c["inverters"], 1)
+    bess_mva_agg = round(bess["mva"] * c["bess_units"], 1) if has_bess else 0
+    units = [(2, pv_name, inv, pv_mva_agg, "EQ Gen 1")]
+    if has_bess:
+        units.append((3, bess_name, bess, bess_mva_agg, "EQ Gen 2"))
+
+    for col, name, unit, mva_agg, bus in units:
+        dp = unit.get("dyd_params") or {}
+        wecc = unit.get("wecc_models") or {}
+        dyn_block(3, 21, col, name, str(wecc.get("gen", "regc_a")).lower(),
+                  dp.get("regc") or {}, {"generator bus": bus, "mva": mva_agg, "lvplsw": 1})
+        dyn_block(25, 81, col, name, str(wecc.get("elec", "reec_a")).lower(),
+                  dp.get("reec") or {}, {"mvab": mva_agg})
+        # Frequency ride-through (PRC-024 envelope defaults)
+        frt = labels(148, 172)
+        W(ws4, f"{_cl(col)}{frt['generator']}", name)
+        W(ws4, f"{_cl(col)}{frt['model name']}", "lhfrt")
+        W(ws4, f"{_cl(col)}{frt['monitored bus']}", bus)
+        for i, (hz, sec) in enumerate([(57.0, 0.16), (58.4, 300.0), (61.2, 300.0), (61.8, 0.16)], 1):
+            W(ws4, f"{_cl(col)}{frt[f'dftrp{i}']}", hz)
+            W(ws4, f"{_cl(col)}{frt[f'dttrp{i}']}", sec)
+        W(ws4, f"{_cl(col)}{labels(176, 176)['generator']}", name)
+    # Plant controller — one plant-level REPC at the POI
+    dyn_block(85, 144, 2, pv_name,
+              str((inv.get("wecc_models") or {}).get("plant", "repc_a")).lower(),
+              (inv.get("dyd_params") or {}).get("repc") or {},
+              {"monitored bus": "Point of Interconnection",
+               "monitored branch": "Line1 (High Side of GSU - Point of Interconnection)",
+               "mvab": pv_mva_agg + bess_mva_agg})
+
+    # --- V. IR Validation & Comments: customer confirmation = Yes / N-A ------
+    ws5 = wb["V. IR Validation & Comments"]
+    for row in ws5.iter_rows(min_col=1, max_col=2):
+        a, b = row[0], row[1]
+        if str(a.value).strip() == "Choose":
+            q = str(b.value or "")
+            a.value = "N/A" if "Tower Configuration" in q else "Yes"
+
+    # --- Version Control ------------------------------------------------------
+    wsv = wb["Version Control"]
+    gv = eng.get("graph_version") or (eng.get("graph") or {}).get("version", "")
+    for col_n, val in enumerate([date.today().strftime("%Y-%m-%d"), "Draft 1",
+                                 f"Filled from the validated developer intake (graph {gv})",
+                                 "Interconnection Customer"], 1):
+        wsv.cell(15, col_n, val)
+
+    wb.calculation.fullCalcOnLoad = True   # Excel recalculates formulas on open
+    wb.save(str(path))
+
+
+def _gen_attachment_a_xlsx(intake: dict, d: dict, eng: dict, path: Path) -> None:
+    """Generated mirror of the technical-data workbook (non-CAISO ISOs)."""
     import math as _math
 
     import openpyxl
@@ -2999,10 +3289,17 @@ def generate_packet(intake: dict[str, Any], org_id: str, iso: str | None = None)
         loc("The official CAISO Appendix 1 Word form, filled in place — original wording, layout, "
             "and checkboxes untouched; blanks the intake cannot answer stay empty (see Missing "
             "Data Report). Execute electronically in RIMS5."), 2))
+    aa_ext = "xlsm" if profile["iso"] == "CAISO" else "xlsx"
     _gen_attachment_a(intake, d, eng, add(
-        "03", "attachment_a", profile["tech_form"], f"03_{tech_file}_{slug}.xlsx",
-        "checklist", "generated", loc("DATA READY — transfer into official .xlsm"), "GridPilot",
-        loc("Official sheet structure: I. Project Configuration, I-a. Short Circuit Data, "
+        "03", "attachment_a", profile["tech_form"], f"03_{tech_file}_{slug}.{aa_ext}",
+        "checklist", "generated",
+        loc("OFFICIAL WORKBOOK FILLED — macros intact" if profile["iso"] == "CAISO"
+            else "DATA READY — transfer into official workbook"), "GridPilot",
+        loc("The official CAISO macro workbook (v14.5), filled in place — input cells only; "
+            "formulas, macros, and validation untouched. OEM short-circuit current tables "
+            "(I-a) stay blank until vendor data arrives."
+            if profile["iso"] == "CAISO" else
+            "Official sheet structure: I. Project Configuration, I-a. Short Circuit Data, "
             "II. Technical Validation, V. IR Validation & Comments (all Yes/N-A)."), 3))
     _gen_site_exclusivity(intake, d, add(
         "04", "exclusivity", "Evidence of Site Exclusivity", f"04_SiteExclusivity_{slug}.{form_ext}",

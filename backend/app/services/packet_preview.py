@@ -160,13 +160,23 @@ def _pdf_body(inline_url: str) -> str:
 
 
 def _xlsx_body(path: Path) -> str:
+    import warnings
+
     import openpyxl
 
-    wb = openpyxl.load_workbook(path, data_only=True)
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        wb = openpyxl.load_workbook(path, data_only=True)
     parts: list[str] = []
     for ws in wb.worksheets:
+        if ws.sheet_state != "visible":
+            continue
         rows = []
-        for row in ws.iter_rows(values_only=True):
+        # Cap the scan: the official workbook has sheets with full-row
+        # formatting artifacts spanning thousands of empty columns.
+        for row in ws.iter_rows(max_row=min(ws.max_row, 500),
+                                max_col=min(ws.max_column, 30),
+                                values_only=True):
             cells = ["" if v is None else str(v) for v in row]
             while cells and cells[-1] == "":
                 cells.pop()
@@ -942,7 +952,7 @@ def render_preview(manifest: dict, doc: dict, path: Path, download_url: str) -> 
     suffix = path.suffix.lower()
     if suffix == ".pdf":
         body = _pdf_body(download_url)
-    elif suffix == ".xlsx":
+    elif suffix in (".xlsx", ".xlsm"):
         body = _xlsx_body(path)
     elif suffix == ".docx":
         body = _docx_body(path)
