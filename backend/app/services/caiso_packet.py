@@ -979,7 +979,18 @@ class _Pdf:
         self.page.draw_rect(r, color=INK, width=0.8)
         if checked:
             self.page.insert_text((39.5, self.y - 0.5), "X", fontsize=8, fontname="hebo", color=INK)
-        self.page.insert_text((54, self.y), text, fontsize=9, fontname="helv", color=INK)
+        # Wrap long labels so they don't run off the right page edge.
+        words = text.split()
+        line = ""
+        for w in words:
+            if line and len(line) + len(w) + 1 > 100:
+                self.page.insert_text((54, self.y), line, fontsize=9, fontname="helv", color=INK)
+                self.y += 12
+                self._ensure(13)
+                line = w
+            else:
+                line = f"{line} {w}".strip()
+        self.page.insert_text((54, self.y), line, fontsize=9, fontname="helv", color=INK)
         self.y += 16
 
     def save(self, path: Path) -> None:
