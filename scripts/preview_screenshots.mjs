@@ -28,12 +28,12 @@ const pid = gen.packet.id;
 console.log("packet:", pid);
 
 const targets = [
-  ["02_AttachmentA_Ravenwood.xlsx", "xlsx"],
-  ["08_ProjectBoundary_Ravenwood.kmz", "kmz"],
-  ["10_LoadFlowModel_Ravenwood.epc", "epc"],
-  ["11_DynamicModel_Ravenwood.dyd", "dyd"],
+  ["03_AttachmentA_Ravenwood.xlsx", "xlsx"],
+  ["S1_ProjectBoundary_Ravenwood.kmz", "kmz"],
+  ["06_LoadFlowModel_Ravenwood.epc", "epc"],
+  ["07_DynamicModel_Ravenwood.dyd", "dyd"],
   ["00_SubmissionChecklist_Ravenwood.md", "md"],
-  ["01_Appendix1_Ravenwood.pdf", "pdf"],
+  ["02_Appendix1_Ravenwood.pdf", "pdf"],
 ];
 for (const [file, tag] of targets) {
   await page.goto(`${BASE}/api/caiso/packets/${pid}/preview/${file}`);

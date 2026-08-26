@@ -83,8 +83,16 @@ for (const title of [
   "Source Trace Appendix",
   "Portal Field Export (JSON)",
   "Single-Line Diagram (DXF)",
-  "Load Flow & Short-Circuit Validation",
-  "Dynamic Validation — Flat Start & Bump Tests",
+  "Load Flow & Short-Circuit Report",
+  "Dynamic Validation Report",
+  "Appendix 1 — Interconnection Request",
+  "Attachment A — Generator Technical Data",
+  "Evidence of Site Exclusivity",
+  "Reactive Power Capability Document",
+  "Site Drawing",
+  "Flat Run & Bump Test Plots",
+  "Requested MW at POI Plot",
+  "IBR Model Validation Results",
 ]) {
   check((await page.locator(`text=${title}`).count()) >= 1, `packet lists: ${title}`);
 }

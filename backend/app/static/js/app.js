@@ -866,13 +866,43 @@ function intakeFieldHtml(f, values, prov = null, errs = null) {
 }
 
 const PACKET_CATEGORIES = [
-  ["application", "Application forms"],
-  ["models", "Power system models"],
-  ["simulations", "PSLF simulation plots"],
-  ["drawings", "Drawings & GIS"],
-  ["legal", "Legal & site documents"],
-  ["reference", "Reference"],
+  ["checklist", "Minimum-requirements checklist documents"],
+  ["supporting", "Supporting work products"],
 ];
+
+/** Status band summarising the 13-item CAISO checklist (p.checklist from the API). */
+function checklistBandHtml(p) {
+  const c = p?.checklist;
+  if (!c) return "";
+  const done = (c.generated || []).length;
+  const actions = (c.actions || [])
+    .map((a) => `<li><strong class="text-ink">Item ${esc(a.item)} — ${esc(a.title)}.</strong> ${esc(a.note)}</li>`)
+    .join("");
+  const excluded = (c.excluded || [])
+    .map((a) => `<li><strong class="text-ink">Item ${esc(a.item)} — ${esc(a.title)}.</strong> ${esc(a.note)}</li>`)
+    .join("");
+  const cells = [];
+  for (let i = 1; i <= (c.total || 13); i += 1) {
+    const isDone = (c.generated || []).includes(i);
+    const isAction = (c.actions || []).some((a) => a.item === i);
+    const cls = isDone
+      ? "border-ok/40 bg-ok-soft text-ok"
+      : isAction
+        ? "border-warn/40 bg-warn-soft text-ink"
+        : "border-line bg-soft text-muted";
+    const label = isDone ? "✓" : isAction ? "$" : "—";
+    cells.push(`<span class="inline-flex h-9 w-9 flex-col items-center justify-center rounded-card border ${cls}" title="Checklist item ${i}">
+      <span class="font-mono text-[10px] leading-none">${i}</span><span class="text-[11px] leading-none">${label}</span></span>`);
+  }
+  return `
+    <div class="mb-5 rounded-card border border-line bg-soft p-4">
+      <div class="mb-2 flex flex-wrap items-center gap-2">
+        <strong class="text-[14px]">CAISO minimum requirements — ${done} of ${esc(c.total)} items in this packet</strong>
+      </div>
+      <div class="mb-3 flex flex-wrap gap-1.5">${cells.join("")}</div>
+      <ul class="space-y-1 text-[12.5px] text-muted">${actions}${excluded}</ul>
+    </div>`;
+}
 
 /** base64url-encode the intake so packet URLs are self-contained.
  *  Serverless instances don't share storage; the server regenerates the packet
@@ -905,6 +935,7 @@ function packetDocRowHtml(pid, doc, qs = null) {
     <article class="flex flex-wrap items-start justify-between gap-3 rounded-card border border-line p-3.5">
       <div class="min-w-0 flex-1">
         <div class="flex flex-wrap items-center gap-2">
+          ${doc.checklist_item ? `<span class="rounded-pill border border-line-strong bg-info-soft px-2 py-0.5 font-mono text-[10px] uppercase tracking-[0.06em] text-ink">Item ${esc(doc.checklist_item)}</span>` : ""}
           <strong class="text-[14px] tracking-tightish">${esc(doc.title)}</strong>
           ${chip}
         </div>
@@ -1339,6 +1370,7 @@ function renderWizardStep(step) {
         <div class="rounded-card border border-line bg-soft p-4"><span class="font-mono text-[11px] uppercase tracking-[0.08em] text-muted">Track</span><strong class="mt-1 block text-[13px]">${esc(p.track)}</strong></div>
         <div class="rounded-card border border-line bg-soft p-4"><span class="font-mono text-[11px] uppercase tracking-[0.08em] text-muted">Deposit</span><strong class="mt-1 block text-[13px]">${esc(p.deposit)}</strong></div>
       </div>
+      ${checklistBandHtml(p)}
       <div class="mb-5 rounded-card border border-ok/30 bg-ok-soft p-4">
         <strong class="mb-2 block text-ok">Consistency QC — passed</strong>
         <ul class="space-y-1 text-[13px] text-muted">
@@ -2687,6 +2719,7 @@ async function renderRequest(projectId) {
                  </div>`
               : ""
           }
+          ${checklistBandHtml(p)}
           ${PACKET_CATEGORIES.map(([key, title]) => {
             const docs = p.documents.filter((doc) => doc.category === key);
             if (!docs.length) return "";
