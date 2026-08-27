@@ -1078,7 +1078,6 @@ def _split_name(full: str) -> tuple[str, str]:
 
 
 APPENDIX1_TEMPLATE = Path(__file__).resolve().parents[1] / "assets" / "appendix1_template.docx"
-_BLANK_RE = re.compile("\u2002+")
 
 
 def _gen_appendix1(intake: dict, d: dict, path: Path) -> None:
@@ -1098,77 +1097,95 @@ def _gen_appendix1(intake: dict, d: dict, path: Path) -> None:
 
 
 def _fill_appendix1_docx(intake: dict, d: dict, path: Path) -> None:
+    """Fill the official ISP/Fast Track Appendix 1 Word form.
+
+    The template ("interconnectionrequestform-appendix1-independentstudy
+    andfasttrack") uses legacy Word form fields: FORMCHECKBOX, FORMTEXT and
+    dropdown (ddList) fields. Nothing is generated, moved or deleted — the
+    original wording, headers, footers and cell borders are untouched. The
+    fill only sets checkbox states, form-text results and dropdown
+    selections, then saves as a new document. Fields the intake cannot
+    answer stay blank (they surface in the Missing Data Report).
+    """
     import docx
     from docx.oxml import OxmlElement
     from docx.oxml.ns import qn
 
     doc = docx.Document(str(APPENDIX1_TEMPLATE))
-    paras = doc.paragraphs
+    body = doc.element.body
 
-    def _box(run) -> None:
-        """Draw a single-line border around the run so the entry reads as a
-        form cell (matches how the blanks render in Word)."""
-        rPr = run._element.get_or_add_rPr()
-        if rPr.find(qn("w:bdr")) is not None:
+    # Collect the legacy form fields in document order. Each field starts at
+    # a run holding <w:fldChar fldCharType="begin"> with <w:ffData>.
+    fields: list[dict] = []
+    for r in body.iter(qn("w:r")):
+        fc = r.find(qn("w:fldChar"))
+        if fc is None or fc.get(qn("w:fldCharType")) != "begin":
+            continue
+        ff = fc.find(qn("w:ffData"))
+        if ff is None:
+            continue
+        kind = ("chk" if ff.find(qn("w:checkBox")) is not None
+                else "dd" if ff.find(qn("w:ddList")) is not None else "txt")
+        fields.append({"kind": kind, "ff": ff, "run": r})
+    if len(fields) != 134:
+        raise RuntimeError(f"Appendix 1 template changed: {len(fields)} form fields")
+
+    def _result_runs(field) -> list:
+        """Runs between the field's 'separate' and 'end' markers (the text
+        Word displays for the field)."""
+        par = field["run"].getparent()
+        runs = list(par.findall(qn("w:r")))
+        out, state = [], 0
+        for rr in runs[runs.index(field["run"]):]:
+            fc = rr.find(qn("w:fldChar"))
+            if fc is not None:
+                ft = fc.get(qn("w:fldCharType"))
+                if ft == "separate" and state == 0:
+                    state = 1
+                    continue
+                if ft == "end" and state == 1:
+                    break
+            elif state == 1:
+                out.append(rr)
+        return out
+
+    def text(i: int, value) -> None:
+        """Set a FORMTEXT field's displayed result (formatting preserved)."""
+        if value is None or str(value).strip() == "":
             return
-        bdr = OxmlElement("w:bdr")
-        bdr.set(qn("w:val"), "single")
-        bdr.set(qn("w:sz"), "4")
-        bdr.set(qn("w:space"), "2")
-        bdr.set(qn("w:color"), "000000")
-        # Keep schema order: w:bdr belongs before w:rtl.
-        rtl = rPr.find(qn("w:rtl"))
-        if rtl is not None:
-            rtl.addprevious(bdr)
-        else:
-            rPr.append(bdr)
+        rrs = _result_runs(fields[i])
+        if not rrs:
+            return
+        t_el = rrs[0].find(qn("w:t"))
+        if t_el is None:
+            t_el = OxmlElement("w:t")
+            rrs[0].append(t_el)
+        t_el.text = str(value)
+        t_el.set(qn("xml:space"), "preserve")
+        for rr in rrs[1:]:
+            for t2 in rr.findall(qn("w:t")):
+                rr.remove(t2)
 
-    def find(prefix: str, nth: int = 1, exact: bool = False):
-        # Whitespace-normalized matching: the form mixes tabs/spaces after "☐".
-        norm = " ".join(prefix.split())
-        n = 0
-        for par in paras:
-            t = " ".join(par.text.split())
-            if (t == norm) if exact else t.startswith(norm):
-                n += 1
-                if n == nth:
-                    return par
-        raise KeyError(prefix)
+    def check(i: int) -> None:
+        """Tick a FORMCHECKBOX (sets w:checked on the field data)."""
+        cb = fields[i]["ff"].find(qn("w:checkBox"))
+        ch = cb.find(qn("w:checked"))
+        if ch is None:
+            ch = OxmlElement("w:checked")
+            cb.append(ch)
+        ch.set(qn("w:val"), "1")
 
-    def fill(par, *values) -> None:
-        """Replace successive en-space blanks with values inside a bordered
-        form cell. The run is split so the border wraps only the entry (not
-        unit text like " (MW)" that shares the run); formatting is preserved.
-        None keeps the blank as an empty cell."""
-        from docx.text.run import Run
-
-        vals = list(values)
-        for run in list(par.runs):
-            if not vals:
-                return
-            m = _BLANK_RE.search(run.text)
-            if m is None:
-                continue
-            v = vals.pop(0)
-            before, after = run.text[:m.start()], run.text[m.end():]
-            cell_text = "\u00a0" * 5 if v is None else f"\u00a0{v}\u00a0"
-            el = run._element
-            val_el = copy.deepcopy(el)
-            el.addnext(val_el)
-            val_run = Run(val_el, par)
-            val_run.text = cell_text
-            _box(val_run)
-            if after:
-                after_el = copy.deepcopy(el)
-                val_el.addnext(after_el)
-                Run(after_el, par).text = after
-            run.text = before
-
-    def tick(par) -> None:
-        for run in par.runs:
-            if "☐" in run.text:
-                run.text = run.text.replace("☐", "☒", 1)
-                return
+    def select(i: int, option: str) -> None:
+        """Pick a dropdown (ddList) entry and update the displayed text."""
+        dl = fields[i]["ff"].find(qn("w:ddList"))
+        entries = [e.get(qn("w:val")) for e in dl.findall(qn("w:listEntry"))]
+        idx = entries.index(option)
+        res = dl.find(qn("w:result"))
+        if res is None:
+            res = OxmlElement("w:result")
+            dl.insert(0, res)
+        res.set(qn("w:val"), str(idx))
+        text(i, option)
 
     first, last = _split_name(intake.get("signatory_name"))
     deliv = str(intake.get("deliverability") or "Full Capacity")
@@ -1179,148 +1196,115 @@ def _fill_appendix1_docx(intake: dict, d: dict, path: Path) -> None:
                   and round(_num(intake.get("bess_mwh")) / d["bess_mw"], 1))
     today = date.today().strftime("%m/%d/%Y")
 
-    # 1. Process (check only one)
-    tick(find("☐  Fast Track Process") if d["track"] == "Fast Track"
-         else find("☐  Independent Study Process"))
-    # 2. Request type
-    tick(find("☐  A proposed new Generating Facility"))
-    # 3. Deliverability (on-peak / off-peak)
+    # ---- Page 1: minimum-requirements checklist — mark what the packet
+    # contains. Items 1 (study deposit) and 5 (ISP demonstrations, fields
+    # 6-12) are the developer's own actions and stay unchecked.
+    for i in (1,          # 2. Completed Appendix 1
+              2, 3, 4,    # 3. Attachment A + Technical Data / IR Validation tabs
+              5,          # 4. Evidence of Site Exclusivity
+              13, 14,     # 6. Load Flow Model (.epc)  7. Dynamic Model (.dyd)
+              15, 16, 17,  # 8. Reactive capability  9. Site Drawing  10. SLD
+              18, 19,     # 11. Flat run & bump test  12. MW at POI plot
+              20, 21, 22, 23):  # 13. IBR validation + all three tests
+        check(i)
+
+    # ---- 1. Process (check only one)
+    check(24 if d["track"] == "Fast Track" else 25)
+    # ---- 2. Request type
+    check(26)  # A proposed new Generating Facility
+    # ---- 3. Deliverability (on-peak / off-peak)
     if deliv == "Full Capacity":
-        tick(find("☐  Full Capacity"))
+        check(28)
     elif deliv == "Energy Only":
-        tick(find("☐  Energy Only"))
+        check(31)
     else:
-        par = find("☐  Partial Deliverability for")
-        tick(par)
-        fill(par, intake.get("partial_pct") or "")
+        check(29)
+        text(30, intake.get("partial_pct") or "")
     if is_solar_or_wind:
-        if deliv != "Energy Only":
-            tick(find("☐ Off-Peak Deliverability"))
-        else:
-            tick(find("☐ Economic Only"))
-    # 4a. Project name & location (street address / city / zip are not in the
-    # intake — left blank on purpose; see the Missing Data Report)
-    fill(find("Project Name:"), intake.get("project_name"))
-    fill(find("County:"), intake.get("county"))
-    fill(find("State:"), intake.get("state") or "CA")
-    fill(find("Latitude:"), d["lat"], d["lon"])
-    # 4b. Megawatt values
-    fill(find("Total Generating Facility Gross Capacity:"), _fmt(_num(intake.get("gross_mva"))))
-    fill(find("Total Generating Facility Gross Output:"), _fmt(d["gross"]))
-    fill(find("Generating Facility Auxiliary Load:"), _fmt(d["aux"]))
-    fill(find("Maximum Net Megawatt Electrical Output:"), _fmt(d["max_net"]))
-    fill(find("Anticipated losses between the Generating Facility and POI:"), _fmt(d["losses"]))
-    fill(find("Requested Interconnection Service Capacity"), _fmt(d["net"]))
-    fill(find("Provide a description of any automatic control scheme"),
-         f"A plant-level Power Plant Controller (PPC) monitors POI revenue metering and limits "
-         f"aggregate export to {_fmt(d['net'])} MW via real-time inverter setpoint dispatch; "
-         "inverter-level curtailment provides backup limitation.")
-    # 4c. Technology + equipment configuration
-    tech_par = find("Technology", exact=True)
-    tech_par.runs[-1].text = "\t" + str(intake.get("project_type") or "")
-    fill(find("Technology Comments:"),
-         f"{intake.get('inverter') or 'Inverters TBD'}; {intake.get('module') or 'modules TBD'}"
-         + (f"; {intake.get('bess_vendor') or 'BESS TBD'}" if d["has_bess"] else ""))
-    conf_par = find("General description of the equipment configuration")
-    conf_par.runs[-1].text = (
-        f"  GSU {intake.get('transformer') or 'TBD'}; {_fmt(d['col_kv'])} kV collector system; "
-        f"gross {_fmt(d['gross'])} MW, net {_fmt(d['net'])} MW at POI.")
-    # Generation-type table: row 1 = PV, row 3 = storage (entry rows)
-    tbl = doc.tables[0]
-
-    def fill_row(row, gen_type: str, fuel: str, mw, mwh=None, hours=None, hybrid=False):
-        row.cells[0].paragraphs[0].runs[0].text = gen_type
-        row.cells[1].paragraphs[0].runs[0].text = fuel
-        fill(row.cells[2].paragraphs[0], _fmt(mw))
-        if mwh is not None:
-            fill(row.cells[3].paragraphs[0], _fmt(mwh))
-        if hours is not None:
-            fill(row.cells[4].paragraphs[0], _fmt(hours))
-        tick(row.cells[6].paragraphs[0] if hybrid else row.cells[5].paragraphs[0])
-
+        check(32 if deliv != "Energy Only" else 33)
+    # ---- 4a. Project name & location (street address / city / zip are not
+    # in the intake — left blank on purpose; see the Missing Data Report)
+    text(35, intake.get("project_name"))
+    text(38, intake.get("county"))
+    text(39, intake.get("state") or "CA")
+    text(41, d["lat"])
+    text(42, d["lon"])
+    # ---- 4b. Megawatt values
+    text(43, _fmt(_num(intake.get("gross_mva"))))
+    text(44, _fmt(d["gross"]))
+    text(45, _fmt(d["aux"]))
+    text(46, _fmt(d["max_net"]))
+    text(48, _fmt(d["losses"]))
+    text(49, _fmt(d["net"]))
+    text(50, f"A plant-level Power Plant Controller (PPC) monitors POI revenue metering and "
+             f"limits aggregate export to {_fmt(d['net'])} MW via real-time inverter setpoint "
+             "dispatch; inverter-level curtailment provides backup limitation.")
+    # ---- 4c. Technology table: row 1 = PV, row 2 = storage
     pv_mw = d["gross"] - (d["bess_mw"] or 0)
-    fill_row(tbl.rows[1], "Solar Photovoltaic", "Solar", pv_mw, hybrid=is_hybrid)
+    select(51, "Photovoltaic")
+    select(52, "Solar")
+    text(53, _fmt(pv_mw))
+    if is_hybrid:
+        check(57)
     if d["has_bess"]:
-        fill_row(tbl.rows[3], "Battery Energy Storage", "Battery", d["bess_mw"],
-                 _num(intake.get("bess_mwh")), bess_hours, hybrid=is_hybrid)
-    # 4d. Dates
-    fill(find("Proposed In-Service Date:"), d["in_service"].strftime("%m/%d/%Y"))
-    fill(find("Proposed Trial Operation Commencement Date:"), d["trial_op"].strftime("%m/%d/%Y"))
-    fill(find("Proposed Commercial Operation Date:"), d["cod"].strftime("%m/%d/%Y"))
-    fill(find("Proposed Term of Service (years):"), "40")
-    # 4e. Contact person (company street address is not in the intake)
-    fill(find("First Name:", 1), first)
-    fill(find("Last Name:", 1), last)
-    fill(find("Title:", 1), intake.get("signatory_title"))
-    fill(find("Company Name:", 1), intake.get("legal_name"))
-    fill(find("Phone Number:", 1), intake.get("contact_phone"))
-    fill(find("Email Address:", 1), intake.get("contact_email"))
-    # 4f. Point of Interconnection
-    fill(find("Substation or Transmission Line Name:"), intake.get("poi_name"), _fmt(d["kv"]))
+        select(58, "Storage")
+        select(59, "Battery")
+        text(60, _fmt(d["bess_mw"]))
+        text(61, _fmt(_num(intake.get("bess_mwh"))))
+        text(62, _fmt(bess_hours))
+        if is_hybrid:
+            check(64)
+    text(80, f"{intake.get('inverter') or 'Inverters TBD'}; {intake.get('module') or 'modules TBD'}"
+             + (f"; {intake.get('bess_vendor') or 'BESS TBD'}" if d["has_bess"] else ""))
+    text(81, f"GSU {intake.get('transformer') or 'TBD'}; {_fmt(d['col_kv'])} kV collector "
+             f"system; gross {_fmt(d['gross'])} MW, net {_fmt(d['net'])} MW at POI.")
+    # ---- 4d. Dates
+    text(82, d["in_service"].strftime("%m/%d/%Y"))
+    text(83, d["trial_op"].strftime("%m/%d/%Y"))
+    text(84, d["cod"].strftime("%m/%d/%Y"))
+    text(85, "40")
+    # ---- 4e. Contact person (company street address is not in the intake)
+    text(86, first)
+    text(87, last)
+    text(88, intake.get("signatory_title"))
+    text(89, intake.get("legal_name"))
+    text(94, intake.get("contact_phone"))
+    text(96, intake.get("contact_email"))
+    # ---- 4f. Point of Interconnection
+    text(97, intake.get("poi_name"))
+    text(98, _fmt(d["kv"]))
     shared = str(intake.get("shared_facilities") or "No shared facilities")
-    gt_par = find("Third-party Shared Gen-tie:")
-    gt_par.runs[-1].text = "Yes — " + shared if "gen-tie" in shared.lower() else "No"
-    # 6. Site exclusivity
-    tick(find("☐ Is attached to this Interconnection Request"))
+    select(99, "Yes" if "gen-tie" in shared.lower() else "No")
+    # ---- 6. Site exclusivity
+    check(100)  # Is attached to this Interconnection Request
     sc = str(intake.get("site_control") or "")
-    for label, match in (("☐ Proof of Ownership (Deed)", "Deed" in sc),
-                         ("☐ Lease Agreement", sc == "Lease Agreement"),
-                         ("☐ Option to Purchase", sc == "Option to Purchase"),
-                         ("☐ Option to Lease", "Option to Lease" in sc)):
+    for i, match in ((101, "Deed" in sc),
+                     (102, sc == "Lease Agreement"),
+                     (103, sc == "Option to Purchase"),
+                     (104, "Option to Lease" in sc)):
         if match:
-            tick(find(label))
-    tick(find("☐ Yes", exact=True))
+            check(i)
+    check(107)  # granted to the same entity — Yes
     # 40-year lease from COD — matches the Site Exclusivity form (item 4).
-    fill(find("Term of Agreement?"), "40")
-    fill(find("Acreage acquired or reserved for project site?"), f"~{_fmt(d['acres'])}")
-    # 8. Representative to contact (same as the contact person)
-    fill(find("First Name:", 2), first)
-    fill(find("Last Name:", 2), last)
-    fill(find("Title:", 2), intake.get("signatory_title"))
-    fill(find("Company Name:", 2), intake.get("legal_name"))
-    fill(find("Phone Number:", 2), intake.get("contact_phone"))
-    fill(find("Email Address:", 2), intake.get("contact_email"))
-    # 9. Submitted by + consent + e-signature
-    fill(find("Legal name of the Interconnection Customer:"), intake.get("legal_name"))
-    fill(find("State of Origin for Secretary of State Document:"), intake.get("state_of_origin"))
-    fill(find("Name of Parent Company (if applicable):"), "N/A")
-    tick(find("☐ By executing this Interconnection Request"))
-    tick(find("☐ Your electronic signature below"))
-    fill(find("First Name:", 3), first)
-    fill(find("Last Name:", 3), last)
-    fill(find("Title:", 3), intake.get("signatory_title"))
-    fill(find("Date (MM/DD/YYYY):"), today)
-
-    # Any blanks the intake cannot answer become empty form cells — same
-    # boxed look as the filled entries (they're tracked in the Missing Data
-    # Report), so no cell disappears from the original form.
-    all_pars = list(doc.paragraphs)
-    for tbl in doc.tables:
-        for row in tbl.rows:
-            for cell in row.cells:
-                all_pars.extend(cell.paragraphs)
-    for par in all_pars:
-        guard = 0
-        while any("\u2002" in r.text for r in par.runs) and guard < 12:
-            fill(par, None)
-            guard += 1
-
-    # The template opens with an empty paragraph carrying a section break,
-    # which renders as a blank first page — drop it, moving its header/footer
-    # references onto the remaining section so the CAISO header survives.
-    first_par = doc.paragraphs[0]
-    if not first_par.text.strip():
-        pPr = first_par._element.find(qn("w:pPr"))
-        sect = pPr.find(qn("w:sectPr")) if pPr is not None else None
-        if sect is not None:
-            body_sect = doc.element.body.find(qn("w:sectPr"))
-            for tag in ("w:headerReference", "w:footerReference", "w:titlePg"):
-                for el in sect.findall(qn(tag)):
-                    t = el.get(qn("w:type"))
-                    if not any(e.get(qn("w:type")) == t
-                               for e in body_sect.findall(qn(tag))):
-                        body_sect.insert(0, copy.deepcopy(el))
-        first_par._element.getparent().remove(first_par._element)
+    text(111, "40")
+    text(113, f"~{_fmt(d['acres'])}")
+    # ---- 8. Representative to contact (same as the contact person)
+    text(114, first)
+    text(115, last)
+    text(116, intake.get("signatory_title"))
+    text(117, intake.get("legal_name"))
+    text(122, intake.get("contact_phone"))
+    text(124, intake.get("contact_email"))
+    # ---- 9. Submitted by + consent + e-signature
+    text(125, intake.get("legal_name"))
+    text(126, intake.get("state_of_origin"))
+    text(127, "N/A")
+    check(128)  # consent to disclosure
+    check(129)  # electronic signature agreement
+    text(130, first)
+    text(131, last)
+    text(132, intake.get("signatory_title"))
+    text(133, today)
 
     doc.save(str(path))
 

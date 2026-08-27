@@ -222,6 +222,28 @@ def _docx_body(path: Path) -> str:
     from docx.text.run import Run
 
     def _run_html(r) -> str:
+        # Legacy form fields: render FORMCHECKBOX state as a box glyph; the
+        # begin/separate/end marker runs themselves produce no text.
+        fld = r._element.find(_qn("w:fldChar"))
+        if fld is not None:
+            ff = fld.find(_qn("w:ffData"))
+            cb = ff.find(_qn("w:checkBox")) if ff is not None else None
+            if cb is not None:
+                ch = cb.find(_qn("w:checked"))
+                if ch is None:
+                    ch = cb.find(_qn("w:default"))
+                on = ch is not None and ch.get(_qn("w:val")) in (None, "1", "true")
+                return ('<span class="cbx on">☒</span>' if on
+                        else '<span class="cbx">☐</span>')
+            dl = ff.find(_qn("w:ddList")) if ff is not None else None
+            if dl is not None:
+                # Dropdown form field — show the selected list entry.
+                res = dl.find(_qn("w:result"))
+                entries = dl.findall(_qn("w:listEntry"))
+                if res is not None and entries:
+                    sel = entries[int(res.get(_qn("w:val")))].get(_qn("w:val"))
+                    return f'<span class="fillin">{_e(sel)}</span>'
+                return '<span class="cell">&nbsp;&nbsp;&nbsp;&nbsp;</span>'
         rpr = r._element.find(_qn("w:rPr"))
         style = rpr.find(_qn("w:rStyle")) if rpr is not None else None
         if style is not None and style.get(_qn("w:val")) == "PlaceholderText":
