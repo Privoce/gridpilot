@@ -2543,30 +2543,34 @@ def _gen_site_drawing(intake: dict, d: dict, eng: dict, path: Path) -> None:
     # off the roads). The PDF layer adds the callouts pointing at the regions
     # the prompt pins down: boundary centered, switchyard left-center inside,
     # footprint right-center inside.
-    label_box(455, 60, "LAND UNDER SITE CONTROL", 130)
-    arrow(520, 76, 490, 122)
+    lat0, lon0 = float(d["lat"]), float(d["lon"])
 
-    # Switchyard sits on the west half of the parcel — sample GPS offset
-    # from the site centroid already shown in the title block.
-    sw_lat = round(float(d["lat"]) + 0.0014, 4)
-    sw_lon = round(float(d["lon"]) - 0.0038, 4)
-    sw_gps = f"{sw_lat:.4f}° N, {abs(sw_lon):.4f}° W"
-    label_box(52, 288, "NEW SWITCHYARD", 128, sw_gps)
+    def gps(dlat: float, dlon: float) -> str:
+        return f"{lat0 + dlat:.4f}° N, {abs(lon0 + dlon):.4f}° W"
+
+    label_box(430, 52, "LAND UNDER SITE CONTROL", 148, gps(0.0, 0.0))
+    arrow(520, 78, 490, 122)
+
+    # Switchyard on the west half of the parcel.
+    label_box(52, 288, "NEW SWITCHYARD", 128, gps(0.0014, -0.0038))
     arrow(180, 300, 250, 295)
 
-    label_box(300, 520, "PROPOSED FACILITY", 108, "FOOTPRINT")
-    arrow(360, 520, 410, 372)
+    label_box(268, 512, "PROPOSED FACILITY FOOTPRINT", 148, gps(-0.0006, 0.0036))
+    arrow(360, 512, 410, 372)
 
     # POI + gen-tie callout (orange, off-site indicator like the example).
     # Dark translucent chips keep the colored text legible on bright terrain.
     page.draw_rect(fitz.Rect(146, 66, 166, 92), color=ORG, width=2.5)
     poi_label = f"POI at {poi_name.split(' (')[0][:26]}"
-    page.draw_rect(fitz.Rect(86, 118, 86 + 12 + 5.2 * len(poi_label), 162),
+    poi_gps = gps(0.0048, -0.0096)
+    chip_w = max(12 + 5.2 * len(poi_label), 12 + 5.2 * len(poi_gps))
+    page.draw_rect(fitz.Rect(86, 118, 86 + chip_w, 174),
                    color=None, fill=(0.12, 0.12, 0.12), fill_opacity=0.62)
     page.insert_text((92, 130), poi_label, fontsize=9, fontname="hebo", color=ORG)
-    page.insert_text((92, 143), f"{_fmt(d['net'])} MW", fontsize=9, fontname="hebo", color=ORG)
-    page.insert_text((92, 156), f"{_fmt(d['kv'])} kV", fontsize=9, fontname="hebo", color=ORG)
-    page.draw_rect(fitz.Rect(86, 174, 152, 204), color=None,
+    page.insert_text((92, 143), f"{_fmt(d['net'])} MW   {_fmt(d['kv'])} kV",
+                     fontsize=9, fontname="hebo", color=ORG)
+    page.insert_text((92, 156), poi_gps, fontsize=8, fontname="hebo", color=ORG)
+    page.draw_rect(fitz.Rect(86, 178, 152, 208), color=None,
                    fill=(0.12, 0.12, 0.12), fill_opacity=0.62)
     page.insert_text((92, 186), "Gen-tie", fontsize=9, fontname="hebo", color=YEL)
     page.insert_text((92, 198), f"{_fmt(gentie_mi)} miles", fontsize=9, fontname="hebo", color=YEL)
