@@ -2546,8 +2546,13 @@ def _gen_site_drawing(intake: dict, d: dict, eng: dict, path: Path) -> None:
     label_box(455, 60, "LAND UNDER SITE CONTROL", 130)
     arrow(520, 76, 490, 122)
 
-    label_box(66, 288, "NEW SWITCHYARD", 96, "(GIS coordination)")
-    arrow(162, 300, 250, 295)
+    # Switchyard sits on the west half of the parcel — sample GPS offset
+    # from the site centroid already shown in the title block.
+    sw_lat = round(float(d["lat"]) + 0.0014, 4)
+    sw_lon = round(float(d["lon"]) - 0.0038, 4)
+    sw_gps = f"{sw_lat:.4f}° N, {abs(sw_lon):.4f}° W"
+    label_box(52, 288, "NEW SWITCHYARD", 128, sw_gps)
+    arrow(180, 300, 250, 295)
 
     label_box(300, 520, "PROPOSED FACILITY", 108, "FOOTPRINT")
     arrow(360, 520, 410, 372)
