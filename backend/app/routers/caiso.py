@@ -234,6 +234,28 @@ def post_engineering(
     eng = run_engineering(intake, iso, prov, actor=actor,
                           history_note="Engineering design review")
     pf = eng["powerflow"]
+
+    # Render the packet-format SLD (checklist item 10) for the inline preview
+    # so the design-review step shows the same sheet that ships in the packet.
+    sld_png = None
+    try:
+        import base64
+        import tempfile
+        from pathlib import Path
+
+        import fitz
+
+        from backend.app.services.caiso_packet import _derived, _gen_sld
+
+        with tempfile.TemporaryDirectory() as td:
+            p = Path(td) / "sld.pdf"
+            _gen_sld(intake, _derived(intake), eng, p)
+            pdf = fitz.open(p)
+            png = pdf[0].get_pixmap(dpi=150, alpha=False).tobytes("png")
+            pdf.close()
+        sld_png = "data:image/png;base64," + base64.b64encode(png).decode()
+    except Exception:
+        pass
     return {
         "ready": eng["ready"],
         "graph_version": eng["graph"].get("version", ""),
@@ -258,7 +280,9 @@ def post_engineering(
         "checks": eng["checks"],
         "approvals": eng["approvals"],
         "source_trace": eng["source_trace"],
-        "sld_svg": to_svg(build_sld(eng["graph"], eng["design"], intake)),
+        "sld_png": sld_png,
+        "sld_svg": None if sld_png else to_svg(
+            build_sld(eng["graph"], eng["design"], intake)),
     }
 
 

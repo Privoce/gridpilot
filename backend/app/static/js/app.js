@@ -2198,9 +2198,9 @@ function engineeringPanelHtml(eng) {
 
       <div class="rounded-card border border-line bg-white p-3">
         <div class="mb-2 flex flex-wrap items-center justify-between gap-2">
-          <span class="font-mono text-[11px] uppercase tracking-[0.08em] text-muted">Single-line diagram — generated from the project graph</span>
+          <span class="font-mono text-[11px] uppercase tracking-[0.08em] text-muted">Single-line diagram — conceptual, for interconnection application only</span>
         </div>
-        <div class="max-h-[420px] overflow-auto rounded-input border border-line">${eng.sld_svg || ""}</div>
+        <div class="max-h-[420px] overflow-auto rounded-input border border-line">${eng.sld_png ? `<img class="w-full" src="${eng.sld_png}" alt="Single-line diagram">` : (eng.sld_svg || "")}</div>
       </div>
 
       <div class="grid grid-cols-1 gap-3 md:grid-cols-2">
