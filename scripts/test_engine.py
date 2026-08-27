@@ -315,7 +315,8 @@ def test_phase8_packet() -> None:
         ok((pdir / doc["file"]).exists(), f"file exists: {doc['file']}")
 
     z = zipfile.ZipFile(pdir / m["zip_file"])
-    ok(len(z.namelist()) == len(m["documents"]), "zip contains every document")
+    deliverable = [d for d in m["documents"] if d["key"] != "readme"]
+    ok(len(z.namelist()) == len(deliverable), "zip contains every deliverable (checklist README is in-app only)")
 
     e = m["engineering"]
     ok(e["loadflow"]["converged"], "manifest carries the solved case")

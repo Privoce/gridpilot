@@ -230,7 +230,7 @@ DEFAULT_INTAKE: dict[str, Any] = {
     "bess_charging": "On-site generation only",
     "inverter": "Sungrow SG4400UD-MV, qty 18",
     "module": "JinkoSolar Tiger Neo 620W bifacial",
-    "bess_vendor": "Tesla Megapack 2XL, qty 50",
+    "bess_vendor": "Tesla Megapack 2XL",
     "dyd_status": "Received from vendor",
     "transformer": "140 MVA, 34.5/230 kV, Z = 8.5% @ ONAF, YNd1",
     "collector_kv": 34.5,
@@ -852,6 +852,12 @@ def _fmt(v: float | None) -> str:
     return f"{v:g}"
 
 
+def _pacific_today() -> date:
+    """CAISO business date (Pacific), not the UTC server clock."""
+    from zoneinfo import ZoneInfo
+    return datetime.now(ZoneInfo("America/Los_Angeles")).date()
+
+
 # ---------------------------------------------------------------------------
 # PDF helpers (PyMuPDF)
 # ---------------------------------------------------------------------------
@@ -906,7 +912,7 @@ class _Pdf:
         self.page.draw_line(fitz.Point(36, 82), fitz.Point(PAGE_W - 36, 82), color=LINE, width=0.8)
         self.page.insert_text(
             (36, PAGE_H - 28),
-            f"Generated {datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M UTC')} — verify before RIMS5 submission",
+            f"{_pacific_today().strftime('%B %d, %Y')}  ·  Verify before RIMS5 submission",
             fontsize=7, fontname="helv", color=MUT,
         )
         self.y = 100
@@ -1194,9 +1200,7 @@ def _fill_appendix1_docx(intake: dict, d: dict, path: Path) -> None:
     is_hybrid = d["has_bess"] and "BESS" in str(intake.get("project_type") or "")
     bess_hours = (d["bess_mw"] and _num(intake.get("bess_mwh"))
                   and round(_num(intake.get("bess_mwh")) / d["bess_mw"], 1))
-    # CAISO business date (the server may run in UTC).
-    from zoneinfo import ZoneInfo
-    today = datetime.now(ZoneInfo("America/Los_Angeles")).strftime("%m/%d/%Y")
+    today = _pacific_today().strftime("%m/%d/%Y")
 
     # ---- Page 1: minimum-requirements checklist — mark what the packet
     # contains. Items 1 (study deposit) and 5 (ISP demonstrations, fields
@@ -1665,7 +1669,7 @@ def _fill_attachment_a_xlsm(intake: dict, d: dict, eng: dict, path: Path) -> Non
     # --- Version Control ------------------------------------------------------
     wsv = wb["Version Control"]
     gv = eng.get("graph_version") or (eng.get("graph") or {}).get("version", "")
-    for col_n, val in enumerate([date.today().strftime("%Y-%m-%d"), "Draft 1",
+    for col_n, val in enumerate([_pacific_today().strftime("%Y-%m-%d"), "Draft 1",
                                  f"Filled from the validated developer intake (graph {gv})",
                                  "Interconnection Customer"], 1):
         wsv.cell(15, col_n, val)
@@ -2129,9 +2133,9 @@ def _gen_attachment_a_xlsx(intake: dict, d: dict, eng: dict, path: Path) -> None
     wsv.append(["Date:", "Version:", "Changes:", "By who:"])
     for col in range(1, 5):
         wsv.cell(2, col).font = head
-    wsv.append([date.today().strftime("%Y-%m-%d"), "Draft 1",
-                "Generated from the validated intake "
-                f"(graph {eng.get('graph_version', '')})", "Auto-generated"])
+    wsv.append([_pacific_today().strftime("%Y-%m-%d"), "Draft 1",
+                "Filled from the validated intake "
+                f"(graph {eng.get('graph_version', '')})", "Interconnection Customer"])
 
     # Openpyxl stores any string beginning with "=" as a formula, which Excel
     # then fails to parse and prompts to "repair" — force those back to text
@@ -2173,7 +2177,10 @@ def _gen_signatory(intake: dict, path: Path) -> None:
                "Appendix 1 (Interconnection Request), Attachment A, and related submissions via the RIMS5 system;")
     pdf.bullet("RESOLVED FURTHER, that such officer is authorized to make deposits and payments required by the "
                "CAISO Tariff in connection therewith.")
-    pdf.para("Date: ____________        Sole Member: ____________________________", size=9)
+    member = (intake.get("sole_member") or intake.get("parent_company")
+              or "Ravenwood Holdings LLC")
+    pdf.para(f"Date: {_pacific_today().strftime('%m/%d/%Y')}        "
+             f"Sole Member: {member}", size=9)
     sig_file = _file_meta(intake.get("file_signatory"))
     if sig_file:
         pdf.section("Developer-provided evidence")
@@ -2281,7 +2288,7 @@ def _fill_site_exclusivity_docx(intake: dict, d: dict, path: Path) -> None:
                     _box_el(run_el)
                 placed = True
 
-    today = date.today().strftime("%m/%d/%Y")
+    today = _pacific_today().strftime("%m/%d/%Y")
     cod = d["cod"]
     lease_years = 40
     expiry = cod.replace(year=cod.year + lease_years)
@@ -2349,7 +2356,7 @@ def _gen_site_exclusivity_pdf(intake: dict, d: dict, path: Path) -> None:
     pdf.kv("Project Name", proj)
     pdf.kv("Cluster #", "N/A — Independent Study / Fast Track" if d["is_isp"] or d["track"] == "Fast Track"
            else "Per cluster window")
-    pdf.kv("Submission Date", date.today().strftime("%m/%d/%Y"))
+    pdf.kv("Submission Date", _pacific_today().strftime("%m/%d/%Y"))
     pdf.kv("Current COD", cod.strftime("%m/%d/%Y"))
     pdf.para("Process:", size=8.5, color=MUT)
     pdf.checkbox(True, "IR Application Submittal")
@@ -2648,7 +2655,7 @@ def _title_block_strip(intake: dict, d: dict) -> bytes:
 
     # Date Issued
     t(xs[4] + 6, 18, "Date Issued", 6, mut=True)
-    t(xs[4] + 6, 36, date.today().strftime("%m/%d/%Y"), 7.5, bold=True)
+    t(xs[4] + 6, 36, _pacific_today().strftime("%m/%d/%Y"), 7.5, bold=True)
     p.draw_line(fitz.Point(xs[4] + 4, 44), fitz.Point(xs[5] - 4, 44), color=MUT, width=0.4)
 
     # Firm header (top of the final column, where the example has the logo)
@@ -2674,7 +2681,7 @@ def _gen_site_drawing_schematic(intake: dict, d: dict, eng: dict, path: Path) ->
                      fontsize=15, fontname="hebo", color=INK)
     page.insert_text((36, 52),
                      f"~{_fmt(d['acres'])} acres — {intake.get('county')} County, {intake.get('state') or 'CA'} — "
-                     f"GPS {d['lat']}, {d['lon']} — auto-generated (replace with survey-based AutoCAD before construction)",
+                     f"GPS {d['lat']}, {d['lon']} — conceptual (replace with survey-based AutoCAD before construction)",
                      fontsize=8.5, fontname="helv", color=MUT)
     page.insert_text((36, 66),
                      "Companion site map with aerial imagery: Project Boundary KMZ (supporting document) — "

@@ -46,8 +46,8 @@ def gen_equipment_schedule(eng: dict[str, Any], intake: dict[str, Any], path: Pa
 
     ws["A1"] = f"{intake.get('project_name')} — Equipment Schedule"
     ws["A1"].font = Font(bold=True, size=13)
-    ws["A2"] = (f"Generated from project graph "
-                f"{eng['graph'].get('version', '')} · topology: {eng['design']['topology']}")
+    ws["A2"] = (f"Project graph {eng['graph'].get('version', '')} · "
+                f"topology: {eng['design']['topology']}")
     ws["A2"].font = Font(size=8, color="666666")
 
     cols = ["Item", "Make / model", "Qty", "Rating", "Data source", "OEM verified"]
@@ -278,8 +278,8 @@ def gen_source_trace(eng: dict[str, Any], intake: dict[str, Any], path: Path) ->
     lines = [
         f"# Source Trace — {intake.get('project_name')}",
         "",
-        f"Project graph `{g.get('version', '')}` · generated "
-        f"{datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M UTC')} by the engineering engine.",
+        f"Project graph `{g.get('version', '')}` · "
+        f"{datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M UTC')}.",
         "",
         "Every parameter used in this packet, with its source and origin. "
         "Source classes: developer, document_extraction, oem_datasheet, iso_rule, "
@@ -332,8 +332,8 @@ def gen_missing_data(eng: dict[str, Any], intake: dict[str, Any], path: Path) ->
     lines = [
         f"# Missing Data List — {intake.get('project_name')}",
         "",
-        f"Project graph `{eng['graph'].get('version', '')}` · generated "
-        f"{datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M UTC')} by the engineering engine.",
+        f"Project graph `{eng['graph'].get('version', '')}` · "
+        f"{datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M UTC')}.",
         "",
         f"{len(missing)} item(s) the engineering engine needed but could not find in the "
         "intake or attached documents. GridPilot never invents missing engineering truth: "
@@ -372,7 +372,7 @@ def gen_portal_fields(eng: dict[str, Any], intake: dict[str, Any],
     fields = {
         "portal": profile["portal"],
         "portal_url": profile.get("portal_url", ""),
-        "generated_by": "deterministic engineering engine",
+        "prepared_by": "deterministic engineering engine",
         "graph_version": eng["graph"].get("version", ""),
         "fields": {
             "applicant_legal_name": intake.get("legal_name"),
@@ -389,7 +389,7 @@ def gen_portal_fields(eng: dict[str, Any], intake: dict[str, Any],
             "poi_voltage_kv": intake.get("poi_voltage_kv"),
             "gentie_mi": eng["design"]["gentie_mi"],
             "shared_facilities": intake.get("shared_facilities"),
-            "prior_queue_reference": intake.get("queue_ref"),
+            "prior_queue_reference": intake.get("queue_ref") or "N/A",
             "county_state": f"{intake.get('county')}, {intake.get('state')}",
             "gps": {"lat": intake.get("gps_lat"), "lon": intake.get("gps_lon")},
             "site_control": intake.get("site_control"),

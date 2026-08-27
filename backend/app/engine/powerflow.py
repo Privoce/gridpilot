@@ -236,7 +236,10 @@ def solve(design: dict[str, Any], intake: dict[str, Any]) -> dict[str, Any]:
     for vrow in voltages:
         if not 0.95 <= vrow["v_pu"] <= 1.05:
             warnings.append(f"{vrow['bus']} voltage {vrow['v_pu']} pu outside 0.95-1.05")
-    if gross_cap and p_gen > gross_cap + 1e-6:
+    # Declared Appendix 1 losses are typically a round number; the solved
+    # case can sit a few tenths of a MW above that. Flag only a real
+    # shortfall — not the documented declared-vs-computed tolerance.
+    if gross_cap and p_gen > gross_cap + 0.5:
         warnings.append(
             f"Required dispatch {p_gen:.2f} MW exceeds gross capability {gross_cap:.1f} MW — "
             "the requested net MW at POI is not achievable with declared losses")

@@ -206,8 +206,7 @@ def dyd_text(design: dict[str, Any], intake: dict[str, Any],
     src_note = (f"OEM parameter set: {inv['datasheet']}" if inv["verified"]
                 else "GENERIC WECC parameters — replace with OEM MOD-026/027 data")
     lines = [
-        f"# {profile['model_tool']} dynamic data — {intake.get('project_name')} — "
-        f"auto-generated",
+        f"# {profile['model_tool']} dynamic data — {intake.get('project_name')}",
         f"# PV fleet: {c['inverters']} x {inv['vendor']} {inv['model']} — {src_note}",
     ]
     m = inv["wecc_models"]
@@ -248,8 +247,7 @@ def dyr_text(design: dict[str, Any], intake: dict[str, Any],
                     " ".join(f"{v:g}" for v in params["repc"].values()) + " /")
         return rows
 
-    L = [f"/ {profile['model_tool']} DYR — {intake.get('project_name')} — "
-         f"auto-generated"]
+    L = [f"/ {profile['model_tool']} DYR — {intake.get('project_name')}"]
     L += block(BUS["pv"], inv["wecc_models"], inv["dyd_params"],
                f"PV: {c['inverters']} x {inv['vendor']} {inv['model']}"
                + ("" if inv["verified"] else " (GENERIC — replace with OEM)"))

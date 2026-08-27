@@ -16,8 +16,9 @@ Primitive forms:
 
 from __future__ import annotations
 
-from datetime import date
+from datetime import datetime
 from typing import Any
+from zoneinfo import ZoneInfo
 
 import fitz
 
@@ -116,9 +117,10 @@ def build_sld(graph: dict[str, Any], design: dict[str, Any],
     tb_y = H - 92
     s.line(18, tb_y, W - 18, tb_y)
     s.text(30, tb_y + 20, 11, f"{project} — Single-Line Diagram")
-    s.text(30, tb_y + 36, 8.5, f"Generated from project graph {graph.get('version', '')}")
+    s.text(30, tb_y + 36, 8.5, f"Project graph {graph.get('version', '')}")
+    sld_date = datetime.now(ZoneInfo("America/Los_Angeles")).strftime("%m/%d/%Y")
     s.text(30, tb_y + 50, 8.5,
-           f"Rev A · {date.today().strftime('%m/%d/%Y')} · "
+           f"Rev A · {sld_date} · "
            "NOT FOR CONSTRUCTION: FOR INTERCONNECTION APPLICATION ONLY")
     s.text(W - 30, tb_y + 20, 9, f"POI: {poi_name}", "end")
     s.text(W - 30, tb_y + 36, 9, f"{poi_kv:g} kV / {col_kv:g} kV", "end")
