@@ -899,8 +899,8 @@ class _Pdf:
             self.y = 84
             return
         self.page.draw_rect(fitz.Rect(0, 0, PAGE_W, 6), color=ACC, fill=ACC)
-        if self.banner:
-            self.page.insert_text((36, 34), self.banner, fontsize=7.5, fontname="cour", color=RED)
+        # Banner text intentionally not rendered — deliverables carry no
+        # "GENERATED/COMPUTED" stamp line (the manifest keeps that metadata).
         self.page.insert_text((36, 56), self.title, fontsize=15, fontname="hebo", color=INK)
         self.page.insert_text((36, 72), self.subtitle, fontsize=9, fontname="helv", color=MUT)
         self.page.draw_line(fitz.Point(36, 82), fitz.Point(PAGE_W - 36, 82), color=LINE, width=0.8)
