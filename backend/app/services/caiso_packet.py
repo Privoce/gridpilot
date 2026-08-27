@@ -3486,13 +3486,14 @@ def _gen_flat_bump(intake: dict, d: dict, eng: dict, path: Path) -> None:
         return plot.x0 + plot.width * tt / 20.0
 
     def draw_channel(vals: list[float], lo: float, hi: float, color) -> None:
+        # One polyline per trace: per-segment draw_line calls make PyMuPDF
+        # re-scan the page content stream on every commit (quadratic).
         pts = []
         for tt, v in zip(t, vals):
             frac = (v - lo) / (hi - lo)
             frac = min(max(frac, 0.0), 1.0)
-            pts.append((xmap(tt), plot.y1 - plot.height * frac))
-        for a, b in zip(pts, pts[1:]):
-            page.draw_line(fitz.Point(*a), fitz.Point(*b), color=color, width=0.9)
+            pts.append(fitz.Point(xmap(tt), plot.y1 - plot.height * frac))
+        page.draw_polyline(pts, color=color, width=0.9)
 
     draw_channel(pg, 0.0, p_top, RED_C)
     draw_channel(qg, -q_lim, q_lim, BLU_C)
