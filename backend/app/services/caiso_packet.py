@@ -3963,8 +3963,10 @@ def generate_packet(intake: dict[str, Any], org_id: str, iso: str | None = None)
     zip_path = pdir / f"{slug}_{profile['iso'].replace('-', '')}_Packet.zip"
     with zipfile.ZipFile(zip_path, "w", zipfile.ZIP_DEFLATED) as z:
         for doc in docs:
-            # The checklist README is an in-app map only — not a deliverable.
-            if doc["key"] == "readme":
+            # Only checklist deliverables ship in the submission zip — the
+            # README map and the S-series supporting work products stay
+            # in-app as engineering backup.
+            if doc["key"] == "readme" or doc["category"] != "checklist":
                 continue
             fp = pdir / doc["file"]
             if fp.exists():
