@@ -1039,21 +1039,19 @@ def _hl_note(hl: list[str]) -> str:
 
 
 DOC_CSS = """<style>
-  .paper { max-width: 720px; margin: 0 auto; padding: 42px 48px; background: #fff;
-    border: 1px solid var(--line); border-radius: 10px; box-shadow: 0 1px 8px rgba(0,0,0,0.04); }
-  .paper h1 { font-size: 17px; text-align: center; letter-spacing: 0.02em; margin: 0 0 4px;
-    text-transform: uppercase; }
-  .paper .sub { text-align: center; font-size: 12px; color: var(--muted); margin: 0 0 26px; }
-  .paper h2 { font-size: 12px; text-transform: uppercase; letter-spacing: 0.07em;
-    color: var(--accent); margin: 24px 0 8px; font-family: "JetBrains Mono", monospace; }
-  .paper p { margin: 0 0 10px; font-size: 13.5px; }
-  .paper .sig { display: grid; gap: 28px; grid-template-columns: 1fr 1fr; margin-top: 34px; }
-  .paper .sig div { border-top: 1px solid var(--ink); padding-top: 6px; font-size: 12px;
-    color: var(--muted); }
-  .paper .sig strong { display: block; color: var(--ink); font-size: 13px; }
-  .stamp { float: right; margin: -6px 0 10px 14px; padding: 5px 12px; border: 2px solid #b23b3b;
-    border-radius: 6px; color: #b23b3b; font-family: "JetBrains Mono", monospace; font-size: 10px;
-    text-transform: uppercase; letter-spacing: 0.1em; transform: rotate(2deg); }
+  .paper { max-width: 720px; margin: 0 auto; padding: 48px 56px; background: #fff;
+    border: 1px solid var(--line); font-family: "Times New Roman", Times, Georgia, serif;
+    color: #000; }
+  .paper h1 { font-size: 16px; text-align: center; margin: 0 0 4px; color: #000;
+    text-transform: uppercase; font-family: inherit; font-weight: 700; }
+  .paper .sub { text-align: center; font-size: 13px; color: #000; margin: 0 0 26px; }
+  .paper h2 { font-size: 13px; text-transform: uppercase; color: #000;
+    margin: 22px 0 8px; font-family: inherit; font-weight: 700; }
+  .paper p { margin: 0 0 10px; font-size: 13.5px; line-height: 1.55; color: #000; }
+  .paper .sig { display: grid; gap: 28px; grid-template-columns: 1fr 1fr; margin-top: 40px; }
+  .paper .sig div { border-top: 1px solid #000; padding-top: 6px; font-size: 12.5px;
+    color: #000; }
+  .paper .sig strong { display: block; color: #000; font-size: 13px; }
 </style>"""
 
 
@@ -1064,29 +1062,28 @@ def _lease_body(intake: dict, hl: list[str] | None = None) -> str:
     executed agreement, uploaded at kickoff.</p>
     {_hl_note(hl)}
     <div class="paper">
-      <span class="stamp">Executed copy</span>
       <h1>Solar Ground Lease Agreement</h1>
       <p class="sub">Dated as of March 14, 2026</p>
-      <h2>1 · Parties</h2>
+      <h2>1. Parties</h2>
       <p>This Ground Lease ("Lease") is entered into between <strong>{_e(intake.get('site_owner'))}</strong>,
       a California limited partnership ("Lessor"), and {_mark('legal_name' in hl,
       f"<strong>{_e(intake.get('legal_name'))}</strong>, a {_e(intake.get('state_of_origin'))} limited liability company")}
       ("Lessee").</p>
-      <h2>2 · Premises</h2>
+      <h2>2. Premises</h2>
       <p>Approximately <strong>{_e(intake.get('site_acreage'))} acres</strong> of real property in
       {_e(intake.get('county'))} County, {_e(intake.get('state'))}, centered near
       {_mark('gps' in hl, f"{_e(intake.get('gps_lat'))}, {_e(intake.get('gps_lon'))}")}, as further described in Exhibit A
       (legal description) and depicted in Exhibit B (parcel map).</p>
-      <h2>3 · Purpose and exclusivity</h2>
+      <h2>3. Purpose and Exclusivity</h2>
       <p>{_mark('exclusivity' in hl,
       "Lessee shall have the <strong>exclusive right</strong> to use the Premises for the development, "
       "construction, and operation of a solar photovoltaic and battery energy storage facility, including "
       "interconnection facilities. Lessor shall not grant any interest in the Premises inconsistent with "
       "Lessee's exclusive rights during the Term.")}</p>
-      <h2>4 · Term</h2>
+      <h2>4. Term</h2>
       <p>A development term of five (5) years from the Effective Date, followed upon commercial operation
       by an operating term of thirty (30) years with two (2) five-year extension options.</p>
-      <h2>5 · Assignment for interconnection</h2>
+      <h2>5. Assignment for Interconnection</h2>
       <p>{_mark('exclusivity' in hl,
       "Lessor acknowledges that Lessee may present this Lease to the California Independent System "
       "Operator as evidence of site exclusivity in connection with its interconnection request.")}</p>
@@ -1110,14 +1107,14 @@ def _signatory_body(intake: dict, hl: list[str] | None = None) -> str:
       <p>The undersigned, being the Secretary of {_mark('legal_name' in hl,
       f"<strong>{_e(intake.get('legal_name'))}</strong>")} (the
       "Company"), hereby certifies that:</p>
-      <h2>1 · Authorization</h2>
+      <h2>1. Authorization</h2>
       <p>{_mark('signatory' in hl,
       f"<strong>{_e(intake.get('signatory_name'))}</strong>, {_e(intake.get('signatory_title'))} of the "
       "Company, is duly authorized to execute and deliver, on behalf of the Company, any and all "
       "applications, agreements, and instruments in connection with the Company's generator "
       "interconnection request to the California Independent System Operator Corporation, including "
       "Appendix 1 (Interconnection Request) and submissions through the RIMS5 system.")}</p>
-      <h2>2 · Incumbency</h2>
+      <h2>2. Incumbency</h2>
       <p>The signature set forth beside the officer's name below is such officer's true signature.</p>
       <div class="sig">
         <div><strong>{_e(intake.get('signatory_name'))}</strong>{_e(intake.get('signatory_title'))} — specimen signature</div>
@@ -1155,18 +1152,16 @@ _BESS_ROWS: list[tuple[str, list[tuple[str, str, str]]]] = [
 ]
 
 WORKBOOK_CSS = """<style>
-  .wb { max-width: 720px; margin: 0 auto; background: #fff; border: 1px solid var(--line);
-    border-radius: 10px; overflow: hidden; box-shadow: 0 1px 8px rgba(0,0,0,0.04); }
+  .wb { max-width: 720px; margin: 0 auto; background: #fff; border: 1px solid #bfbfbf;
+    font-family: Calibri, "Segoe UI", Arial, sans-serif; color: #000; }
   .wb table { width: 100%; border-collapse: collapse; font-size: 13px; }
-  .wb th { text-align: left; font-family: "JetBrains Mono", monospace; font-size: 10px;
-    text-transform: uppercase; letter-spacing: 0.08em; color: var(--muted);
-    background: var(--soft); padding: 8px 14px; border-bottom: 1px solid var(--line); }
-  .wb td { padding: 8px 14px; border-bottom: 1px solid var(--line); vertical-align: top; }
-  .wb td.val { font-family: "JetBrains Mono", monospace; white-space: nowrap; }
-  .wb tr.sec td { background: var(--soft); font-family: "JetBrains Mono", monospace;
-    font-size: 10.5px; text-transform: uppercase; letter-spacing: 0.08em; color: var(--accent); }
+  .wb th { text-align: left; font-size: 13px; font-weight: 700; color: #000;
+    background: #f2f2f2; padding: 6px 12px; border: 1px solid #bfbfbf; }
+  .wb td { padding: 6px 12px; border: 1px solid #d9d9d9; vertical-align: top; color: #000; }
+  .wb td.val { white-space: nowrap; }
+  .wb tr.sec td { background: #f2f2f2; font-weight: 700; color: #000; }
   .wb tr.vhl-row td { background: #fffbeb; box-shadow: inset 3px 0 0 #f59e0b; }
-  .wb td .blank { color: #b23b3b; font-style: italic; }
+  .wb td .blank { color: #595959; font-style: italic; }
 </style>"""
 
 
