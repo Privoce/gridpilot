@@ -1514,6 +1514,12 @@ def _fill_attachment_a_xlsm(intake: dict, d: dict, eng: dict, path: Path) -> Non
     W(ws, "F240", qmax)
     W(ws, "F241", -qmax)
     W(ws, "F242", 40)
+    # Ground-truth site rules: reactive requirement = net MW x tan(acos(0.95)).
+    _sr = eng["design"].get("site_rules") or {}
+    q_req_site = _sr.get("q_req_mvar") or round(d["net"] * _math.tan(_math.acos(0.95)), 2)
+    W(ws, "F249", qmax)
+    W(ws, "F251", qmax)
+    W(ws, "F253", q_req_site)
     W(ws, "F260", 5)
     W(ws, "F261", 5)
     W(ws, "F262", d["net"])
@@ -1542,7 +1548,9 @@ def _fill_attachment_a_xlsm(intake: dict, d: dict, eng: dict, path: Path) -> Non
     W(ws, "F295", "ONAN/ONAF")
     W(ws, "F297", d["kv"])
     W(ws, "G297", col_kv)
+    W(ws, "F299", mpt.get("taps") or "±10% / 33 steps (OLTC)")
     W(ws, "F300", "Yes")
+    W(ws, "F301", "Neutral start — OLTC regulates the 34.5 kV collector bus")
     W(ws, "F304", mpt["z_pct"])
     W(ws, "F305", mpt["mva"])
     W(ws, "F309", mpt["xr"])
@@ -1554,7 +1562,11 @@ def _fill_attachment_a_xlsm(intake: dict, d: dict, eng: dict, path: Path) -> Non
     W(ws, "G328", "Wye Grounded")
     W(ws, "F331", col_kv)
     W(ws, "G331", inv["ac_kv"])
+    _detc = design.get("pad_detc") or {}
+    W(ws, "F333", f"±5% — {_detc.get('positions', 5)} DETC positions, "
+                  f"{_detc.get('step_pct', 2.5):g}% steps")
     W(ws, "F334", "No")
+    W(ws, "F335", f"{_detc.get('neutral', 'Tap 3 (34.5 kV)')} — neutral")
     W(ws, "F338", pad["z_pct"])
     W(ws, "F339", pad["mva"])
     W(ws, "F343", pad["xr"])
@@ -1854,13 +1866,14 @@ def _gen_attachment_a_xlsx(intake: dict, d: dict, eng: dict, path: Path) -> None
     row("", "VII. Voltage / PF Control, Frequency Control & Power Plant Controller", "", "", "", "", "sect")
     gross_mva = eng["design"].get("total_mva") or _num(intake.get("gross_mva")) or d["gross"] * 1.05
     qmax = round(_math.sqrt(max(gross_mva ** 2 - d["gross"] ** 2, 0)), 2)
-    q_req = round(_math.sqrt((d["gross"] / 0.95) ** 2 - d["gross"] ** 2), 2)
+    _sr = eng["design"].get("site_rules") or {}
+    q_req = _sr.get("q_req_mvar") or round(d["net"] * _math.tan(_math.acos(0.95)), 2)
     row("VII.1", "Reactive capability from generators — Qmax", "MVARS", qmax, "",
         "= sqrt(gross MVA² − gross MW²)", "calc")
     row("VII.2", "Reactive capability from generators — Qmin", "MVARS", -qmax, "", "", "calc")
     row("VII.3", "Expected ambient temperature for the capability above", "⁰C", 40)
     row("VII.13", "Estimated dynamic reactive requirement (asynchronous)", "MVARS", q_req, "",
-        "= sqrt((I.2 / 0.95)² − I.2²) — see Reactive Power capability document", "calc")
+        "= net MW at POI x tan(acos(0.95)) — see Reactive Power capability document", "calc")
     row("VII.15", "Upward frequency response droop", "%", 5)
     row("", "Power Plant Controller", "",
         f"PPC limits POI export to {_fmt(d['net'])} MW", "",

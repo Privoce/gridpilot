@@ -31,6 +31,13 @@ from backend.app.engine.graph import (
 FEEDER_LOADING_FACTOR = 0.90
 # Main transformer margin above gross MVA.
 MPT_MARGIN = 1.05
+# Ground-truth site-design rules (developer's "Generation site design" workbook):
+# design power factor at the POI, and the MPT cooling-stage rating ladder
+# ONAN : ONAF1 : ONAF2 = 3 : 4 : 5 of the top nameplate.
+PF_POI = 0.95
+MPT_LADDER = (0.6, 0.8, 1.0)
+# Pad transformers carry DETC taps: 5 positions, 2.5% steps, neutral at tap 3.
+PAD_DETC = {"positions": 5, "step_pct": 2.5, "neutral": "Tap 3 (34.5 kV)"}
 
 
 def design_plant(graph: dict[str, Any], intake: dict[str, Any]) -> dict[str, Any]:
@@ -161,15 +168,22 @@ def design_plant(graph: dict[str, Any], intake: dict[str, Any]) -> dict[str, Any
     # PV blocks and the BESS segment are fed separately: feeder count is sized
     # on the PV block MVA; BESS units get their own collector position.
     cable = lib.CABLES["al_1000_35kv"]
-    feeder_mva_limit = (math.sqrt(3) * col_kv * cable["ampacity_a"] / 1000.0) * FEEDER_LOADING_FACTOR
     pv_block_mva = n_blocks * block_mva
     total_mva = pv_block_mva + (n_bess * bess_unit["mva"] if bess_unit else 0)
-    n_feeders = max(1, math.ceil(pv_block_mva / feeder_mva_limit)) if n_blocks else 0
+    # Ground-truth feeder rule: transformers per circuit = floor(usable circuit
+    # ampacity / per-block current at the collector voltage); circuits needed =
+    # ceil(blocks / per-circuit).
+    feeder_amps = cable["ampacity_a"] * FEEDER_LOADING_FACTOR
+    block_amps = block_mva * 1000.0 / (math.sqrt(3) * col_kv) if block_mva else 0.0
+    blocks_per_feeder = int(feeder_amps // block_amps) if block_amps else 0
+    n_feeders = (max(1, math.ceil(n_blocks / blocks_per_feeder))
+                 if n_blocks and blocks_per_feeder else (1 if n_blocks else 0))
     if n_feeders:
         add_param(graph, "design.n_feeders", "Collector feeders (PV)", n_feeders, "feeders",
                   SRC_CALC, "design_engine",
-                  f"ceil({pv_block_mva:.1f} MVA PV / {feeder_mva_limit:.1f} MVA per feeder "
-                  f"({cable['desc']} at {FEEDER_LOADING_FACTOR:.0%} loading))")
+                  f"ceil({n_blocks} blocks / {blocks_per_feeder} per circuit) — "
+                  f"floor({feeder_amps:.0f} A usable / {block_amps:.0f} A per "
+                  f"{block_mva:g} MVA block at {col_kv:g} kV)")
         add_param(graph, "design.feeder_cable", "Feeder cable", cable["desc"], "",
                   SRC_OEM, f"library:{cable['id']}")
 
@@ -257,6 +271,38 @@ def design_plant(graph: dict[str, Any], intake: dict[str, Any]) -> dict[str, Any
         add_param(graph, "design.poi_sc_mva", "POI short-circuit strength", poi_sc_mva, "MVA",
                   "developer", "intake:poi_sc_mva")
 
+    # --- Ground-truth site design rules ------------------------------------
+    # From the developer's "Generation site design" workbook: the facility must
+    # deliver the requested net MW at a 0.95 power factor, which fixes the
+    # reactive requirement, the apparent-power throughput the gen-tie and MPTs
+    # must carry, and the MPT cooling-stage rating ladder.
+    net_poi = _num(intake.get("net_mw_poi")) or 0.0
+    q_req = net_poi * math.tan(math.acos(PF_POI))
+    s_facility = math.sqrt(net_poi ** 2 + q_req ** 2)
+    gentie_amps_req = (s_facility * 1000.0 / (math.sqrt(3) * poi_kv)) if poi_kv else 0.0
+    gentie_loading = gentie_amps_req / line["ampacity_a"] if line["ampacity_a"] else 0.0
+    if net_poi:
+        add_param(graph, "design.q_req_mvar", "Reactive power requirement",
+                  round(q_req, 2), "Mvar", SRC_CALC, "design_engine",
+                  f"{net_poi:g} MW x tan(acos({PF_POI})) — {PF_POI} power factor at the POI")
+        add_param(graph, "design.s_facility_mva", "Total facility apparent output",
+                  round(s_facility, 2), "MVA", SRC_CALC, "design_engine",
+                  f"sqrt({net_poi:g}² + {q_req:.2f}²) MVA delivered at the POI")
+        add_param(graph, "design.gentie_loading", "Gen-tie expected loading",
+                  round(gentie_loading * 100.0, 1), "%", SRC_CALC, "design_engine",
+                  f"required {gentie_amps_req:.0f} A ({s_facility:.1f} MVA at {poi_kv:g} kV) "
+                  f"/ {line['ampacity_a']} A conductor rating")
+    mpt_ratings = {"onan": round(mpt["mva"] * MPT_LADDER[0], 1),
+                   "onaf1": round(mpt["mva"] * MPT_LADDER[1], 1),
+                   "onaf2": mpt["mva"]}
+    mpt_rule_ok = (n_mpt * mpt["mva"]) >= s_facility * MPT_MARGIN
+    add_param(graph, "design.mpt_ladder", "MPT cooling-stage ratings",
+              f"{mpt_ratings['onan']:g} / {mpt_ratings['onaf1']:g} / {mpt_ratings['onaf2']:g}",
+              "MVA", SRC_CALC, "design_engine",
+              f"ONAN / ONAF1 / ONAF2 = 3:4:5 of the {mpt['mva']:g} MVA top nameplate; "
+              f"{n_mpt} x {mpt['mva']:g} MVA {'covers' if mpt_rule_ok else 'DOES NOT cover'} "
+              f"{MPT_MARGIN} x {s_facility:.1f} MVA facility apparent output")
+
     # --- Topology nodes/edges ---------------------------------------------
     graph["nodes"] = []
     graph["edges"] = []
@@ -327,12 +373,17 @@ def design_plant(graph: dict[str, Any], intake: dict[str, Any]) -> dict[str, Any
         })
     schedule.append({
         "item": "Main power transformer", "make_model": f"{mpt['mva']:g} MVA {mpt['vector']} OLTC",
-        "qty": n_mpt, "rating": f"{col_kv:g}/{poi_kv:g} kV, Z={mpt['z_pct']:g}% @ {mpt['mva']:g} MVA",
+        "qty": n_mpt,
+        "rating": f"{col_kv:g}/{poi_kv:g} kV, Z={mpt['z_pct']:g}%, "
+                  f"{mpt_ratings['onan']:g}/{mpt_ratings['onaf1']:g}/{mpt_ratings['onaf2']:g} "
+                  f"MVA ONAN/ONAF1/ONAF2",
         "source": "Standard family — confirm with procurement", "verified": True,
     })
     schedule.append({
         "item": "Gen-tie line", "make_model": f"{line['kv_class']} kV OHL",
-        "qty": 1, "rating": f"{gentie_mi:g} mi, {line['ampacity_a']} A",
+        "qty": 1,
+        "rating": f"{gentie_mi:g} mi, {line['ampacity_a']} A "
+                  f"(required {gentie_amps_req:.0f} A — {gentie_loading:.0%} loading)",
         "source": "Developer" if gentie_provided else "Routing assumption",
         "verified": gentie_provided,
     })
@@ -351,6 +402,16 @@ def design_plant(graph: dict[str, Any], intake: dict[str, Any]) -> dict[str, Any
         "cable": cable, "line": line,
         "feeder_mi": feeder_mi, "gentie_mi": gentie_mi,
         "total_mva": round(total_mva, 1), "poi_sc_mva": poi_sc_mva,
+        "site_rules": {
+            "pf_poi": PF_POI,
+            "q_req_mvar": round(q_req, 2),
+            "s_facility_mva": round(s_facility, 2),
+            "gentie_amps_required": round(gentie_amps_req, 1),
+            "gentie_loading_pct": round(gentie_loading * 100.0, 1),
+            "mpt_rule_ok": mpt_rule_ok,
+        },
+        "mpt_ratings": mpt_ratings,
+        "pad_detc": PAD_DETC,
         "schedule": schedule,
         "missing": missing,
         "topology": topology_text,
