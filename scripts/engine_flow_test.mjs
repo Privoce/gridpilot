@@ -39,10 +39,10 @@ await page.evaluate(() => {
   const intake = {
     net_mw_poi: 125.0,
     bess_mwh: 200.0,
-    file_site_control: { name: "Ravenwood_Lease_Executed_2026-03-14.pdf", size: 2871342, example: true },
+    file_site_control: { name: "Ravenwood_Lease_Executed_2026-03-14.docx", size: 2871342, example: true },
     file_technical: { name: "Ravenwood_TechnicalData_Workbook_v2.xlsx", size: 87450, example: true },
     file_bess: { name: "Ravenwood_BESS_Spec_v2.xlsx", size: 54120, example: true },
-    file_signatory: { name: "Ravenwood_OfficerCertificate.pdf", size: 184230, example: true },
+    file_signatory: { name: "Ravenwood_OfficerCertificate.docx", size: 184230, example: true },
     file_dyd: { name: "Sungrow_SG4400UD_PSLF_Models.dyd", size: 18240, example: true },
     file_boundary: { name: "Ravenwood_ParcelBoundary.kmz", size: 46210, example: true },
   };

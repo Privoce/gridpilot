@@ -239,13 +239,13 @@ DEFAULT_INTAKE: dict[str, Any] = {
     # Kickoff document uploads: {name, size} metadata; "example" marks preloaded demo
     # files. All examples start staged (uploaded, not yet submitted) so the demo walks
     # the full choose → upload → preview → submit interaction.
-    "file_site_control": {"name": "Ravenwood_Lease_WillowSpringsRanch_Executed_2026-03-14.pdf",
-                          "size": 2_871_342, "example": True, "staged": True},
+    "file_site_control": {"name": "Ravenwood_Lease_WillowSpringsRanch_Executed_2026-03-14.docx",
+                          "size": 384_726, "example": True, "staged": True},
     "file_technical": {"name": "Ravenwood_TechnicalData_Workbook_v1.xlsx", "size": 87_450,
                        "example": True, "staged": True},
     "file_bess": {"name": "Ravenwood_BESS_Spec_Megapack2XL_v1.xlsx", "size": 54_120,
                   "example": True, "staged": True},
-    "file_signatory": {"name": "Ravenwood_OfficerCertificate_RYang.pdf", "size": 184_230,
+    "file_signatory": {"name": "Ravenwood_OfficerCertificate_RYang.docx", "size": 64_180,
                        "example": True, "staged": True},
     "file_dyd": {"name": "Sungrow_SG4400UD_PSLF_Models.dyd", "size": 18_240,
                  "example": True, "staged": True},
