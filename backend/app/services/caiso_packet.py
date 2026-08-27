@@ -2548,15 +2548,15 @@ def _gen_site_drawing(intake: dict, d: dict, eng: dict, path: Path) -> None:
     def gps(dlat: float, dlon: float) -> str:
         return f"{lat0 + dlat:.4f}° N, {abs(lon0 + dlon):.4f}° W"
 
-    label_box(430, 52, "LAND UNDER SITE CONTROL", 148, gps(0.0, 0.0))
-    arrow(520, 78, 490, 122)
+    label_box(430, 52, "LAND UNDER SITE CONTROL", 148)
+    arrow(520, 68, 490, 122)
 
     # Switchyard on the west half of the parcel.
     label_box(52, 288, "NEW SWITCHYARD", 128, gps(0.0014, -0.0038))
     arrow(180, 300, 250, 295)
 
-    label_box(268, 512, "PROPOSED FACILITY FOOTPRINT", 148, gps(-0.0006, 0.0036))
-    arrow(360, 512, 410, 372)
+    label_box(268, 522, "PROPOSED FACILITY FOOTPRINT", 148)
+    arrow(360, 522, 410, 372)
 
     # POI + gen-tie callout (orange, off-site indicator like the example).
     # Dark translucent chips keep the colored text legible on bright terrain.
