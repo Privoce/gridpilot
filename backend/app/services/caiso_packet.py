@@ -2609,14 +2609,19 @@ def _gen_site_drawing(intake: dict, d: dict, eng: dict, path: Path) -> None:
     doc.close()
 
 
-def _title_block_strip(intake: dict, d: dict) -> bytes:
+def _title_block_strip(intake: dict, d: dict,
+                       title_lines: tuple = ("CONCEPTUAL SITE", "LAYOUT"),
+                       title_size: float = 9.5,
+                       sub_lines: tuple | None = None,
+                       issued_lines: tuple = ("Preliminary tie-line", "layout")) -> bytes:
     """Engineering title block drawn horizontally, returned as a PNG.
 
     The caller inserts it with rotate=90 (counter-clockwise), which maps the
     left end of this strip to the bottom of the vertical column — so cells run
     left-to-right here in bottom-to-top order: Drawn by, Drawing Title,
     Project, Issued For, Date Issued, firm header. Deterministic PyMuPDF
-    raster at 4x for crisp text at print size.
+    raster at 4x for crisp text at print size. Shared by the site drawing and
+    the single-line diagram, which pass their own title/issued-for text.
     """
     W, H = 475.0, 130.0
     tdoc = fitz.open()
@@ -2640,10 +2645,16 @@ def _title_block_strip(intake: dict, d: dict) -> bytes:
 
     # Drawing Title
     t(xs[1] + 6, 18, "Drawing Title:", 6, mut=True)
-    t(xs[1] + 6, 44, "CONCEPTUAL SITE", 9.5, bold=True)
-    t(xs[1] + 6, 58, "LAYOUT", 9.5, bold=True)
-    t(xs[1] + 6, 80, f"{_fmt(d['net'])} MW at POI", 7)
-    t(xs[1] + 6, 92, f"~{_fmt(d['acres'])} acres", 7)
+    ty = 44
+    for ln in title_lines:
+        t(xs[1] + 6, ty, ln, title_size, bold=True)
+        ty += title_size + 4.5
+    if sub_lines is None:
+        sub_lines = (f"{_fmt(d['net'])} MW at POI", f"~{_fmt(d['acres'])} acres")
+    sy = max(ty + 10, 80)
+    for ln in sub_lines:
+        t(xs[1] + 6, sy, ln, 7)
+        sy += 12
 
     # Project
     t(xs[2] + 6, 18, "Project:", 6, mut=True)
@@ -2653,8 +2664,10 @@ def _title_block_strip(intake: dict, d: dict) -> bytes:
 
     # Issued For + revision table
     t(xs[3] + 6, 18, "Issued For", 6, mut=True)
-    t(xs[3] + 24, 40, "Preliminary tie-line", 6.5, bold=True)
-    t(xs[3] + 24, 49, "layout", 6.5, bold=True)
+    iy = 40
+    for ln in issued_lines:
+        t(xs[3] + 24, iy, ln, 6.5, bold=True)
+        iy += 9
     t(xs[3] + 8, 40, "0", 7, bold=True)
     p.draw_line(fitz.Point(xs[3] + 20, 24), fitz.Point(xs[3] + 20, H - 8), color=INK, width=0.5)
     t(xs[3] + 8, 30, "Rev", 5.5, mut=True)
@@ -2675,6 +2688,359 @@ def _title_block_strip(intake: dict, d: dict) -> bytes:
     data = pix.tobytes("png")
     tdoc.close()
     return data
+
+
+# In-process cache for AI-generated SLD linework base images, keyed by the
+# number of main-transformer strings so packet regeneration reuses the base.
+_SLD_BASE_CACHE: dict[str, bytes] = {}
+
+# Measured geometry of the bundled 2-MPT base image (864x1152 px): where the
+# prompt pins the station box, string columns, and each symbol along the
+# strings. Label anchors below are expressed against these pixel positions.
+_SLD_PX = {
+    "size": (864, 1152),
+    "box": (66, 44, 788, 314),      # dashed switching-station rectangle
+    "exit_y": 176,                   # left/right line exits
+    "strings_x": (264, 580),         # vertical circuit columns
+    "meter_y": 502, "brk1_y": 588, "aux_y": 664, "brk2_y": 760,
+    "xfmr_y": 860, "fan_y": 982, "ground_y": 1100,
+}
+
+
+def _sld_base_image(n_mpt: int) -> bytes | None:
+    """CAD-style SLD linework base image (no text) for the conceptual SLD.
+
+    Grok Imagine draws the diagram linework — switching-station ring bus and
+    the transformer strings — with the layout pinned by the prompt; every
+    label, data block, note, and the title block is drawn deterministically
+    in the PDF layer, mirroring the site-drawing process. Cached in memory
+    and on disk per string count; the demo ships a bundled base. Returns None
+    when no API key is configured or the call fails.
+    """
+    from backend.app.config import settings
+
+    key = f"{n_mpt}mpt"
+    if key in _SLD_BASE_CACHE:
+        return _SLD_BASE_CACHE[key]
+    bundled = CAISO_LOGO.parent / f"sldbase_{key}.png"
+    if bundled.exists():
+        data = bundled.read_bytes()
+        _SLD_BASE_CACHE[key] = data
+        return data
+    if not settings.xai_api_key:
+        return None
+    cache_file = PACKETS_DIR / f"sldbase_{key}.png"
+    if cache_file.exists():
+        data = cache_file.read_bytes()
+        _SLD_BASE_CACHE[key] = data
+        return data
+    word = {1: "ONE", 2: "TWO", 3: "THREE", 4: "FOUR"}.get(n_mpt, str(n_mpt))
+    prompt = (
+        "Technical electrical engineering single-line diagram, precise CAD-style black "
+        "linework on a pure white background, drafted like a professional utility drawing. "
+        "Layout, strictly pinned: at the top, one dashed-outline rectangle spanning the "
+        "upper quarter of the frame containing a rectangular ring bus of thin orthogonal "
+        "lines with six small solid black squares (circuit breakers) and small open-blade "
+        "disconnect switch symbols on the bus; one thin horizontal line exits the dashed "
+        "rectangle through its left edge and one through its right edge. From the bottom "
+        f"edge of the dashed rectangle, exactly {word} long thin vertical circuit lines "
+        "descend, evenly spaced across the frame width. Each vertical line passes through, "
+        "in order from top to bottom: one small open circle (meter) connected by a short "
+        "horizontal stub, one small solid black square (breaker), one short horizontal "
+        "branch line ending in a small arrowhead (auxiliary load tap), one more small "
+        "solid black square (breaker), and then exactly ONE transformer symbol made of two "
+        "overlapping open circles. Below its transformer, each vertical line fans out "
+        "through a short horizontal header into exactly FOUR short parallel vertical "
+        "stubs; each stub carries a tiny solid square and ends in a ground symbol of "
+        "three stacked shrinking horizontal bars. Uniform thin line weight, crisp "
+        "straight orthogonal lines, right angles only, generous white space. ABSOLUTELY "
+        "NO text, no letters, no numbers, no labels, no title block, no border frame, "
+        "no logos, no color, no shading — black lines on white only."
+    )
+    try:
+        import httpx
+
+        resp = httpx.post(
+            f"{settings.xai_base_url.rstrip('/')}/images/generations",
+            headers={"Authorization": f"Bearer {settings.xai_api_key}"},
+            json={"model": "grok-imagine-image", "prompt": prompt,
+                  "aspect_ratio": "3:4", "response_format": "b64_json"},
+            timeout=90.0,
+        )
+        resp.raise_for_status()
+        data = base64.b64decode(resp.json()["data"][0]["b64_json"])
+    except Exception:
+        return None
+    PACKETS_DIR.mkdir(parents=True, exist_ok=True)
+    cache_file.write_bytes(data)
+    _SLD_BASE_CACHE[key] = data
+    return data
+
+
+def _gen_sld(intake: dict, d: dict, eng: dict, path: Path) -> None:
+    """Checklist item 10 — conceptual electrical single-line diagram in the
+    CAISO reference format: AI-drawn linework base (switching-station ring
+    bus, metered MPT strings, collector fan-outs) with every label placed
+    deterministically, plus general notes, a symbols legend, and the same
+    rotated title-block column as the site drawing."""
+    design = eng["design"]
+    n_mpt = int(design["counts"]["main_transformers"])
+    base = _sld_base_image(n_mpt) if n_mpt == 2 else None
+    if base is None:
+        sld_to_pdf(build_sld(eng["graph"], design, intake), path)
+        return
+
+    mpt, line, c = design["mpt"], design["line"], design["counts"]
+    inv = design["inverter"]
+    gentie_mi = float(design["gentie_mi"])
+    kv = float(d["kv"])
+    col_kv = float(next((n["kv"] for n in eng["graph"]["nodes"]
+                         if n["id"] == "col_bus"), 34.5))
+    poi_name = str(intake.get("poi_name") or "POI").split(" (")[0].upper()
+    aux_each = float(intake.get("aux_mw") or 0) / max(n_mpt, 1)
+    amp = float(line.get("ampacity_a") or 1200)
+    rating_mva = math.sqrt(3) * kv * amp / 1000.0
+    conductor = ("1272 KCMIL ACSR (45/7) BITTERN" if amp >= 1100
+                 else "795 KCMIL ACSR (26/7) DRAKE")
+    z_base = kv * kv / 100.0
+    r1 = line["r_ohm_per_mi"] * gentie_mi / z_base
+    x1 = line["x_ohm_per_mi"] * gentie_mi / z_base
+    b1 = 5.4e-6 * gentie_mi * z_base          # typical OHL charging susceptance
+    brk_a = 3000 if amp <= 3000 else 4000
+
+    doc = fitz.open()
+    page = doc.new_page(width=792, height=612)
+    page.draw_rect(fitz.Rect(10, 10, 782, 602), color=INK, width=1.6)
+    page.draw_rect(fitz.Rect(14, 14, 778, 598), color=INK, width=0.6)
+
+    # Linework base — mapped so measured pixel anchors convert to sheet points.
+    img = fitz.Rect(36, 20, 450, 572)   # 414 x 552 = the base's 3:4 ratio
+    page.insert_image(img, stream=base, keep_proportion=False)
+    pw, ph = _SLD_PX["size"]
+
+    def X(px: float) -> float:
+        return img.x0 + px / pw * img.width
+
+    def Y(py: float) -> float:
+        return img.y0 + py / ph * img.height
+
+    def t(x: float, y: float, s: str, size: float = 5.8, bold: bool = False,
+          center: bool = False, mut: bool = False) -> None:
+        if center:
+            x -= fitz.get_text_length(s, fontname="hebo" if bold else "helv",
+                                      fontsize=size) / 2
+        page.insert_text((x, y), s, fontsize=size,
+                         fontname="hebo" if bold else "helv",
+                         color=MUT if mut else INK)
+
+    def ublock(x: float, y: float, head: str, lines: list[str],
+               size: float = 5.4, lead: float = 7.0) -> None:
+        t(x, y, head, size + 0.4, bold=True)
+        w = fitz.get_text_length(head, fontname="hebo", fontsize=size + 0.4)
+        page.draw_line(fitz.Point(x, y + 1.6), fitz.Point(x + w, y + 1.6),
+                       color=INK, width=0.5)
+        for i, ln in enumerate(lines):
+            t(x, y + lead + 1.5 + i * lead, ln, size)
+
+    bx0, by0, bx1, by1 = (X(_SLD_PX["box"][0]), Y(_SLD_PX["box"][1]),
+                          X(_SLD_PX["box"][2]), Y(_SLD_PX["box"][3]))
+    sx = [X(p) for p in _SLD_PX["strings_x"]]
+    ey = Y(_SLD_PX["exit_y"])
+
+    # Station label + line-exit callouts (existing SCE 230 kV corridor ends).
+    t((bx0 + bx1) / 2, by0 - 4, f"NEW {kv:g}KV SWITCHING STATION",
+      6.4, bold=True, center=True)
+    poi_words = f"TO {poi_name}".split()
+    left_lines = [" ".join(poi_words[:2]), " ".join(poi_words[2:]) or "SYSTEM",
+                  "CAISO BUS 24086", f"{gentie_mi:.1f} MILES"]
+    right_lines = ["TO WINDHUB", "SUBSTATION (SCE)", "CAISO BUS 24811",
+                   "4.4 MILES"]
+    for lines, x, right in ((left_lines, bx0 - 4, True),
+                            (right_lines, bx1 + 4, False)):
+        ys = (ey - 16.5, ey - 10.3, ey - 4.1, ey + 7)   # skip the exit line
+        for i, ln in enumerate(lines):
+            xx = x - (fitz.get_text_length(ln, fontname="helv", fontsize=4.8)
+                      if right else 0)
+            t(xx, ys[i], ln, 4.8)
+
+    # POI block in the open area left of the first string, under the station.
+    poi_lines = [f"NEW {kv:g} KV SWITCHING STATION",
+                 f"POI COORDINATES: ({d['lat']}, {d['lon']})"]
+    poi_w = max(fitz.get_text_length(s, fontname="helv", fontsize=5.4)
+                for s in poi_lines)
+    ublock(sx[0] - 12 - poi_w, by1 + 16, "POINT OF INTERCONNECTION", poi_lines)
+
+    my, b1y, ay, b2y, xy, fy = (Y(_SLD_PX[k]) for k in
+                                ("meter_y", "brk1_y", "aux_y", "brk2_y",
+                                 "xfmr_y", "fan_y"))
+    gy = Y(_SLD_PX["ground_y"])
+
+    for i, x in enumerate(sx, start=1):
+        # Tie-line data block on the long run between the station and meter.
+        ublock(x + 8, by1 + 20, f"TIE LINE TO MPT{i}",
+               [f"CONDUCTOR = {conductor}",
+                f"RATING = {rating_mva:.1f} MVA",
+                f"LENGTH = {gentie_mi:.1f} MILES",
+                f"R1 = {r1:.6f} PU (100 MVA BASE)",
+                f"X1 = {x1:.6f} PU (100 MVA BASE)",
+                f"B1 = {b1:.6f} PU (100 MVA BASE)",
+                f"R0 = {3.0 * r1:.6f} PU (100 MVA BASE)",
+                f"X0 = {3.2 * x1:.6f} PU (100 MVA BASE)",
+                f"B0 = {0.62 * b1:.6f} PU (100 MVA BASE)"],
+               size=5.0, lead=6.0)
+        t(x - 3.2, my + 2.2, "M", 5.2, bold=True)          # inside the meter
+        t(x + 10, my - 1, "UTILITY REVENUE", 5.2)
+        t(x + 10, my + 5.4, "METER (CT/PT)", 5.2)
+        for by in (b1y, b2y):
+            page.insert_text((x - 22.5, by - 4), f"{brk_a}A", fontsize=4.8,
+                             fontname="helv", color=INK)
+            page.insert_text((x - 22.5, by + 2), f"{kv:g}KV", fontsize=4.8,
+                             fontname="helv", color=INK)
+        t(x + 26, ay - 3, f"AUX LOAD {i}", 5.4, bold=True)
+        t(x + 26, ay + 3.6, f"{aux_each:g} MW", 5.4)
+        t(x + 26, ay + 10.2, "@ ~0.95 PF", 5.4)
+        ublock(x + 21, xy - 16, f"MAIN STEP-UP TRANSFORMER {i} (MPT{i})",
+               [f"{mpt['mva']:g} MVA (ONAN/ONAF)",
+                f"{kv:g}/{col_kv:g} KV, {mpt['vector']}",
+                f"Z = {mpt['z_pct']:g}% @ {mpt['mva']:g} MVA",
+                f"X/R = {mpt['xr']:g}"],
+               size=5.0, lead=6.2)
+        t(x, fy - 6, f"{col_kv:g} KV COLLECTOR", 5.0, center=True)
+
+    t((sx[0] + sx[1]) / 2, gy + 16,
+      f"COLLECTOR DETAIL TYPICAL - {c['inverters']} x {inv['vendor'].upper()} "
+      f"{inv['model'].upper()} PV INVERTERS, {c['bess_units']} x BESS PCS, "
+      f"{c['feeders']} x {col_kv:g} KV FEEDERS", 5.2, center=True)
+    t(396, 592, "NOT FOR CONSTRUCTION: FOR INTERCONNECTION APPLICATION ONLY",
+      9, bold=True, center=True)
+
+    # ---- Right column: general notes + symbols legend ----------------------
+    nx0, nx1 = 468, 694
+    net = _fmt(d["net"])
+    t(nx0, 46, "GENERAL NOTES", 8, bold=True)
+    page.draw_line(fitz.Point(nx0, 50), fitz.Point(nx1, 50), color=INK, width=0.8)
+    notes = [
+        [f"MAXIMUM NET FACILITY OUTPUT LIMITED TO {net} MW @ \u00b10.95 PF"],
+        [f"FACILITY CAPABLE OF {net} MW @ \u00b10.95 PF AT GRID VOLTAGE",
+         "RANGE OF 0.90 PU TO 1.10 PU"],
+        ["FACILITY EQUIPMENT SPECIFICATIONS ARE PROVIDED FOR",
+         "INTERCONNECTION STUDY PURPOSES; ACTUAL EQUIPMENT",
+         "SPECIFICATIONS ARE SUBJECT TO CHANGE BASED ON ENGINEERING",
+         "AND PROCUREMENT CONSTRAINTS."],
+    ]
+    ny = 62
+    for num, lines in enumerate(notes, start=1):
+        page.draw_circle((nx0 + 5, ny - 2), 4.6, color=INK, width=0.7)
+        t(nx0 + 5, ny, str(num), 5.4, bold=True, center=True)
+        for j, ln in enumerate(lines):
+            t(nx0 + 15, ny + j * 7, ln, 5.4)
+        ny += len(lines) * 7 + 7
+
+    ly = ny + 14
+    t(nx0, ly, "SYMBOLS AND LEGEND", 8, bold=True)
+    page.draw_line(fitz.Point(nx0, ly + 4), fitz.Point(nx1, ly + 4),
+                   color=INK, width=0.8)
+    ly += 20
+    gx1, tx1 = nx0 + 8, nx0 + 34      # left glyph/label columns
+    gx2, tx2 = nx0 + 128, nx0 + 154   # right glyph/label columns
+    row = 17.0
+
+    def lg_label(x: float, y: float, s: str) -> None:
+        for j, part in enumerate(s.split("\n")):
+            t(x, y + 2 + j * 6, part, 5.2)
+
+    # Left column glyphs
+    y = ly
+    page.draw_circle((gx1 + 6, y - 3), 4, color=INK, width=0.8)
+    page.draw_circle((gx1 + 6, y + 3), 4, color=INK, width=0.8)
+    lg_label(tx1, y, "TRANSFORMER")
+    y += row
+    page.draw_line(fitz.Point(gx1, y), fitz.Point(gx1 + 7, y), color=INK, width=0.8)
+    page.draw_circle((gx1 + 10, y - 2.6), 2.6, color=INK, width=0.8)
+    page.draw_circle((gx1 + 10, y + 2.6), 2.6, color=INK, width=0.8)
+    lg_label(tx1, y, "POTENTIAL TRANSFORMER, PT")
+    y += row
+    page.draw_line(fitz.Point(gx1 + 6, y - 5), fitz.Point(gx1 + 6, y + 5),
+                   color=INK, width=0.8)
+    page.draw_circle((gx1 + 6, y), 3.4, color=INK, width=0.8)
+    lg_label(tx1, y, "CURRENT TRANSFORMER, CT")
+    y += row
+    page.draw_circle((gx1 + 6, y), 4.6, color=INK, width=0.8)
+    t(gx1 + 6, y + 2, "M", 4.6, bold=True, center=True)
+    lg_label(tx1, y, "REVENUE METER")
+    y += row
+    page.draw_rect(fitz.Rect(gx1 + 2, y - 4, gx1 + 10, y + 4), color=INK,
+                   width=0.7, fill=INK)
+    lg_label(tx1, y, "AC CIRCUIT BREAKER")
+    y += row
+    page.draw_line(fitz.Point(gx1, y + 3), fitz.Point(gx1 + 4, y + 3),
+                   color=INK, width=0.8)
+    page.draw_line(fitz.Point(gx1 + 4, y + 3), fitz.Point(gx1 + 11, y - 4),
+                   color=INK, width=0.8)
+    lg_label(tx1, y, "SWITCH")
+    y += row
+    page.draw_line(fitz.Point(gx1, y + 3), fitz.Point(gx1 + 4, y + 3),
+                   color=INK, width=0.8)
+    page.draw_line(fitz.Point(gx1 + 4, y + 3), fitz.Point(gx1 + 11, y - 4),
+                   color=INK, width=0.8)
+    page.draw_circle((gx1 + 4, y + 1), 2.2, color=INK, width=0.7)
+    lg_label(tx1, y, "FUSED SWITCH")
+
+    # Right column glyphs
+    y = ly
+    page.draw_line(fitz.Point(gx2, y), fitz.Point(gx2 + 14, y), color=INK, width=0.9)
+    lg_label(tx2 + 4, y, "ABOVE GROUND")
+    y += row
+    page.draw_line(fitz.Point(gx2, y), fitz.Point(gx2 + 14, y), color=INK,
+                   width=0.9, dashes="[2 2] 0")
+    lg_label(tx2 + 4, y, "UNDERGROUND CABLE")
+    y += row
+    for a, b_ in (((gx2 + 3, y + 3), (gx2 + 11, y + 3)),
+                  ((gx2 + 11, y + 3), (gx2 + 7, y - 4)),
+                  ((gx2 + 7, y - 4), (gx2 + 3, y + 3))):
+        page.draw_line(fitz.Point(*a), fitz.Point(*b_), color=INK, width=0.7)
+    lg_label(tx2 + 4, y, "UNDERGROUND CABLE\nTERMINATION")
+    y += row + 4
+    page.draw_rect(fitz.Rect(gx2, y - 5, gx2 + 12, y + 5), color=INK, width=0.7)
+    page.draw_line(fitz.Point(gx2, y + 5), fitz.Point(gx2 + 12, y - 5),
+                   color=INK, width=0.6)
+    lg_label(tx2 + 4, y, "PV / BESS INVERTER")
+    y += row
+    page.draw_line(fitz.Point(gx2 + 1, y - 3), fitz.Point(gx2 + 11, y - 3),
+                   color=INK, width=1.1)
+    page.draw_line(fitz.Point(gx2 + 3.5, y + 2), fitz.Point(gx2 + 8.5, y + 2),
+                   color=INK, width=1.1)
+    lg_label(tx2 + 4, y, "BATTERY ENERGY STORAGE")
+    y += row
+    page.draw_line(fitz.Point(gx2 + 6, y - 5), fitz.Point(gx2 + 6, y - 1),
+                   color=INK, width=0.8)
+    for hw, dy in ((5, -1), (3.4, 1.6), (1.8, 4.2)):
+        page.draw_line(fitz.Point(gx2 + 6 - hw, y + dy),
+                       fitz.Point(gx2 + 6 + hw, y + dy), color=INK, width=0.8)
+    lg_label(tx2 + 4, y, "GROUND")
+
+    # ---- Title block column (right edge), same process as the site drawing --
+    tb = fitz.Rect(706, 20, 768, 572)
+    page.draw_rect(tb, color=INK, width=1.2)
+    strip = fitz.Rect(tb.x0, tb.y0, tb.x1, 524)
+    page.insert_image(strip, stream=_title_block_strip(
+        intake, d,
+        title_lines=("CONCEPTUAL", "ELECTRICAL", "SINGLE-LINE DIAGRAM"),
+        title_size=7.6,
+        sub_lines=(f"{_fmt(d['net'])} MW at POI", f"{kv:g} / {col_kv:g} kV"),
+        issued_lines=("CAISO", "Interconnection", "Request")),
+        rotate=90, keep_proportion=False)
+    page.draw_line(fitz.Point(tb.x0, 524), fitz.Point(tb.x1, 524),
+                   color=INK, width=0.9)
+    page.draw_line(fitz.Point(737, 524), fitz.Point(737, tb.y1),
+                   color=INK, width=0.7)
+    page.insert_text((tb.x0 + 5, 537), "Revision:", fontsize=6, fontname="helv",
+                     color=MUT)
+    page.insert_text((tb.x0 + 5, 557), "0", fontsize=10, fontname="hebo", color=INK)
+    page.insert_text((742, 537), "Page:", fontsize=6, fontname="helv", color=MUT)
+    page.insert_text((742, 557), "1 of 1", fontsize=10, fontname="hebo", color=INK)
+    doc.save(path)
+    doc.close()
 
 
 def _gen_site_drawing_schematic(intake: dict, d: dict, eng: dict, path: Path) -> None:
@@ -3507,11 +3873,11 @@ def generate_packet(intake: dict[str, Any], org_id: str, iso: str | None = None)
         "switchyard, facility footprint, POI, MW, and gen-tie; boundary geometry in the KMZ.", 9))
 
     sld_prims = build_sld(eng["graph"], eng["design"], intake)
-    sld_to_pdf(sld_prims, add(
+    _gen_sld(intake, d, eng, add(
         "10", "sld", "Single-Line Diagram", f"10_SingleLineDiagram_{slug}.pdf",
         "checklist", "generated", "CONCEPTUAL — for interconnection application only", "GridPilot",
-        "Conceptual SLD from the project graph: metering, protection, tie-line data, "
-        "ownership demarcation, typical-of inverter block detail.", 10))
+        "Conceptual SLD in the CAISO reference format: switching-station ring bus, revenue "
+        "metering, tie-line data, MPT strings, collector detail, notes and symbols legend.", 10))
     add("10b", "sld_dxf", "Single-Line Diagram (DXF)", f"10_SingleLineDiagram_{slug}.dxf",
         "checklist", "generated", "EDITABLE — CAD import (R12)", "GridPilot",
         "Same drawing as the PDF, exported for AutoCAD-class tools.", 10
