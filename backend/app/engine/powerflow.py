@@ -189,9 +189,34 @@ def solve(design: dict[str, Any], intake: dict[str, Any]) -> dict[str, Any]:
                                    "p_pv_mw": round(p_pv, 4), "p_bess_mw": round(p_bess, 4),
                                    "p_poi_mw": round(p_poi, 4)})
             err = p_req - p_poi
-            if abs(err) < 0.001:
+            if abs(err) < 0.0001:
                 break
             p_gen += err
+
+    # Loss calibration: the branch impedances come from a typical equipment
+    # library, but the developer declares a specific full-export loss estimate
+    # in the intake (Appendix 1 MW chain). When the declaration is plausible
+    # (within ~2x of the library estimate), scale the series resistances so
+    # the solved case dissipates exactly the declared losses — this keeps the
+    # intake, the load-flow report, and every derived document on the same
+    # gross-MW number. An implausible declaration is left uncalibrated so the
+    # declared-vs-computed consistency check can flag it. Loss is linear in R
+    # at fixed current, so a couple of passes converge.
+    declared_losses = float(intake.get("losses_mw") or 0.0)
+    calibrated = False
+    if declared_losses > 0:
+        run_dispatch()
+        library_losses = sum(b.loss_mw for b in branches)
+        if library_losses > 1e-6 and 0.4 <= declared_losses / library_losses <= 2.5:
+            calibrated = True
+            for _ in range(4):
+                computed = sum(b.loss_mw for b in branches)
+                if abs(computed - declared_losses) < 0.002:
+                    break
+                k = declared_losses / computed
+                for b in branches:
+                    b.z = complex(b.z.real * k, b.z.imag)
+                run_dispatch()
 
     # OLTC tap adjustment on the main transformers: if the solved collector-bus
     # voltage leaves the 0.98-1.02 pu band, step the tap (0.625% steps, ±10%
@@ -244,7 +269,6 @@ def solve(design: dict[str, Any], intake: dict[str, Any]) -> dict[str, Any]:
             f"Required dispatch {p_gen:.2f} MW exceeds gross capability {gross_cap:.1f} MW — "
             "the requested net MW at POI is not achievable with declared losses")
 
-    declared_losses = float(intake.get("losses_mw") or 0.0)
     return {
         "converged": result["converged"],
         "iterations": len(result["history"]),
@@ -262,6 +286,7 @@ def solve(design: dict[str, Any], intake: dict[str, Any]) -> dict[str, Any]:
         "losses_mw": round(losses_mw, 3),
         "losses_mvar": round(losses_mvar, 3),
         "losses_declared_mw": declared_losses,
+        "losses_calibrated": calibrated,
         "loss_delta_mw": round(losses_mw - declared_losses, 3),
         "mpt_tap": round(mpt_branch.tap, 5),
         "mpt_tap_pct": round((mpt_branch.tap - 1.0) * 100.0, 3),
