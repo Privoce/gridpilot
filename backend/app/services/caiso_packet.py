@@ -3572,6 +3572,9 @@ def generate_packet(intake: dict[str, Any], org_id: str, iso: str | None = None)
     zip_path = pdir / f"{slug}_{profile['iso'].replace('-', '')}_Packet.zip"
     with zipfile.ZipFile(zip_path, "w", zipfile.ZIP_DEFLATED) as z:
         for doc in docs:
+            # The checklist README is an in-app map only — not a deliverable.
+            if doc["key"] == "readme":
+                continue
             fp = pdir / doc["file"]
             if fp.exists():
                 z.write(fp, doc["file"])
