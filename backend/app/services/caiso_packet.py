@@ -217,7 +217,9 @@ DEFAULT_INTAKE: dict[str, Any] = {
     "shared_facilities": "No shared facilities",
     "queue_ref": "",
     "project_type": "Solar PV + BESS (AC-coupled)",
-    "gross_mva": 132.0,
+    # Machine-table sum, matching Attachment A's own SUMPRODUCT formula:
+    # 18 x 4.4 MVA PV inverters + 52 x 2.0 MVA Megapack PCS = 183.2 MVA.
+    "gross_mva": 183.2,
     "gross_mw": 128.0,
     "aux_mw": 2.5,
     "losses_mw": 0.5,
@@ -1240,7 +1242,7 @@ def _fill_appendix1_docx(intake: dict, d: dict, path: Path) -> None:
     text(41, d["lat"])
     text(42, d["lon"])
     # ---- 4b. Megawatt values
-    text(43, _fmt(_num(intake.get("gross_mva"))))
+    text(43, _fmt(d.get("total_mva") or _num(intake.get("gross_mva"))))
     text(44, _fmt(d["gross"]))
     text(45, _fmt(d["aux"]))
     text(46, _fmt(d["max_net"]))
@@ -1353,7 +1355,8 @@ def _gen_ir_generic(intake: dict, d: dict, p: dict, path: Path) -> None:
     pdf.kv("County / State", f"{intake.get('county') or '—'} / {intake.get('state') or '—'}")
     pdf.kv("GPS (decimal)", f"{d['lat']}, {d['lon']}")
     pdf.section("4 · Project megawatt values")
-    pdf.kv("Gross capacity (MVA, unity PF)", _fmt(_num(intake.get("gross_mva"))))
+    pdf.kv("Gross capacity (MVA, unity PF)",
+           _fmt(d.get("total_mva") or _num(intake.get("gross_mva"))))
     pdf.kv("Gross output (MW)", _fmt(d["gross"]))
     pdf.kv("Auxiliary load (MW)", _fmt(d["aux"]))
     pdf.kv("Maximum net electrical output (MW)", _fmt(d["max_net"]))
@@ -1506,7 +1509,7 @@ def _fill_attachment_a_xlsm(intake: dict, d: dict, eng: dict, path: Path) -> Non
         W(ws, "F227", 95)
 
     # Section VII — reactive capability, frequency response, PPC
-    gross_mva = _num(intake.get("gross_mva")) or d["gross"] * 1.05
+    gross_mva = eng["design"].get("total_mva") or _num(intake.get("gross_mva")) or d["gross"] * 1.05
     qmax = round(_math.sqrt(max(gross_mva ** 2 - d["gross"] ** 2, 0)), 2)
     W(ws, "F240", qmax)
     W(ws, "F241", -qmax)
@@ -1763,7 +1766,8 @@ def _gen_attachment_a_xlsx(intake: dict, d: dict, eng: dict, path: Path) -> None
     row("Item #", "I. Overall Project MW Information", "UNITS",
         "Value", "", "Notes", "sect")
     row("I.1", "Total Generating Facility gross capacity", "MVA",
-        _num(intake.get("gross_mva")) or "", "", "Installed capacity at unity PF")
+        eng["design"].get("total_mva") or _num(intake.get("gross_mva")) or "",
+        "", "Installed capacity at unity PF")
     row("I.2", "Total Generating Facility gross output", "MW", d["gross"], "",
         "The gross MW output to achieve requested MW at POI")
     row("I.3", "Generating Facility Auxiliary Load", "MW", d["aux"])
@@ -1848,7 +1852,7 @@ def _gen_attachment_a_xlsx(intake: dict, d: dict, eng: dict, path: Path) -> None
 
     row()
     row("", "VII. Voltage / PF Control, Frequency Control & Power Plant Controller", "", "", "", "", "sect")
-    gross_mva = _num(intake.get("gross_mva")) or d["gross"] * 1.05
+    gross_mva = eng["design"].get("total_mva") or _num(intake.get("gross_mva")) or d["gross"] * 1.05
     qmax = round(_math.sqrt(max(gross_mva ** 2 - d["gross"] ** 2, 0)), 2)
     q_req = round(_math.sqrt((d["gross"] / 0.95) ** 2 - d["gross"] ** 2), 2)
     row("VII.1", "Reactive capability from generators — Qmax", "MVARS", qmax, "",
@@ -3792,6 +3796,10 @@ def generate_packet(intake: dict[str, Any], org_id: str, iso: str | None = None)
     # Full deterministic engineering pass: graph -> design -> load flow ->
     # short circuit -> dynamic validation -> consistency + approvals.
     eng = run_engineering(intake, profile["iso"])
+    # Gross capacity (MVA) quoted in documents is the design engine's machine
+    # sum — the same figure Attachment A's prefab formula computes — so every
+    # document agrees with the workbook regardless of the declared estimate.
+    d["total_mva"] = eng["design"].get("total_mva")
 
     docs: list[dict[str, Any]] = []
 
