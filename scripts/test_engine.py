@@ -315,8 +315,12 @@ def test_phase8_packet() -> None:
         ok((pdir / doc["file"]).exists(), f"file exists: {doc['file']}")
 
     z = zipfile.ZipFile(pdir / m["zip_file"])
-    deliverable = [d for d in m["documents"] if d["key"] != "readme"]
-    ok(len(z.namelist()) == len(deliverable), "zip contains every deliverable (checklist README is in-app only)")
+    deliverable = [d for d in m["documents"]
+                   if d["key"] != "readme" and d["category"] == "checklist"]
+    ok(len(z.namelist()) == len(deliverable),
+       "zip holds exactly the checklist deliverables (README + supporting docs stay in-app)")
+    ok(all(n[:2] not in ("S1", "S2", "S3", "S4", "S5", "S6", "S7", "S8", "S9", "00")
+           for n in z.namelist()), "no supporting files in the zip")
 
     e = m["engineering"]
     ok(e["loadflow"]["converged"], "manifest carries the solved case")
