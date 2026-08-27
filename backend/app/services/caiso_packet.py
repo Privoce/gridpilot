@@ -1194,7 +1194,9 @@ def _fill_appendix1_docx(intake: dict, d: dict, path: Path) -> None:
     is_hybrid = d["has_bess"] and "BESS" in str(intake.get("project_type") or "")
     bess_hours = (d["bess_mw"] and _num(intake.get("bess_mwh"))
                   and round(_num(intake.get("bess_mwh")) / d["bess_mw"], 1))
-    today = date.today().strftime("%m/%d/%Y")
+    # CAISO business date (the server may run in UTC).
+    from zoneinfo import ZoneInfo
+    today = datetime.now(ZoneInfo("America/Los_Angeles")).strftime("%m/%d/%Y")
 
     # ---- Page 1: minimum-requirements checklist — mark what the packet
     # contains. Items 1 (study deposit) and 5 (ISP demonstrations, fields
@@ -1222,6 +1224,8 @@ def _fill_appendix1_docx(intake: dict, d: dict, path: Path) -> None:
         text(30, intake.get("partial_pct") or "")
     if is_solar_or_wind:
         check(32 if deliv != "Energy Only" else 33)
+    text(34, f"{deliv} Deliverability Status requested; deliverability to be assessed "
+             "with the next annual Deliverability Allocation cycle per Appendix DD.")
     # ---- 4a. Project name & location
     text(35, intake.get("project_name"))
     text(36, intake.get("street_address") or "9200 Backus Road")
@@ -1236,6 +1240,7 @@ def _fill_appendix1_docx(intake: dict, d: dict, path: Path) -> None:
     text(44, _fmt(d["gross"]))
     text(45, _fmt(d["aux"]))
     text(46, _fmt(d["max_net"]))
+    text(47, "N/A")  # increase-to-existing value — new facility
     text(48, _fmt(d["losses"]))
     text(49, _fmt(d["net"]))
     text(50, f"A plant-level Power Plant Controller (PPC) monitors POI revenue metering and "
@@ -1279,6 +1284,7 @@ def _fill_appendix1_docx(intake: dict, d: dict, path: Path) -> None:
     text(92, company_state)
     text(93, company_zip)
     text(94, intake.get("contact_phone"))
+    text(95, "N/A")
     text(96, intake.get("contact_email"))
     # ---- 4f. Point of Interconnection
     text(97, intake.get("poi_name"))
@@ -1297,6 +1303,7 @@ def _fill_appendix1_docx(intake: dict, d: dict, path: Path) -> None:
     check(107)  # granted to the same entity — Yes
     # 40-year lease from COD — matches the Site Exclusivity form (item 4).
     text(111, "40")
+    text(112, "N/A")  # term of option — site control is a lease
     text(113, f"~{_fmt(d['acres'])}")
     # ---- 8. Representative to contact (same as the contact person)
     text(114, first)
@@ -1308,6 +1315,7 @@ def _fill_appendix1_docx(intake: dict, d: dict, path: Path) -> None:
     text(120, company_state)
     text(121, company_zip)
     text(122, intake.get("contact_phone"))
+    text(123, "N/A")
     text(124, intake.get("contact_email"))
     # ---- 9. Submitted by + consent + e-signature
     text(125, intake.get("legal_name"))
