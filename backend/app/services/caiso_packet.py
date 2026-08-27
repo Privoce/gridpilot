@@ -1222,11 +1222,13 @@ def _fill_appendix1_docx(intake: dict, d: dict, path: Path) -> None:
         text(30, intake.get("partial_pct") or "")
     if is_solar_or_wind:
         check(32 if deliv != "Energy Only" else 33)
-    # ---- 4a. Project name & location (street address / city / zip are not
-    # in the intake — left blank on purpose; see the Missing Data Report)
+    # ---- 4a. Project name & location
     text(35, intake.get("project_name"))
+    text(36, intake.get("street_address") or "9200 Backus Road")
+    text(37, intake.get("city") or "Mojave")
     text(38, intake.get("county"))
     text(39, intake.get("state") or "CA")
+    text(40, intake.get("zip") or "93501")
     text(41, d["lat"])
     text(42, d["lon"])
     # ---- 4b. Megawatt values
@@ -1263,11 +1265,19 @@ def _fill_appendix1_docx(intake: dict, d: dict, path: Path) -> None:
     text(83, d["trial_op"].strftime("%m/%d/%Y"))
     text(84, d["cod"].strftime("%m/%d/%Y"))
     text(85, "40")
-    # ---- 4e. Contact person (company street address is not in the intake)
+    # ---- 4e. Contact person
+    company_addr = intake.get("company_address") or "500 Capitol Mall, Suite 2350"
+    company_city = intake.get("company_city") or "Sacramento"
+    company_state = intake.get("company_state") or "CA"
+    company_zip = intake.get("company_zip") or "95814"
     text(86, first)
     text(87, last)
     text(88, intake.get("signatory_title"))
     text(89, intake.get("legal_name"))
+    text(90, company_addr)
+    text(91, company_city)
+    text(92, company_state)
+    text(93, company_zip)
     text(94, intake.get("contact_phone"))
     text(96, intake.get("contact_email"))
     # ---- 4f. Point of Interconnection
@@ -1293,6 +1303,10 @@ def _fill_appendix1_docx(intake: dict, d: dict, path: Path) -> None:
     text(115, last)
     text(116, intake.get("signatory_title"))
     text(117, intake.get("legal_name"))
+    text(118, company_addr)
+    text(119, company_city)
+    text(120, company_state)
+    text(121, company_zip)
     text(122, intake.get("contact_phone"))
     text(124, intake.get("contact_email"))
     # ---- 9. Submitted by + consent + e-signature
