@@ -57,7 +57,11 @@ def epc_text(design: dict[str, Any], pf: dict[str, Any], intake: dict[str, Any],
     pv_mva = round(c["inverters"] * inv["mva"], 1)
     q_pv = round(pv_mva * inv["q_pu_max"], 1)
     bess = design.get("bess_unit")
-    bess_mva = round(c["bess_units"] * bess["mva"], 1) if bess else 0.0
+    # Declared machine base uses the configured PCS rating so the model file
+    # matches the Attachment A machine table.
+    _bconf = design.get("bess_conf") or {}
+    bess_mva = (round(c["bess_units"] * _bconf.get("mva", bess["mva"]), 1)
+                if bess else 0.0)
     q_bess = round(bess_mva * bess["q_pu_max"], 1) if bess else 0.0
 
     lines = [
@@ -140,7 +144,11 @@ def raw_text(design: dict[str, Any], pf: dict[str, Any], intake: dict[str, Any],
     pv_mva = round(c["inverters"] * inv["mva"], 1)
     q_pv = round(pv_mva * inv["q_pu_max"], 1)
     bess = design.get("bess_unit")
-    bess_mva = round(c["bess_units"] * bess["mva"], 1) if bess else 0.0
+    # Declared machine base uses the configured PCS rating so the model file
+    # matches the Attachment A machine table.
+    _bconf = design.get("bess_conf") or {}
+    bess_mva = (round(c["bess_units"] * _bconf.get("mva", bess["mva"]), 1)
+                if bess else 0.0)
     q_bess = round(bess_mva * bess["q_pu_max"], 1) if bess else 0.0
 
     L = [

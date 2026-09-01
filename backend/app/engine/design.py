@@ -180,7 +180,30 @@ def design_plant(graph: dict[str, Any], intake: dict[str, Any]) -> dict[str, Any
     # on the PV block MVA; BESS units get their own collector position.
     cable = lib.CABLES["al_1000_35kv"]
     pv_block_mva = n_blocks * block_mva
-    total_mva = pv_block_mva + (n_bess * bess_unit["mva"] if bess_unit else 0)
+    # The 128 MW-class gross output is the design goal: the BESS PCS is
+    # declared at its configured (duration-driven) rating — per-unit MW =
+    # plant BESS MW / unit count, MVA = MW / 0.9 — rather than the full
+    # hardware nameplate. The machine-table sum (gross capacity) then tracks
+    # gross MW / 0.9 instead of the PCS overbuild.
+    bess_conf = None
+    if bess_unit and n_bess:
+        conf_mw = bess_mw / n_bess
+        conf_mva = math.ceil(conf_mw / INVERTER_SIZING_PF * 100.0) / 100.0
+        bess_conf = {"mw": round(conf_mw, 3), "mva": conf_mva}
+        add_param(graph, "design.bess_configured", "BESS PCS configured rating",
+                  f"{bess_conf['mw']:g} MW / {bess_conf['mva']:g} MVA per unit", "",
+                  SRC_CALC, "design_engine",
+                  f"{bess_mw:g} MW plant limit / {n_bess} units; MVA = MW / "
+                  f"{INVERTER_SIZING_PF} (hardware nameplate {bess_unit['mw']:g} MW / "
+                  f"{bess_unit['mva']:g} MVA)")
+    total_mva = pv_block_mva + (n_bess * bess_conf["mva"] if bess_conf else 0)
+    if total_mva:
+        add_param(graph, "design.gross_capacity_mva", "Gross capacity (machine sum)",
+                  round(total_mva, 2), "MVA", SRC_CALC, "design_engine",
+                  f"{n_inv} x {inverter['mva']:g} MVA PV"
+                  + (f" + {n_bess} x {bess_conf['mva']:g} MVA BESS PCS (configured)"
+                     if bess_conf else "")
+                  + f" — tracks gross {gross_mw:g} MW / {INVERTER_SIZING_PF}")
     # Ground-truth feeder rule: transformers per circuit = floor(usable circuit
     # ampacity / per-block current at the collector voltage); circuits needed =
     # ceil(blocks / per-circuit).
@@ -372,7 +395,10 @@ def design_plant(graph: dict[str, Any], intake: dict[str, Any]) -> dict[str, Any
     if bess_unit and n_bess:
         schedule.append({
             "item": "BESS AC block", "make_model": f"{bess_unit['vendor']} {bess_unit['model']}",
-            "qty": n_bess, "rating": f"{bess_unit['mw']:g} MW / {bess_unit['mwh']:g} MWh",
+            "qty": n_bess,
+            "rating": f"{bess_unit['mw']:g} MW / {bess_unit['mwh']:g} MWh"
+                      + (f" (configured {bess_conf['mw']:g} MW / {bess_conf['mva']:g} MVA)"
+                         if bess_conf else ""),
             "source": bess_unit["datasheet"],
             "verified": bess_unit["verified"] and (bess_matched or bool(bess_unit.get("vendor_file"))),
         })
@@ -412,7 +438,8 @@ def design_plant(graph: dict[str, Any], intake: dict[str, Any]) -> dict[str, Any
         "inverter": inverter, "bess_unit": bess_unit, "pad": pad, "mpt": mpt,
         "cable": cable, "line": line,
         "feeder_mi": feeder_mi, "gentie_mi": gentie_mi,
-        "total_mva": round(total_mva, 1), "poi_sc_mva": poi_sc_mva,
+        "total_mva": round(total_mva, 2), "poi_sc_mva": poi_sc_mva,
+        "bess_conf": bess_conf,
         "site_rules": {
             "pf_poi": PF_POI,
             "q_req_mvar": round(q_req, 2),

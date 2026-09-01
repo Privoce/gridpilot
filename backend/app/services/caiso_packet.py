@@ -217,10 +217,10 @@ DEFAULT_INTAKE: dict[str, Any] = {
     "shared_facilities": "No shared facilities",
     "queue_ref": "",
     "project_type": "Solar PV + BESS (AC-coupled)",
-    # Machine-table sum, matching Attachment A's own SUMPRODUCT formula:
-    # 20 x 4.4 MVA PV inverters (MVA = MW / 0.9 sizing rule) + 52 x 2.0 MVA
-    # Megapack PCS = 192.0 MVA.
-    "gross_mva": 192.0,
+    # Machine-table sum anchored to the 128 MW gross output goal (MVA = MW / 0.9):
+    # 20 x 4.4 MVA PV inverters + 52 x 1.07 MVA Megapack PCS (configured
+    # 4-hour rating) = 143.64 MVA — matches Attachment A's SUMPRODUCT formula.
+    "gross_mva": 143.64,
     "gross_mw": 128.0,
     "aux_mw": 2.5,
     "losses_mw": 0.5,
@@ -1469,7 +1469,13 @@ def _fill_attachment_a_xlsm(intake: dict, d: dict, eng: dict, path: Path) -> Non
             "33: photovoltaic (tracking)" if is_tracking else "32: photovoltaic (fixed)",
             c["inverters"])
     if has_bess:
-        gen_col("G", bess_name, bess, "42: energy storage - battery", c["bess_units"])
+        # Declared at the configured (duration-driven) rating so the workbook's
+        # gross-capacity SUMPRODUCT tracks gross MW / 0.9 — not the PCS overbuild.
+        _conf = design.get("bess_conf") or {}
+        gen_col("G", bess_name,
+                {**bess, "mva": _conf.get("mva", bess["mva"]),
+                 "mw": _conf.get("mw", bess["mw"])},
+                "42: energy storage - battery", c["bess_units"])
 
     # Section V — inverter data in two-column blocks: F:G = PV, H:I = BESS
     W(ws, "F147", "Yes" if is_tracking else "No")
@@ -1648,7 +1654,9 @@ def _fill_attachment_a_xlsm(intake: dict, d: dict, eng: dict, path: Path) -> Non
                 W(ws4, f"{_cl(col)}{r}", val)
 
     pv_mva_agg = round(inv["mva"] * c["inverters"], 1)
-    bess_mva_agg = round(bess["mva"] * c["bess_units"], 1) if has_bess else 0
+    _conf4 = design.get("bess_conf") or {}
+    bess_mva_agg = (round(_conf4.get("mva", bess["mva"]) * c["bess_units"], 2)
+                    if has_bess else 0)
     units = [(2, pv_name, inv, pv_mva_agg, "EQ Gen 1")]
     if has_bess:
         units.append((3, bess_name, bess, bess_mva_agg, "EQ Gen 2"))
@@ -1813,13 +1821,16 @@ def _gen_attachment_a_xlsx(intake: dict, d: dict, eng: dict, path: Path) -> None
         c["inverters"], c["bess_units"] if gt2 else "")
     row("II.10", "Nominal Terminal Voltage", "kV", inv["ac_kv"], bess["ac_kv"] if gt2 else "")
     row("II.11", "Expected average high ambient temperature for the site", "⁰C", 40, 40 if gt2 else "")
+    _confx = eng["design"].get("bess_conf") or {}
+    _bmva = _confx.get("mva", bess["mva"]) if gt2 else ""
+    _bmw = _confx.get("mw", bess["mw"]) if gt2 else ""
     row("II.12", "Individual generator rated MVA at the temperature above", "MVA",
-        inv["mva"], bess["mva"] if gt2 else "")
+        inv["mva"], _bmva)
     row("II.13", "Individual generator rated MW at the temperature above", "MW",
-        inv["mw"], bess["mw"] if gt2 else "")
+        inv["mw"], _bmw)
     row("II.14", "Individual generator power factor at rated MW", "",
         round(inv["mw"] / inv["mva"], 4),
-        round(bess["mw"] / bess["mva"], 4) if gt2 else "", "= II.13 / II.12", "calc")
+        round(_bmw / _bmva, 4) if gt2 else "", "= II.13 / II.12", "calc")
     row("II.15", "PF regulation range at rated MW — Leading (−)", "", 0.95, 0.95 if gt2 else "")
     row("II.16", "PF regulation range at rated MW — Lagging (+)", "", 0.95, 0.95 if gt2 else "")
     row("II.18", "Phase", "", 3, 3 if gt2 else "")
@@ -3214,7 +3225,8 @@ def _gen_reactive_capability(intake: dict, d: dict, eng: dict, path: Path) -> No
     q_pv = math.sqrt(max(total_rated_mva ** 2 - pf["p_pv_mw"] ** 2, 0.0))
     q_bess = 0.0
     if has_bess:
-        bess_mva = c["bess_units"] * bess["mva"]
+        _confq = design.get("bess_conf") or {}
+        bess_mva = c["bess_units"] * _confq.get("mva", bess["mva"])
         q_bess = math.sqrt(max(bess_mva ** 2 - pf["p_bess_mw"] ** 2, 0.0))
     d_dynamic = round(q_pv + q_bess, 2)
 
