@@ -218,8 +218,9 @@ DEFAULT_INTAKE: dict[str, Any] = {
     "queue_ref": "",
     "project_type": "Solar PV + BESS (AC-coupled)",
     # Machine-table sum, matching Attachment A's own SUMPRODUCT formula:
-    # 18 x 4.4 MVA PV inverters + 52 x 2.0 MVA Megapack PCS = 183.2 MVA.
-    "gross_mva": 183.2,
+    # 20 x 4.4 MVA PV inverters (MVA = MW / 0.9 sizing rule) + 52 x 2.0 MVA
+    # Megapack PCS = 192.0 MVA.
+    "gross_mva": 192.0,
     "gross_mw": 128.0,
     "aux_mw": 2.5,
     "losses_mw": 0.5,
@@ -230,7 +231,8 @@ DEFAULT_INTAKE: dict[str, Any] = {
     "bess_mw": 50.0,
     "bess_mwh": None,
     "bess_charging": "On-site generation only",
-    "inverter": "Sungrow SG4400UD-MV, qty 18",
+    # Quantity is computed by the design engine (MVA = MW / 0.9 rule), not declared.
+    "inverter": "Sungrow SG4400UD-MV",
     "module": "JinkoSolar Tiger Neo 620W bifacial",
     "bess_vendor": "Tesla Megapack 2XL",
     "dyd_status": "Received from vendor",
@@ -1267,8 +1269,10 @@ def _fill_appendix1_docx(intake: dict, d: dict, path: Path) -> None:
         text(62, _fmt(bess_hours))
         if is_hybrid:
             check(64)
-    text(80, f"{intake.get('inverter') or 'Inverters TBD'}; {intake.get('module') or 'modules TBD'}"
-             + (f"; {intake.get('bess_vendor') or 'BESS TBD'}" if d["has_bess"] else ""))
+    text(80, f"{d.get('inverter_desc') or intake.get('inverter') or 'Inverters TBD'}; "
+             f"{intake.get('module') or 'modules TBD'}"
+             + (f"; {d.get('bess_desc') or intake.get('bess_vendor') or 'BESS TBD'}"
+                if d["has_bess"] else ""))
     text(81, f"GSU {intake.get('transformer') or 'TBD'}; {_fmt(d['col_kv'])} kV collector "
              f"system; gross {_fmt(d['gross'])} MW, net {_fmt(d['net'])} MW at POI.")
     # ---- 4d. Dates
@@ -3813,6 +3817,14 @@ def generate_packet(intake: dict[str, Any], org_id: str, iso: str | None = None)
     # sum — the same figure Attachment A's prefab formula computes — so every
     # document agrees with the workbook regardless of the declared estimate.
     d["total_mva"] = eng["design"].get("total_mva")
+    # Equipment descriptions carry the engine-computed unit counts
+    # (MVA = MW / 0.9 sizing rule), not declared quantities.
+    _cnt, _inv_e = eng["design"]["counts"], eng["design"]["inverter"]
+    d["inverter_desc"] = (f"{_cnt['inverters']} x {_inv_e['vendor']} {_inv_e['model']}"
+                          if _cnt.get("inverters") else None)
+    _bess_e = eng["design"].get("bess_unit")
+    d["bess_desc"] = (f"{_cnt['bess_units']} x {_bess_e['vendor']} {_bess_e['model']}"
+                      if _bess_e and _cnt.get("bess_units") else None)
 
     docs: list[dict[str, Any]] = []
 

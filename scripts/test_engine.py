@@ -76,14 +76,14 @@ def test_phase3_design() -> None:
     g = build_graph(INTAKE, "CAISO")
     d = design_plant(g, INTAKE)
     c = d["counts"]
-    # 128 gross - 50 BESS = 78 MW PV / 4.4 -> 18 inverters, 9 blocks.
-    ok(c["inverters"] == 18, f"18 inverters (got {c['inverters']})")
-    ok(c["blocks"] == 9, f"9 skids (got {c['blocks']})")
-    # BESS: max(ceil(50/1.927)=26, ceil(200/3.854)=52) = 52 Megapacks.
+    # 128 gross - 50 BESS = 78 MW PV / 0.9 = 86.7 MVA / 4.4 -> 20 inverters, 10 blocks.
+    ok(c["inverters"] == 20, f"20 inverters via MVA = MW / 0.9 rule (got {c['inverters']})")
+    ok(c["blocks"] == 10, f"10 skids (got {c['blocks']})")
+    # BESS: max(ceil(50/0.9/2.0)=28, ceil(200/3.854)=52) = 52 Megapacks.
     ok(c["bess_units"] == 52, f"52 Megapacks (got {c['bess_units']})")
     ok(c["main_transformers"] == 2, "two main transformers above 100 MVA")
-    # PV block MVA = 9 x 8.8 = 79.2; feeder limit = sqrt(3)*34.5*585*0.9 ~ 31.5 MVA -> 3.
-    ok(c["feeders"] == 3, f"PV feeders sized by ampacity (got {c['feeders']})")
+    # 527 A usable per feeder / 147 A per 8.8 MVA block -> 3 blocks/circuit; ceil(10/3) = 4.
+    ok(c["feeders"] == 4, f"PV feeders sized by ampacity (got {c['feeders']})")
     ok(any(n["id"] == "bess_seg" for n in g["nodes"]), "BESS has its own collector segment")
     blocks = [n.get("blocks") for n in g["nodes"] if n["type"] == "feeder"]
     ok(min(blocks) >= 1 and sum(blocks) == c["blocks"], f"blocks distributed evenly {blocks}")
@@ -129,7 +129,7 @@ def test_phase4_sld() -> None:
     ok(root.tag.endswith("svg"), "SVG parses")
     ok("OWNERSHIP BOUNDARY" in svg, "ownership boundary drawn")
     ok("Revenue metering" in svg, "metering point drawn")
-    ok("TYPICAL OF 9 INVERTER BLOCKS" in svg, "typical-of block notation")
+    ok("TYPICAL OF 10 INVERTER BLOCKS" in svg, "typical-of block notation")
     ok(f"{d['counts']['bess_units']} x Megapack 2XL" in svg, "BESS labelled from design")
     ok("Gen-tie — 5 mi" in svg, "gen-tie length labelled")
 
@@ -327,7 +327,7 @@ def test_phase8_packet() -> None:
     ok(e["approvals"]["all_approved"], "manifest reflects approvals")
     ok(all(c["status"] != "fail" for c in e["checks"]),
        "no failing checks on the approved intake")
-    ok(e["counts"]["inverters"] == 18, "manifest counts from the design engine")
+    ok(e["counts"]["inverters"] == 20, "manifest counts from the design engine")
 
     epc = (pdir / next(d["file"] for d in m["documents"] if d["key"] == "epc")).read_text()
     ok("Solved case" in epc and "backward/forward sweep" in epc,
@@ -513,8 +513,8 @@ def test_datasheet_ingest() -> None:
        "design engine uses the datasheet ratings")
     ok(not d["inverter"]["verified"] and d["inverter"].get("custom"),
        "entry stays unverified")
-    # PV 78 MW / 3.6 MW per unit -> 22 inverters (vs 18 with the Sungrow).
-    ok(d["counts"]["inverters"] == 22, f"fleet resized ({d['counts']['inverters']} units)")
+    # PV 78 MW / 0.9 = 86.7 MVA / 3.6 MVA per unit -> 25 inverters (vs 20 with the Sungrow).
+    ok(d["counts"]["inverters"] == 25, f"fleet resized ({d['counts']['inverters']} units)")
     ok(g["params"]["equip.inverter"]["source"] == SRC_DOC,
        "graph tags the entry as document extraction")
 

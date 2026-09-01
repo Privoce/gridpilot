@@ -38,6 +38,9 @@ PF_POI = 0.95
 MPT_LADDER = (0.6, 0.8, 1.0)
 # Pad transformers carry DETC taps: 5 positions, 2.5% steps, neutral at tap 3.
 PAD_DETC = {"positions": 5, "step_pct": 2.5, "neutral": "Tap 3 (34.5 kV)"}
+# Inverter fleet sizing power factor: required MVA = MW / 0.9, so the fleet
+# carries reactive headroom at full real-power output (ground-truth rule).
+INVERTER_SIZING_PF = 0.90
 
 
 def design_plant(graph: dict[str, Any], intake: dict[str, Any]) -> dict[str, Any]:
@@ -134,11 +137,16 @@ def design_plant(graph: dict[str, Any], intake: dict[str, Any]) -> dict[str, Any
                   "OEM parameter blocks parsed from the vendor-supplied model file")
 
     # --- PV inverter sizing ----------------------------------------------
-    n_inv = math.ceil(pv_mw / inverter["mw"]) if pv_mw > 0 else 0
+    # Ground-truth rule: convert the real-power requirement to apparent power
+    # at the 0.9 sizing power factor (MVA = MW / 0.9), then count whole units
+    # by their MVA rating.
+    pv_mva_req = pv_mw / INVERTER_SIZING_PF
+    n_inv = math.ceil(pv_mva_req / inverter["mva"]) if pv_mw > 0 else 0
     if n_inv:
         add_param(graph, "design.n_inverters", "PV inverter count", n_inv, "units",
                   SRC_CALC, "design_engine",
-                  f"ceil(PV {pv_mw:g} MW / {inverter['mw']:g} MW per {inverter['model']})")
+                  f"PV {pv_mw:g} MW / {INVERTER_SIZING_PF} = {pv_mva_req:.1f} MVA; "
+                  f"ceil({pv_mva_req:.1f} / {inverter['mva']:g} MVA per {inverter['model']})")
 
     # Two inverters per skid is the standard block for this class.
     inv_per_block = 2
@@ -156,13 +164,16 @@ def design_plant(graph: dict[str, Any], intake: dict[str, Any]) -> dict[str, Any
     # --- BESS sizing -------------------------------------------------------
     n_bess = 0
     if bess_unit and bess_mw > 0:
-        by_power = math.ceil(bess_mw / bess_unit["mw"])
+        # Same MVA = MW / 0.9 sizing rule on the PCS side; energy need wins
+        # when the duration forces more units.
+        bess_mva_req = bess_mw / INVERTER_SIZING_PF
+        by_power = math.ceil(bess_mva_req / bess_unit["mva"])
         by_energy = math.ceil(bess_mwh / bess_unit["mwh"]) if bess_mwh else 0
         n_bess = max(by_power, by_energy)
         add_param(graph, "design.n_bess", "BESS unit count", n_bess, "units",
                   SRC_CALC, "design_engine",
-                  f"max(ceil({bess_mw:g}/{bess_unit['mw']:g} MW), "
-                  f"ceil({bess_mwh:g}/{bess_unit['mwh']:g} MWh))")
+                  f"max(ceil({bess_mw:g} MW / {INVERTER_SIZING_PF} / {bess_unit['mva']:g} MVA), "
+                  f"ceil({bess_mwh:g} / {bess_unit['mwh']:g} MWh))")
 
     # --- Collector feeders ---------------------------------------------
     # PV blocks and the BESS segment are fed separately: feeder count is sized
