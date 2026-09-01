@@ -113,13 +113,20 @@ def design_plant(graph: dict[str, Any], intake: dict[str, Any]) -> dict[str, Any
                       "Ratings extracted from an uploaded datasheet — verify against the OEM "
                       "document before submission")
         else:
-            bess_unit, bess_matched = lib.match_bess(str(intake.get("bess_vendor") or ""))
+            # The requested duration picks the OEM configuration (2h vs 4h PCS
+            # ratings differ per the datasheets); unknown duration defaults to 4h.
+            duration_h = (bess_mwh / bess_mw) if (bess_mw and bess_mwh) else None
+            bess_unit, bess_matched = lib.match_bess(str(intake.get("bess_vendor") or ""),
+                                                     duration_h)
             add_param(graph, "equip.bess", "BESS unit (library match)",
                       f"{bess_unit['vendor']} {bess_unit['model']}", "",
                       SRC_OEM if bess_matched else SRC_ASSUME,
                       f"library:{bess_unit['id']}",
-                      None if bess_matched else
-                      "No library match for the intake BESS text — generic 2 MW block assumed")
+                      (f"{duration_h:g}-hour duty selects the OEM "
+                       f"{'2' if duration_h and duration_h < 3 else '4'}-hour configuration"
+                       if bess_matched and duration_h else
+                       None if bess_matched else
+                       "No library match for the intake BESS text — generic 2 MW block assumed"))
 
     # --- Vendor OEM model file (parsed at extraction) -----------------------
     # Parameter blocks from an uploaded vendor .dyd replace the library set;

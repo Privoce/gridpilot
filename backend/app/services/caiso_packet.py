@@ -878,9 +878,11 @@ def validate_intake(intake: dict[str, Any], iso: str | None = None) -> dict[str,
                    lib.match_inverter, "pv_inverter", "inverter"),
     ]
     if _num(intake.get("bess_mw")):
+        _bmw, _bmwh = _num(intake.get("bess_mw")), _num(intake.get("bess_mwh"))
+        _dur = (_bmwh / _bmw) if (_bmw and _bmwh) else None
         _lib_entries.append(
             _lib_check("BESS unit", str(intake.get("bess_vendor") or "").strip(),
-                       lib.match_bess, "bess", "bess_vendor"))
+                       lambda t: lib.match_bess(t, _dur), "bess", "bess_vendor"))
     for entry in filter(None, _lib_entries):
         admin_alerts.extend(lib.spec_gaps(entry))
 

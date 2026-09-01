@@ -68,53 +68,82 @@
       "id": "sma_sc4600up",
       "vendor": "SMA",
       "model": "Sunny Central 4600 UP",
+      "aliases": ["SC 4600 UP", "SC4600UP-US", "SC 4600 UP-US"],
       "kind": "pv_inverter",
-      "verified": false,
+      "verified": true,
       "mva": 4.6,
+      "mva_50c": 4.14,
       "mw": 4.6,
-      "pf_range": 0.9,
+      "pf_range": 0.8,
       "ac_kv": 0.69,
       "fault_current_pu": 1.2,
-      "q_pu_max": 0.484,
+      "q_pu_max": 0.6,
       "wecc_models": {"gen": "REGC_A", "elec": "REEC_A", "plant": "REPC_A"},
       "dyd_params": {
         "regc": {"tg": 0.02, "rrpwr": 10.0, "brkpt": 0.9, "zerox": 0.4, "lvpl1": 1.2},
         "reec": {"trv": 0.02, "vdip": 0.9, "vup": 1.1, "kqv": 2.2, "iqh1": 1.03,
-                 "iql1": -1.03, "tp": 0.05, "qmax": 0.484, "qmin": -0.484},
+                 "iql1": -1.03, "tp": 0.05, "qmax": 0.6, "qmin": -0.6},
         "repc": {"tfltr": 0.02, "kp": 16.0, "ki": 4.5, "tft": 0.0, "tfv": 0.05,
                  "ddn": 20.0, "dup": 0.0, "fdbd1": -0.0006, "fdbd2": 0.0006}
       },
-      "datasheet": "SMA SC 4600 UP — vendor claim, not yet verified against an official datasheet",
-      "source": null,
-      "sourced_keys": [],
-      "assumed_keys": ["mva", "mw", "pf_range", "ac_kv", "fault_current_pu", "q_pu_max", "dyd_params"],
-      "source_notes": {"_all": "ADMIN: verify against the official SMA Sunny Central UP datasheet before filing"}
+      "datasheet": "SMA Sunny Central 4000/4200/4400/4600 UP(-US) Datasheet (official)",
+      "source": {
+        "title": "SMA Sunny Central UP Datasheet, SC4xxxUP-DS-en (US variant SCXXXXUP-US-DS-en-27), sma.de official",
+        "url": "https://files.sma.de/downloads/SCXXXXUP-US-DS-en-27.pdf"
+      },
+      "sourced_keys": ["mva", "mva_50c", "mw", "pf_range", "ac_kv", "q_pu_max"],
+      "assumed_keys": ["mva_40c", "fault_current_pu", "dyd_params"],
+      "source_notes": {
+        "mva": "Nominal AC power at cos phi = 1: 4600 kVA @ 35 C (4140 kVA @ 50 C) — datasheet 'Output (AC)'",
+        "mva_40c": "Rating at the 40 C design temperature is NOT published (datasheet gives 35 C and 50 C points only) — ADMIN: obtain the SMA derating curve before using this unit in a filing",
+        "mw": "kW = kVA at cos phi = 1 per the datasheet rating basis",
+        "pf_range": "Power factor adjustable 0.8 overexcited to 0.8 underexcited — datasheet",
+        "ac_kv": "Nominal AC voltage 690 V (552 V to 759 V) for the SC 4600 UP — datasheet",
+        "q_pu_max": "At 0.8 PF and rated kVA: Q/S = sin(acos(0.8)) = 0.6 — derived from the sourced PF range",
+        "fault_current_pu": "ASSUMED 1.2 — not in the public datasheet; ADMIN: request OEM short-circuit contribution letter",
+        "dyd_params": "Generic WECC parameter set — replaced by the vendor .dyd (MOD-026/027) when uploaded"
+      }
     },
     "pe_fs3430k": {
       "id": "pe_fs3430k",
       "vendor": "Power Electronics",
-      "model": "FS3430K",
+      "model": "Freesun HEMK FS3430K",
+      "aliases": ["FS3430K", "HEMK"],
       "kind": "pv_inverter",
-      "verified": false,
-      "mva": 3.43,
-      "mw": 3.43,
-      "pf_range": 0.9,
+      "verified": true,
+      "mva": 3.55,
+      "mva_50c": 3.43,
+      "mw": 3.55,
+      "pf_range": 0.5,
       "ac_kv": 0.645,
+      "max_efficiency_pct": 98.87,
+      "thd_pct": 3.0,
       "fault_current_pu": 1.3,
-      "q_pu_max": 0.484,
+      "q_pu_max": 0.866,
       "wecc_models": {"gen": "REGC_A", "elec": "REEC_A", "plant": "REPC_A"},
       "dyd_params": {
         "regc": {"tg": 0.02, "rrpwr": 10.0, "brkpt": 0.9, "zerox": 0.4, "lvpl1": 1.3},
         "reec": {"trv": 0.02, "vdip": 0.9, "vup": 1.1, "kqv": 2.0, "iqh1": 1.05,
-                 "iql1": -1.05, "tp": 0.05, "qmax": 0.484, "qmin": -0.484},
+                 "iql1": -1.05, "tp": 0.05, "qmax": 0.866, "qmin": -0.866},
         "repc": {"tfltr": 0.02, "kp": 18.0, "ki": 5.0, "tft": 0.0, "tfv": 0.05,
                  "ddn": 20.0, "dup": 0.0, "fdbd1": -0.0006, "fdbd2": 0.0006}
       },
-      "datasheet": "Power Electronics FS3430K — vendor claim, not yet verified against an official datasheet",
-      "source": null,
-      "sourced_keys": [],
-      "assumed_keys": ["mva", "mw", "pf_range", "ac_kv", "fault_current_pu", "q_pu_max", "dyd_params"],
-      "source_notes": {"_all": "ADMIN: verify against the official Power Electronics FS3430K datasheet before filing"}
+      "datasheet": "Power Electronics Freesun HEMK technical characteristics (FS3430K column)",
+      "source": {
+        "title": "Power Electronics Freesun HEMK datasheet — FS3430K: 3430 kVA @ 50 C / 3550 kVA @ 40 C, 645 VAC, PF 0.5-0.5 (OEM table)",
+        "url": "https://cdn.enfsolar.com/Product/pdf/Inverter/5c81ed6357171.pdf"
+      },
+      "sourced_keys": ["mva", "mva_50c", "mw", "pf_range", "ac_kv", "max_efficiency_pct", "thd_pct", "q_pu_max"],
+      "assumed_keys": ["fault_current_pu", "dyd_params"],
+      "source_notes": {
+        "mva": "AC output power 3550 kVA @ 40 C (3430 kVA @ 50 C) — HEMK datasheet; 40 C matches the site design temperature",
+        "mw": "kVA = kW rating basis per the HEMK datasheet output table",
+        "pf_range": "Power factor adjustable 0.5 leading - 0.5 lagging, reactive power injection at night — HEMK datasheet",
+        "ac_kv": "Operating grid voltage 645 VAC +/-10% — HEMK datasheet",
+        "q_pu_max": "At 0.5 PF and rated kVA: Q/S = sin(acos(0.5)) = 0.866 — derived from the sourced PF range",
+        "fault_current_pu": "ASSUMED 1.3 — not in the public datasheet; ADMIN: request OEM short-circuit contribution letter",
+        "dyd_params": "Generic WECC parameter set — replaced by the vendor .dyd (MOD-026/027) when uploaded"
+      }
     },
     "generic_pv_4mva": {
       "id": "generic_pv_4mva",
@@ -185,6 +214,130 @@
         "rte_pct": "Round-trip efficiency, 4-Hour: 93.7% (full-depth cycle at 25 C) — datasheet",
         "fault_current_pu": "ASSUMED 1.15 — not in the public datasheet; ADMIN: request Tesla short-circuit contribution data",
         "q_pu_max": "ASSUMED 0.62 — reactive envelope not in the public datasheet; ADMIN: request Tesla PQ capability curve",
+        "dyd_params": "Generic WECC parameter set — replaced by the vendor .dyd (MOD-026/027) when uploaded"
+      }
+    },
+    "tesla_megapack_2xl_2h": {
+      "id": "tesla_megapack_2xl_2h",
+      "vendor": "Tesla",
+      "model": "Megapack 2 XL (2-hour)",
+      "aliases": ["Megapack 2XL 2h"],
+      "kind": "bess",
+      "verified": true,
+      "mw": 1.927,
+      "mwh": 3.854,
+      "mva": 2.4,
+      "mva_increment": 0.05,
+      "mva_min": 0.4,
+      "ac_kv": 0.48,
+      "rte_pct": 92.0,
+      "fault_current_pu": 1.15,
+      "q_pu_max": 0.62,
+      "wecc_models": {"gen": "REGC_A", "elec": "REEC_C", "plant": "REPC_A"},
+      "dyd_params": {
+        "regc": {"tg": 0.02, "rrpwr": 10.0, "brkpt": 0.9, "zerox": 0.4, "lvpl1": 1.15},
+        "reec": {"trv": 0.02, "vdip": 0.9, "vup": 1.1, "kqv": 2.0, "iqh1": 1.05,
+                 "iql1": -1.05, "tp": 0.05, "qmax": 0.62, "qmin": -0.62,
+                 "soc_ini": 0.8, "socmax": 1.0, "socmin": 0.0},
+        "repc": {"tfltr": 0.02, "kp": 18.0, "ki": 5.0, "tft": 0.0, "tfv": 0.05,
+                 "ddn": 20.0, "dup": 20.0, "fdbd1": -0.0006, "fdbd2": 0.0006}
+      },
+      "datasheet": "Tesla Megapack 2 XL Datasheet (2-hour configuration)",
+      "source": {
+        "title": "Tesla Megapack 2 XL Datasheet (public spec sheet; figures also on tesla.com/megapack/design)",
+        "url": "https://www.carverma.gov/sites/g/files/vyhlif4221/f/uploads/megapack_2_xl_datasheet_0.pdf"
+      },
+      "sourced_keys": ["mw", "mwh", "mva", "mva_increment", "mva_min", "ac_kv", "rte_pct"],
+      "assumed_keys": ["fault_current_pu", "q_pu_max", "dyd_params"],
+      "source_notes": {
+        "mw": "2-Hour configuration: 1927 kW AC power per Megapack (nominal at 25 C) — datasheet",
+        "mwh": "2-Hour configuration: 3854 kWh per Megapack (nominal at 25 C) — datasheet",
+        "mva": "Inverter power per Megapack, 2-Hour max: 2400 kVA — datasheet",
+        "mva_increment": "Inverter capacity scalable from 400 kVA minimum in increments of 50 kVA — datasheet footnote",
+        "ac_kv": "Nominal AC voltage 480 V AC 3-phase — datasheet",
+        "rte_pct": "Round-trip efficiency, 2-Hour: 92.0% (full-depth cycle at 25 C) — datasheet",
+        "fault_current_pu": "ASSUMED 1.15 — not in the public datasheet; ADMIN: request Tesla short-circuit contribution data",
+        "q_pu_max": "ASSUMED 0.62 — reactive envelope not in the public datasheet; ADMIN: request Tesla PQ capability curve",
+        "dyd_params": "Generic WECC parameter set — replaced by the vendor .dyd (MOD-026/027) when uploaded"
+      }
+    },
+    "sungrow_powertitan2_4h": {
+      "id": "sungrow_powertitan2_4h",
+      "vendor": "Sungrow",
+      "model": "PowerTitan 2.0 ST5015UX-4H-US",
+      "aliases": ["PowerTitan", "ST5015UX-4H", "ST5015UX"],
+      "kind": "bess",
+      "verified": true,
+      "mw": 1.26,
+      "mwh": 5.015,
+      "mva": 1.26,
+      "ac_kv": 0.69,
+      "fault_current_pu": 1.15,
+      "q_pu_max": 1.0,
+      "wecc_models": {"gen": "REGC_A", "elec": "REEC_C", "plant": "REPC_A"},
+      "dyd_params": {
+        "regc": {"tg": 0.02, "rrpwr": 10.0, "brkpt": 0.9, "zerox": 0.4, "lvpl1": 1.15},
+        "reec": {"trv": 0.02, "vdip": 0.9, "vup": 1.1, "kqv": 2.0, "iqh1": 1.05,
+                 "iql1": -1.05, "tp": 0.05, "qmax": 1.0, "qmin": -1.0,
+                 "soc_ini": 0.8, "socmax": 1.0, "socmin": 0.0},
+        "repc": {"tfltr": 0.02, "kp": 18.0, "ki": 5.0, "tft": 0.0, "tfv": 0.05,
+                 "ddn": 20.0, "dup": 20.0, "fdbd1": -0.0006, "fdbd2": 0.0006}
+      },
+      "datasheet": "Sungrow PowerTitan 2.0 ST5015UX-2H-US / ST5015UX-4H-US Datasheet (official)",
+      "source": {
+        "title": "Sungrow ST5015UX-2H-US / ST5015UX-4H-US PowerTitan 2.0 Datasheet V5 (2024), info-support.sungrowpower.com official",
+        "url": "https://info-support.sungrowpower.com/application/pdf/2024/12/07/ST5015UX-2H-US_ST5015UX-4H-US%20Datasheet.pdf"
+      },
+      "sourced_keys": ["mw", "mwh", "mva", "ac_kv", "q_pu_max"],
+      "assumed_keys": ["rte_pct", "fault_current_pu", "dyd_params"],
+      "source_notes": {
+        "mw": "4H-US nominal AC power 1260 kVA (210 kVA x 6 PCS), PF > 0.99 at nominal — datasheet",
+        "mwh": "Nominal capacity 5015 kWh (LFP, 416S12P) — datasheet",
+        "mva": "Nominal AC power 1260 kVA — datasheet",
+        "ac_kv": "Nominal AC voltage 690 V (607 V - 759 V), transformerless — datasheet",
+        "q_pu_max": "Adjustable range of reactive power -100% to 100% of nominal — datasheet",
+        "rte_pct": "Round-trip efficiency not published on the system datasheet — ADMIN: request from Sungrow",
+        "fault_current_pu": "ASSUMED 1.15 — not in the public datasheet; ADMIN: request OEM short-circuit contribution data",
+        "dyd_params": "Generic WECC parameter set — replaced by the vendor .dyd (MOD-026/027) when uploaded"
+      }
+    },
+    "sungrow_powertitan2_2h": {
+      "id": "sungrow_powertitan2_2h",
+      "vendor": "Sungrow",
+      "model": "PowerTitan 2.0 ST5015UX-2H-US",
+      "aliases": ["ST5015UX-2H"],
+      "kind": "bess",
+      "verified": true,
+      "mw": 2.52,
+      "mwh": 5.015,
+      "mva": 2.52,
+      "ac_kv": 0.69,
+      "fault_current_pu": 1.15,
+      "q_pu_max": 1.0,
+      "wecc_models": {"gen": "REGC_A", "elec": "REEC_C", "plant": "REPC_A"},
+      "dyd_params": {
+        "regc": {"tg": 0.02, "rrpwr": 10.0, "brkpt": 0.9, "zerox": 0.4, "lvpl1": 1.15},
+        "reec": {"trv": 0.02, "vdip": 0.9, "vup": 1.1, "kqv": 2.0, "iqh1": 1.05,
+                 "iql1": -1.05, "tp": 0.05, "qmax": 1.0, "qmin": -1.0,
+                 "soc_ini": 0.8, "socmax": 1.0, "socmin": 0.0},
+        "repc": {"tfltr": 0.02, "kp": 18.0, "ki": 5.0, "tft": 0.0, "tfv": 0.05,
+                 "ddn": 20.0, "dup": 20.0, "fdbd1": -0.0006, "fdbd2": 0.0006}
+      },
+      "datasheet": "Sungrow PowerTitan 2.0 ST5015UX-2H-US / ST5015UX-4H-US Datasheet (official)",
+      "source": {
+        "title": "Sungrow ST5015UX-2H-US / ST5015UX-4H-US PowerTitan 2.0 Datasheet V5 (2024), info-support.sungrowpower.com official",
+        "url": "https://info-support.sungrowpower.com/application/pdf/2024/12/07/ST5015UX-2H-US_ST5015UX-4H-US%20Datasheet.pdf"
+      },
+      "sourced_keys": ["mw", "mwh", "mva", "ac_kv", "q_pu_max"],
+      "assumed_keys": ["rte_pct", "fault_current_pu", "dyd_params"],
+      "source_notes": {
+        "mw": "2H-US nominal AC power 2520 kVA (210 kVA x 12 PCS), PF > 0.99 at nominal — datasheet",
+        "mwh": "Nominal capacity 5015 kWh (LFP, 416S12P) — datasheet",
+        "mva": "Nominal AC power 2520 kVA — datasheet",
+        "ac_kv": "Nominal AC voltage 690 V (607 V - 759 V), transformerless — datasheet",
+        "q_pu_max": "Adjustable range of reactive power -100% to 100% of nominal — datasheet",
+        "rte_pct": "Round-trip efficiency not published on the system datasheet — ADMIN: request from Sungrow",
+        "fault_current_pu": "ASSUMED 1.15 — not in the public datasheet; ADMIN: request OEM short-circuit contribution data",
         "dyd_params": "Generic WECC parameter set — replaced by the vendor .dyd (MOD-026/027) when uploaded"
       }
     },
@@ -299,5 +452,37 @@
     "sourced_keys": [],
     "assumed_keys": ["r_ohm_per_mi", "x_ohm_per_mi", "ampacity_a"],
     "source_notes": {"_all": "Typical ACSR bundle constants per voltage class — ADMIN: replace with the routed conductor's datasheet (developer workbook example: ACSR 795 26/7 Drake)"}
+  },
+  "pv_modules": {
+    "jinko_tiger_neo_620": {
+      "id": "jinko_tiger_neo_620",
+      "vendor": "JinkoSolar",
+      "model": "Tiger Neo JKM620N-66HL4M-BDV (620 W bifacial)",
+      "aliases": ["Tiger Neo 620W", "JKM620N"],
+      "kind": "pv_module",
+      "verified": true,
+      "w_stc": 620,
+      "voc_v": 49.08,
+      "vmp_v": 40.74,
+      "isc_a": 16.08,
+      "imp_a": 15.22,
+      "efficiency_pct": 22.95,
+      "bifaciality_pct": 80,
+      "max_system_vdc": 1500,
+      "temp_coeff_pmax_pct_per_c": -0.29,
+      "max_series_fuse_a": 35,
+      "datasheet": "JinkoSolar Tiger Neo JKM600-625N-66HL4M-BDV datasheet",
+      "source": {
+        "title": "JinkoSolar JKM620N-66HL4M-BDV manufacturer datasheet (STC electricals corroborated across distributor spec listings)",
+        "url": "https://www.solar-stack.com/en/panel/jinkosolar/tiger-neo-jkm600-625n-66hl4m-bdv-f1/jkm620n-66hl4m-bdv"
+      },
+      "sourced_keys": ["w_stc", "voc_v", "vmp_v", "isc_a", "imp_a", "efficiency_pct",
+                        "bifaciality_pct", "max_system_vdc", "temp_coeff_pmax_pct_per_c",
+                        "max_series_fuse_a"],
+      "assumed_keys": [],
+      "source_notes": {
+        "_all": "Module electricals are reference data (string design); no generated document currently derives numbers from them"
+      }
+    }
   }
 }

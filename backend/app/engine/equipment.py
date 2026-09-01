@@ -53,6 +53,7 @@ BESS_UNITS: dict[str, dict[str, Any]] = dict(_SPECS["bess_units"])
 PAD_TRANSFORMERS: dict[str, dict[str, Any]] = dict(_SPECS["pad_transformers"])
 MAIN_TRANSFORMERS: dict[str, dict[str, Any]] = dict(_SPECS["main_transformers"])
 CABLES: dict[str, dict[str, Any]] = dict(_SPECS["cables"])
+PV_MODULES: dict[str, dict[str, Any]] = dict(_SPECS.get("pv_modules") or {})
 
 # Gen-tie overhead line constants by voltage class (per mile). JSON keys are
 # strings; the engine indexes by integer kV class.
@@ -69,6 +70,7 @@ def catalog() -> dict[str, Any]:
         "pad_transformers": list(PAD_TRANSFORMERS.values()),
         "main_transformers": list(MAIN_TRANSFORMERS.values()),
         "cables": list(CABLES.values()),
+        "pv_modules": list(PV_MODULES.values()),
     }
 
 
@@ -82,8 +84,11 @@ _INVERTER_PATTERNS = [
     (r"fs\s*3430|power\s*electronics", "pe_fs3430k"),
 ]
 
-_BESS_PATTERNS = [
-    (r"megapack|tesla", "tesla_megapack_2xl"),
+# BESS products ship in duration-specific configurations with different PCS
+# ratings (per the OEM datasheets), so each pattern maps duration -> entry.
+_BESS_PATTERNS: list[tuple[str, dict[str, str]]] = [
+    (r"megapack|tesla", {"4h": "tesla_megapack_2xl", "2h": "tesla_megapack_2xl_2h"}),
+    (r"powertitan|st5015|sungrow", {"4h": "sungrow_powertitan2_4h", "2h": "sungrow_powertitan2_2h"}),
 ]
 
 
@@ -96,11 +101,18 @@ def match_inverter(text: str | None) -> tuple[dict[str, Any], bool]:
     return INVERTERS["generic_pv_4mva"], False
 
 
-def match_bess(text: str | None) -> tuple[dict[str, Any], bool]:
+def match_bess(text: str | None,
+               duration_h: float | None = None) -> tuple[dict[str, Any], bool]:
+    """(entry, matched) — the storage duration picks the OEM configuration.
+
+    Durations under 3 hours select the 2-hour datasheet configuration;
+    anything longer (or unknown) selects the 4-hour configuration.
+    """
     t = (text or "").lower()
-    for pat, key in _BESS_PATTERNS:
+    variant = "2h" if (duration_h is not None and duration_h < 3.0) else "4h"
+    for pat, variants in _BESS_PATTERNS:
         if re.search(pat, t):
-            return BESS_UNITS[key], True
+            return BESS_UNITS[variants[variant]], True
     return BESS_UNITS["generic_bess_2mw"], False
 
 
