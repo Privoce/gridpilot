@@ -217,10 +217,10 @@ DEFAULT_INTAKE: dict[str, Any] = {
     "shared_facilities": "No shared facilities",
     "queue_ref": "",
     "project_type": "Solar PV + BESS (AC-coupled)",
-    # Machine-table sum anchored to the 128 MW gross output goal (MVA = MW / 0.9):
-    # 20 x 4.4 MVA PV inverters + 52 x 1.07 MVA Megapack PCS (configured
-    # 4-hour rating) = 143.64 MVA — matches Attachment A's SUMPRODUCT formula.
-    "gross_mva": 143.64,
+    # Machine-table sum anchored to the 128 MW gross output goal (MVA = MW / 0.95):
+    # 19 x 4.4 MVA PV inverters + 52 x 1.02 MVA Megapack PCS (configured
+    # 4-hour rating) = 136.64 MVA — matches Attachment A's SUMPRODUCT formula.
+    "gross_mva": 136.64,
     "gross_mw": 128.0,
     "aux_mw": 2.5,
     "losses_mw": 0.5,
@@ -231,12 +231,14 @@ DEFAULT_INTAKE: dict[str, Any] = {
     "bess_mw": 50.0,
     "bess_mwh": None,
     "bess_charging": "On-site generation only",
-    # Quantity is computed by the design engine (MVA = MW / 0.9 rule), not declared.
+    # Quantity is computed by the design engine (MVA = MW / 0.95 rule), not declared.
     "inverter": "Sungrow SG4400UD-MV",
     "module": "JinkoSolar Tiger Neo 620W bifacial",
     "bess_vendor": "Tesla Megapack 2XL",
     "dyd_status": "Received from vendor",
-    "transformer": "140 MVA, 34.5/230 kV, Z = 8.5% @ ONAF, YNd1",
+    # Matches the engine's family pick for the 136.64 MVA machine sum:
+    # 2 x 75 MVA (45/60/75 MVA ONAN/ONAF1/ONAF2 ladder).
+    "transformer": "75 MVA, 34.5/230 kV, Z = 8% @ ONAF, YNd1",
     "collector_kv": 34.5,
     "substation_arrangement": "Engine recommendation",
     "site_constraints": "",
@@ -1470,7 +1472,7 @@ def _fill_attachment_a_xlsm(intake: dict, d: dict, eng: dict, path: Path) -> Non
             c["inverters"])
     if has_bess:
         # Declared at the configured (duration-driven) rating so the workbook's
-        # gross-capacity SUMPRODUCT tracks gross MW / 0.9 — not the PCS overbuild.
+        # gross-capacity SUMPRODUCT tracks gross MW / 0.95 — not the PCS overbuild.
         _conf = design.get("bess_conf") or {}
         gen_col("G", bess_name,
                 {**bess, "mva": _conf.get("mva", bess["mva"]),
@@ -3830,7 +3832,7 @@ def generate_packet(intake: dict[str, Any], org_id: str, iso: str | None = None)
     # document agrees with the workbook regardless of the declared estimate.
     d["total_mva"] = eng["design"].get("total_mva")
     # Equipment descriptions carry the engine-computed unit counts
-    # (MVA = MW / 0.9 sizing rule), not declared quantities.
+    # (MVA = MW / 0.95 sizing rule), not declared quantities.
     _cnt, _inv_e = eng["design"]["counts"], eng["design"]["inverter"]
     d["inverter_desc"] = (f"{_cnt['inverters']} x {_inv_e['vendor']} {_inv_e['model']}"
                           if _cnt.get("inverters") else None)

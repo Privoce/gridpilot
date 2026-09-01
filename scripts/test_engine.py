@@ -76,10 +76,10 @@ def test_phase3_design() -> None:
     g = build_graph(INTAKE, "CAISO")
     d = design_plant(g, INTAKE)
     c = d["counts"]
-    # 128 gross - 50 BESS = 78 MW PV / 0.9 = 86.7 MVA / 4.4 -> 20 inverters, 10 blocks.
-    ok(c["inverters"] == 20, f"20 inverters via MVA = MW / 0.9 rule (got {c['inverters']})")
+    # 128 gross - 50 BESS = 78 MW PV / 0.95 = 82.1 MVA / 4.4 -> 19 inverters, 10 blocks.
+    ok(c["inverters"] == 19, f"19 inverters via MVA = MW / 0.95 rule (got {c['inverters']})")
     ok(c["blocks"] == 10, f"10 skids (got {c['blocks']})")
-    # BESS: max(ceil(50/0.9/2.0)=28, ceil(200/3.854)=52) = 52 Megapacks.
+    # BESS: max(ceil(50/0.95/2.0)=27, ceil(200/3.854)=52) = 52 Megapacks.
     ok(c["bess_units"] == 52, f"52 Megapacks (got {c['bess_units']})")
     ok(c["main_transformers"] == 2, "two main transformers above 100 MVA")
     # 527 A usable per feeder / 147 A per 8.8 MVA block -> 3 blocks/circuit; ceil(10/3) = 4.
@@ -327,7 +327,7 @@ def test_phase8_packet() -> None:
     ok(e["approvals"]["all_approved"], "manifest reflects approvals")
     ok(all(c["status"] != "fail" for c in e["checks"]),
        "no failing checks on the approved intake")
-    ok(e["counts"]["inverters"] == 20, "manifest counts from the design engine")
+    ok(e["counts"]["inverters"] == 19, "manifest counts from the design engine")
 
     epc = (pdir / next(d["file"] for d in m["documents"] if d["key"] == "epc")).read_text()
     ok("Solved case" in epc and "backward/forward sweep" in epc,
@@ -455,9 +455,10 @@ def test_design_preferences() -> None:
     ok("not feasible" in g2["params"]["design.n_mpt"]["trace"],
        "override reason recorded in the trace")
 
-    # Default keeps the engine recommendation (regression guard).
+    # Default keeps the engine recommendation (regression guard):
+    # 136.64 MVA machine sum x 1.05 / 2 units = 71.7 -> 75 MVA family.
     d3 = design_plant(build_graph(INTAKE, "CAISO"), INTAKE)
-    ok(d3["counts"]["main_transformers"] == 2 and d3["mpt"]["mva"] == 140.0,
+    ok(d3["counts"]["main_transformers"] == 2 and d3["mpt"]["mva"] == 75.0,
        "engine recommendation unchanged by default")
 
     cons = {**INTAKE, "site_constraints": "100 ft setback along the north fence line"}
@@ -513,8 +514,8 @@ def test_datasheet_ingest() -> None:
        "design engine uses the datasheet ratings")
     ok(not d["inverter"]["verified"] and d["inverter"].get("custom"),
        "entry stays unverified")
-    # PV 78 MW / 0.9 = 86.7 MVA / 3.6 MVA per unit -> 25 inverters (vs 20 with the Sungrow).
-    ok(d["counts"]["inverters"] == 25, f"fleet resized ({d['counts']['inverters']} units)")
+    # PV 78 MW / 0.95 = 82.1 MVA / 3.6 MVA per unit -> 23 inverters (vs 19 with the Sungrow).
+    ok(d["counts"]["inverters"] == 23, f"fleet resized ({d['counts']['inverters']} units)")
     ok(g["params"]["equip.inverter"]["source"] == SRC_DOC,
        "graph tags the entry as document extraction")
 

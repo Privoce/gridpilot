@@ -38,9 +38,9 @@ PF_POI = 0.95
 MPT_LADDER = (0.6, 0.8, 1.0)
 # Pad transformers carry DETC taps: 5 positions, 2.5% steps, neutral at tap 3.
 PAD_DETC = {"positions": 5, "step_pct": 2.5, "neutral": "Tap 3 (34.5 kV)"}
-# Inverter fleet sizing power factor: required MVA = MW / 0.9, so the fleet
+# Inverter fleet sizing power factor: required MVA = MW / 0.95, so the fleet
 # carries reactive headroom at full real-power output (ground-truth rule).
-INVERTER_SIZING_PF = 0.90
+INVERTER_SIZING_PF = 0.95
 
 
 def design_plant(graph: dict[str, Any], intake: dict[str, Any]) -> dict[str, Any]:
@@ -138,7 +138,7 @@ def design_plant(graph: dict[str, Any], intake: dict[str, Any]) -> dict[str, Any
 
     # --- PV inverter sizing ----------------------------------------------
     # Ground-truth rule: convert the real-power requirement to apparent power
-    # at the 0.9 sizing power factor (MVA = MW / 0.9), then count whole units
+    # at the sizing power factor (MVA = MW / 0.95), then count whole units
     # by their MVA rating.
     pv_mva_req = pv_mw / INVERTER_SIZING_PF
     n_inv = math.ceil(pv_mva_req / inverter["mva"]) if pv_mw > 0 else 0
@@ -179,12 +179,11 @@ def design_plant(graph: dict[str, Any], intake: dict[str, Any]) -> dict[str, Any
     # PV blocks and the BESS segment are fed separately: feeder count is sized
     # on the PV block MVA; BESS units get their own collector position.
     cable = lib.CABLES["al_1000_35kv"]
-    pv_block_mva = n_blocks * block_mva
     # The 128 MW-class gross output is the design goal: the BESS PCS is
     # declared at its configured (duration-driven) rating — per-unit MW =
-    # plant BESS MW / unit count, MVA = MW / 0.9 — rather than the full
+    # plant BESS MW / unit count, MVA = MW / 0.95 — rather than the full
     # hardware nameplate. The machine-table sum (gross capacity) then tracks
-    # gross MW / 0.9 instead of the PCS overbuild.
+    # gross MW / 0.95 instead of the PCS overbuild.
     bess_conf = None
     if bess_unit and n_bess:
         conf_mw = bess_mw / n_bess
@@ -196,7 +195,9 @@ def design_plant(graph: dict[str, Any], intake: dict[str, Any]) -> dict[str, Any
                   f"{bess_mw:g} MW plant limit / {n_bess} units; MVA = MW / "
                   f"{INVERTER_SIZING_PF} (hardware nameplate {bess_unit['mw']:g} MW / "
                   f"{bess_unit['mva']:g} MVA)")
-    total_mva = pv_block_mva + (n_bess * bess_conf["mva"] if bess_conf else 0)
+    # Machine sum counts actual units (an odd fleet leaves one half-filled
+    # skid), matching Attachment A's SUMPRODUCT of the machine table.
+    total_mva = n_inv * inverter["mva"] + (n_bess * bess_conf["mva"] if bess_conf else 0)
     if total_mva:
         add_param(graph, "design.gross_capacity_mva", "Gross capacity (machine sum)",
                   round(total_mva, 2), "MVA", SRC_CALC, "design_engine",
