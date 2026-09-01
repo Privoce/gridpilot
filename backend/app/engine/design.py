@@ -148,16 +148,23 @@ def design_plant(graph: dict[str, Any], intake: dict[str, Any]) -> dict[str, Any
                   f"PV {pv_mw:g} MW / {INVERTER_SIZING_PF} = {pv_mva_req:.1f} MVA; "
                   f"ceil({pv_mva_req:.1f} / {inverter['mva']:g} MVA per {inverter['model']})")
 
-    # Two inverters per skid is the standard block for this class.
-    inv_per_block = 2
+    # Turnkey stations (e.g. Sungrow SG4400UD-MV) ship with the MV transformer
+    # integrated, so each station is its own block; otherwise two inverters
+    # share a skid with a family pad-mount pick.
+    integrated = lib.integrated_pad(inverter)
+    inv_per_block = 1 if integrated else 2
     n_blocks = math.ceil(n_inv / inv_per_block) if n_inv else 0
     block_mva = inv_per_block * inverter["mva"]
-    pad = lib.pick_pad_transformer(block_mva)
+    pad = integrated or lib.pick_pad_transformer(block_mva)
     if n_blocks:
         add_param(graph, "design.n_blocks", "Inverter blocks (skids)", n_blocks, "skids",
                   SRC_CALC, "design_engine",
+                  "one station per block — MV transformer is integrated in the unit"
+                  if integrated else
                   f"ceil({n_inv} inverters / {inv_per_block} per skid)")
-        add_param(graph, "design.pad_xfmr", "Pad transformer per block",
+        add_param(graph, "design.pad_xfmr",
+                  "Integrated MV transformer per station" if integrated
+                  else "Pad transformer per block",
                   f"{pad['mva']:g} MVA, {inverter['ac_kv']:g}/{col_kv:g} kV, Z={pad['z_pct']:g}%",
                   "", SRC_OEM, f"library:{pad['id']}")
 
@@ -187,20 +194,24 @@ def design_plant(graph: dict[str, Any], intake: dict[str, Any]) -> dict[str, Any
     bess_conf = None
     if bess_unit and n_bess:
         conf_mw = bess_mw / n_bess
-        conf_mva = math.ceil(conf_mw / INVERTER_SIZING_PF * 100.0) / 100.0
+        # Round the PCS setting up to the OEM's orderable increment (Tesla:
+        # configurable from 400 kVA in 50 kVA steps per the datasheet).
+        step = float(bess_unit.get("mva_increment") or 0.01)
+        conf_mva = math.ceil(conf_mw / INVERTER_SIZING_PF / step - 1e-9) * step
+        conf_mva = round(max(conf_mva, float(bess_unit.get("mva_min") or 0.0)), 3)
         bess_conf = {"mw": round(conf_mw, 3), "mva": conf_mva}
         add_param(graph, "design.bess_configured", "BESS PCS configured rating",
                   f"{bess_conf['mw']:g} MW / {bess_conf['mva']:g} MVA per unit", "",
                   SRC_CALC, "design_engine",
                   f"{bess_mw:g} MW plant limit / {n_bess} units; MVA = MW / "
-                  f"{INVERTER_SIZING_PF} (hardware nameplate {bess_unit['mw']:g} MW / "
-                  f"{bess_unit['mva']:g} MVA)")
+                  f"{INVERTER_SIZING_PF} rounded up to the {step * 1000:g} kVA orderable "
+                  f"step (inverter max {bess_unit['mva']:g} MVA per unit)")
     # Machine sum counts actual units (an odd fleet leaves one half-filled
     # skid), matching Attachment A's SUMPRODUCT of the machine table.
     total_mva = n_inv * inverter["mva"] + (n_bess * bess_conf["mva"] if bess_conf else 0)
     if total_mva:
         add_param(graph, "design.gross_capacity_mva", "Gross capacity (machine sum)",
-                  round(total_mva, 2), "MVA", SRC_CALC, "design_engine",
+                  round(total_mva, 3), "MVA", SRC_CALC, "design_engine",
                   f"{n_inv} x {inverter['mva']:g} MVA PV"
                   + (f" + {n_bess} x {bess_conf['mva']:g} MVA BESS PCS (configured)"
                      if bess_conf else "")
@@ -389,9 +400,12 @@ def design_plant(graph: dict[str, Any], intake: dict[str, Any]) -> dict[str, Any
             "verified": inverter["verified"] and (inv_matched or bool(inverter.get("vendor_file"))),
         })
         schedule.append({
-            "item": "Inverter block pad transformer", "make_model": f"{pad['mva']:g} MVA Dyn11",
+            "item": ("Integrated MV transformer (in station)" if pad.get("integrated")
+                     else "Inverter block pad transformer"),
+            "make_model": f"{pad['mva']:g} MVA {pad.get('vector', 'Dyn11')}",
             "qty": n_blocks, "rating": f"{inverter['ac_kv']:g}/{col_kv:g} kV, Z={pad['z_pct']:g}%",
-            "source": pad["datasheet"], "verified": True,
+            "source": pad.get("datasheet") or "Standard family",
+            "verified": bool(pad.get("verified")),
         })
     if bess_unit and n_bess:
         schedule.append({
@@ -426,6 +440,26 @@ def design_plant(graph: dict[str, Any], intake: dict[str, Any]) -> dict[str, Any
         "verified": gentie_provided,
     })
 
+    # --- Verified-spec audit -------------------------------------------------
+    # Every parameter the packet uses must trace to the admin-maintained
+    # equipment_specs.json. Unsourced (assumed) parameters are listed here so
+    # the app can alert the system administrator; Attachment A never carries
+    # them.
+    spec_gaps: list[dict[str, str]] = []
+    spec_gaps += lib.spec_gaps(inverter)
+    if bess_unit is not None:
+        spec_gaps += lib.spec_gaps(bess_unit)
+    spec_gaps += lib.spec_gaps(pad)
+    spec_gaps += lib.spec_gaps(mpt)
+    spec_gaps += lib.spec_gaps(cable)
+    for key in lib.GENTIE_META.get("assumed_keys") or []:
+        spec_gaps.append({
+            "device": f"Gen-tie line constants ({line['kv_class']} kV class)",
+            "param": key,
+            "note": (lib.GENTIE_META.get("source_notes") or {}).get("_all")
+                    or "No source on file",
+        })
+
     graph["missing"] = missing
     topology_text = _topology_text(n_inv, inverter, n_blocks, n_feeders, col_kv,
                                    n_mpt, mpt, poi_kv, gentie_mi,
@@ -439,7 +473,7 @@ def design_plant(graph: dict[str, Any], intake: dict[str, Any]) -> dict[str, Any
         "inverter": inverter, "bess_unit": bess_unit, "pad": pad, "mpt": mpt,
         "cable": cable, "line": line,
         "feeder_mi": feeder_mi, "gentie_mi": gentie_mi,
-        "total_mva": round(total_mva, 2), "poi_sc_mva": poi_sc_mva,
+        "total_mva": round(total_mva, 3), "poi_sc_mva": poi_sc_mva,
         "bess_conf": bess_conf,
         "site_rules": {
             "pf_poi": PF_POI,
@@ -453,6 +487,9 @@ def design_plant(graph: dict[str, Any], intake: dict[str, Any]) -> dict[str, Any
         "pad_detc": PAD_DETC,
         "schedule": schedule,
         "missing": missing,
+        "spec_gaps": spec_gaps,
+        "inverter_matched": inv_matched,
+        "bess_matched": bess_matched,
         "topology": topology_text,
         "bess_assigned": bess_assigned,
     }

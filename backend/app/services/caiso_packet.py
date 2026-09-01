@@ -24,6 +24,7 @@ import fitz
 
 from backend.app.config import DATA_ROOT
 from backend.app.services.iso_profiles import get_profile, localize
+from backend.app.engine import equipment as lib
 from backend.app.engine.consistency import run_engineering
 from backend.app.engine.models_out import dyd_text, dyr_text, epc_text, raw_text
 from backend.app.engine.reports import (
@@ -218,9 +219,10 @@ DEFAULT_INTAKE: dict[str, Any] = {
     "queue_ref": "",
     "project_type": "Solar PV + BESS (AC-coupled)",
     # Machine-table sum anchored to the 128 MW gross output goal (MVA = MW / 0.95):
-    # 19 x 4.4 MVA PV inverters + 52 x 1.02 MVA Megapack PCS (configured
-    # 4-hour rating) = 136.64 MVA — matches Attachment A's SUMPRODUCT formula.
-    "gross_mva": 136.64,
+    # 19 x 4.532 MVA PV stations (SG4400UD-MV rated at the 40 C design temp per
+    # the Sungrow datasheet) + 52 x 1.05 MVA Megapack PCS (4-hour configured,
+    # 50 kVA orderable steps) = 140.708 MVA — matches Attachment A's SUMPRODUCT.
+    "gross_mva": 140.708,
     "gross_mw": 128.0,
     "aux_mw": 2.5,
     "losses_mw": 0.5,
@@ -236,9 +238,10 @@ DEFAULT_INTAKE: dict[str, Any] = {
     "module": "JinkoSolar Tiger Neo 620W bifacial",
     "bess_vendor": "Tesla Megapack 2XL",
     "dyd_status": "Received from vendor",
-    # Matches the engine's family pick for the 136.64 MVA machine sum:
-    # 2 x 75 MVA (45/60/75 MVA ONAN/ONAF1/ONAF2 ladder).
-    "transformer": "75 MVA, 34.5/230 kV, Z = 8% @ ONAF, YNd1",
+    # Matches the engine's family pick for the 140.71 MVA machine sum:
+    # 2 x 75 MVA (45/60/75 MVA ONAN/ONAF1/ONAF2 ladder). Z/X/R from the
+    # developer ground-truth workbook (Z = 9%, X/R = 42).
+    "transformer": "75 MVA, 34.5/230 kV, Z = 9% @ ONAF, YNd1",
     "collector_kv": 34.5,
     "substation_arrangement": "Engine recommendation",
     "site_constraints": "",
@@ -840,12 +843,68 @@ def validate_intake(intake: dict[str, Any], iso: str | None = None) -> dict[str,
              "Attachment A will carry generic values — update before submission to avoid deficiency review.",
              rule="dyd-models", evidence="file_technical", hl=["inverter"])
 
+    # --- Verified equipment library (never-hallucinate policy) ---------------
+    # Every device parameter written into the packet must trace to
+    # equipment_specs.json. An unknown device blocks generation; a known device
+    # with unsourced parameters raises a SYSTEM ADMIN alert and those
+    # parameters are excluded from Attachment A until sourced.
+    admin_alerts: list[dict[str, Any]] = []
+    custom_list = intake.get("custom_equipment")
+    custom_list = custom_list if isinstance(custom_list, list) else []
+
+    def _lib_check(kind_label: str, text: str, matcher, kind_key: str, field: str):
+        if not text or "TBD" in text.upper():
+            return None
+        custom = lib.match_custom(text, custom_list, kind_key)
+        if custom:
+            return lib.custom_entry(custom)
+        entry, matched = matcher(text)
+        if not matched:
+            err(field, f"{kind_label} not in the verified equipment library",
+                f'"{text}" has no entry in the equipment spec file. GridPilot never writes '
+                "unverified device parameters into the packet — ask the system administrator "
+                "to add the device (datasheet values with sources) to "
+                "backend/app/assets/equipment_specs.json, then re-validate.",
+                rule="dyd-models", evidence="file_technical", hl=[field])
+            admin_alerts.append({
+                "device": text, "param": "all parameters",
+                "note": "New device — add a sourced entry to equipment_specs.json",
+            })
+            return None
+        return entry
+
+    _lib_entries = [
+        _lib_check("Inverter", str(intake.get("inverter") or "").strip(),
+                   lib.match_inverter, "pv_inverter", "inverter"),
+    ]
+    if _num(intake.get("bess_mw")):
+        _lib_entries.append(
+            _lib_check("BESS unit", str(intake.get("bess_vendor") or "").strip(),
+                       lib.match_bess, "bess", "bess_vendor"))
+    for entry in filter(None, _lib_entries):
+        admin_alerts.extend(lib.spec_gaps(entry))
+
+    _gaps = [a for a in admin_alerts if a["param"] != "all parameters"]
+    if _gaps:
+        warn("equipment_specs", "Device parameters without an OEM source — admin action",
+             f"{len(_gaps)} parameter(s) on the selected equipment have no source on file and are "
+             "excluded from Attachment A until the system administrator adds sourced values to "
+             "equipment_specs.json: "
+             + "; ".join(f"{a['device']} — {a['param']}" for a in _gaps),
+             rule="dyd-models", evidence="file_technical", hl=["inverter"])
+    elif not admin_alerts and any(e is not None for e in _lib_entries):
+        ok("Equipment parameters fully sourced",
+           "Every parameter of the selected devices traces to a cited OEM datasheet or the "
+           "developer ground-truth workbook — nothing in Attachment A is unsourced.",
+           rule="dyd-models", evidence="file_technical")
+
     return {
         "ok": len(errors) == 0,
         "errors": errors,
         "warnings": warnings,
         "passed": passed,
         "checks": checks,
+        "admin_alerts": admin_alerts,
         "summary": (
             f"{len(errors)} blocking issue(s), {len(warnings)} advisory item(s), {len(passed)} check(s) passed."
         ),
@@ -1456,15 +1515,23 @@ def _fill_attachment_a_xlsm(intake: dict, d: dict, eng: dict, path: Path) -> Non
     W(ws, "F8", d["losses"])
     W(ws, "F10", round(d["aux"] * 0.2, 2))
 
-    # Section II — one column per generation type: F = PV, G = BESS
+    # Section II — one column per generation type: F = PV, G = BESS.
+    # Never-hallucinate rule: the PF regulation range (II.15/16) is written only
+    # when the equipment library sources it from the OEM datasheet (Sungrow:
+    # 0.8 leading – 0.8 lagging). Unsourced device parameters stay blank and
+    # surface as SYSTEM ADMIN alerts instead.
     def gen_col(col: str, name: str, unit: dict, gtype: str, count: int) -> None:
-        for row_n, val in [
+        rows: list[tuple[int, Any]] = [
             (15, name), (16, "DC With Inverter"), (17, gtype),
             (18, unit["vendor"]), (19, unit["model"]), (23, count),
             (24, unit["ac_kv"]), (25, 40), (26, unit["mva"]), (27, unit["mw"]),
-            (29, -0.95), (30, 0.95), (31, 5),
+            (31, 5),
             (32, "Three Phase"), (33, "Grounded WYE"),
-        ]:
+        ]
+        if lib.is_sourced(unit, "pf_range"):
+            pf_rng = float(unit["pf_range"])
+            rows += [(29, -pf_rng), (30, pf_rng)]
+        for row_n, val in rows:
             W(ws, f"{col}{row_n}", val)
 
     gen_col("F", pv_name, inv,
@@ -1497,7 +1564,14 @@ def _fill_attachment_a_xlsm(intake: dict, d: dict, eng: dict, path: Path) -> Non
     W(ws, "F184", "Continuous current injection through the ride-through envelope; "
                   "reactive-priority K-factor response per IEEE 2800 and the OEM datasheet.")
     W(ws, "F188", "No self-lockout; automatic restart after grid conditions normalize per OEM settings")
-    W(ws, "F192", f"{inv.get('dyd_params', {}).get('regc', {}).get('rrpwr', 10):g} pu/s on unit MVA base")
+    # Return ramp rate: only quoted when it traces to the vendor model file;
+    # otherwise the OEM data is pending and the cell must not carry a guess.
+    if inv.get("vendor_file"):
+        W(ws, "F192", f"{inv.get('dyd_params', {}).get('regc', {}).get('rrpwr', 10):g} "
+                      f"pu/s on unit MVA base (vendor file {inv['vendor_file']})")
+    else:
+        W(ws, "F192", "OEM ramp-rate data pending — to be provided with the vendor "
+                      "MOD-026/027 model package")
     for i, (hz, sec) in enumerate([(57.0, 0.16), (58.4, 300), (61.2, 300), (61.8, 0.16)]):
         W(ws, f"F{194 + i}", hz)   # frequency
         W(ws, f"G{194 + i}", sec)  # time
@@ -1511,7 +1585,10 @@ def _fill_attachment_a_xlsm(intake: dict, d: dict, eng: dict, path: Path) -> Non
                       else "AC-side on-site generator only")
         W(ws, "F212", "Follow ISO dispatch instructions")
         W(ws, "F214", mwh)
-        W(ws, "F215", 87)
+        # Charge/discharge cycle efficiency: OEM round-trip efficiency when the
+        # library sources it (Tesla 4-hour: 93.7% per datasheet); never guessed.
+        if lib.is_sourced(bess, "rte_pct"):
+            W(ws, "F215", bess["rte_pct"])
         for r in (216, 218, 220, 222):   # rated/max discharge + charge power
             W(ws, f"F{r}", d["bess_mw"])
         for r in (217, 219, 221, 223):   # durations
@@ -1664,7 +1741,12 @@ def _fill_attachment_a_xlsm(intake: dict, d: dict, eng: dict, path: Path) -> Non
         units.append((3, bess_name, bess, bess_mva_agg, "EQ Gen 2"))
 
     for col, name, unit, mva_agg, bus in units:
-        dp = unit.get("dyd_params") or {}
+        # Never-hallucinate rule: numeric WECC parameters are written only when
+        # they trace to the vendor model file (MOD-026/027 upload) or a sourced
+        # library entry — otherwise only the structural fields (unit, model
+        # name, bus, MVA base) are filled and the parameters await OEM data.
+        params_traceable = bool(unit.get("vendor_file")) or lib.is_sourced(unit, "dyd_params")
+        dp = (unit.get("dyd_params") or {}) if params_traceable else {}
         wecc = unit.get("wecc_models") or {}
         dyn_block(3, 21, col, name, str(wecc.get("gen", "regc_a")).lower(),
                   dp.get("regc") or {}, {"generator bus": bus, "mva": mva_agg, "lvplsw": 1})
@@ -1679,10 +1761,12 @@ def _fill_attachment_a_xlsm(intake: dict, d: dict, eng: dict, path: Path) -> Non
             W(ws4, f"{_cl(col)}{frt[f'dftrp{i}']}", hz)
             W(ws4, f"{_cl(col)}{frt[f'dttrp{i}']}", sec)
         W(ws4, f"{_cl(col)}{labels(176, 176)['generator']}", name)
-    # Plant controller — one plant-level REPC at the POI
+    # Plant controller — one plant-level REPC at the POI (numeric parameters
+    # only when traceable to the vendor model file, same as above)
+    _inv_traceable = bool(inv.get("vendor_file")) or lib.is_sourced(inv, "dyd_params")
     dyn_block(85, 144, 2, pv_name,
               str((inv.get("wecc_models") or {}).get("plant", "repc_a")).lower(),
-              (inv.get("dyd_params") or {}).get("repc") or {},
+              ((inv.get("dyd_params") or {}).get("repc") or {}) if _inv_traceable else {},
               {"monitored bus": "Point of Interconnection",
                "monitored branch": "Line1 (High Side of GSU - Point of Interconnection)",
                "mvab": pv_mva_agg + bess_mva_agg})
@@ -1833,8 +1917,12 @@ def _gen_attachment_a_xlsx(intake: dict, d: dict, eng: dict, path: Path) -> None
     row("II.14", "Individual generator power factor at rated MW", "",
         round(inv["mw"] / inv["mva"], 4),
         round(_bmw / _bmva, 4) if gt2 else "", "= II.13 / II.12", "calc")
-    row("II.15", "PF regulation range at rated MW — Leading (−)", "", 0.95, 0.95 if gt2 else "")
-    row("II.16", "PF regulation range at rated MW — Lagging (+)", "", 0.95, 0.95 if gt2 else "")
+    # PF regulation range: written only when sourced from the OEM datasheet.
+    _pv_pf = -float(inv["pf_range"]) if lib.is_sourced(inv, "pf_range") else ""
+    _b_pf = (float(bess["pf_range"]) if (gt2 and lib.is_sourced(bess, "pf_range")) else "")
+    row("II.15", "PF regulation range at rated MW — Leading (−)", "", _pv_pf,
+        _b_pf and -_b_pf, "" if _pv_pf else "OEM PF range pending — admin to source")
+    row("II.16", "PF regulation range at rated MW — Lagging (+)", "", _pv_pf and -_pv_pf, _b_pf)
     row("II.18", "Phase", "", 3, 3 if gt2 else "")
     row("II.19", "Connection", "", "Wye-Grounded", "Wye-Grounded" if gt2 else "")
     row("II.20", "ACTION REQUIRED: generator reactive capability curves", "",
@@ -1867,7 +1955,9 @@ def _gen_attachment_a_xlsx(intake: dict, d: dict, eng: dict, path: Path) -> None
         row("VI.1", "Source of charging", "",
             "On-site generator" if "On-site" in charging else "Transmission grid", "", charging)
         row("VI.4", "Total Storage Capability", "MWh", d.get("bess_mwh") or _num(intake.get("bess_mwh")) or "")
-        row("VI.5", "Charge/Discharge Cycle Efficiency", "%", 87)
+        row("VI.5", "Charge/Discharge Cycle Efficiency", "%",
+            bess["rte_pct"] if lib.is_sourced(bess, "rte_pct") else "",
+            "", "" if lib.is_sourced(bess, "rte_pct") else "OEM RTE pending — admin to source")
         row("VI.6", "Rated Storage Discharging Power", "MW", d["bess_mw"])
         mwh = _num(intake.get("bess_mwh")) or 0
         row("VI.7", "Discharge Duration under Rated Power", "Hours",

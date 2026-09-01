@@ -76,13 +76,15 @@ def test_phase3_design() -> None:
     g = build_graph(INTAKE, "CAISO")
     d = design_plant(g, INTAKE)
     c = d["counts"]
-    # 128 gross - 50 BESS = 78 MW PV / 0.95 = 82.1 MVA / 4.4 -> 19 inverters, 10 blocks.
+    # 128 gross - 50 BESS = 78 MW PV / 0.95 = 82.1 MVA / 4.532 (datasheet 40 C
+    # rating) -> 19 stations; the SG4400UD-MV integrates its MV transformer, so
+    # every station is its own block.
     ok(c["inverters"] == 19, f"19 inverters via MVA = MW / 0.95 rule (got {c['inverters']})")
-    ok(c["blocks"] == 10, f"10 skids (got {c['blocks']})")
-    # BESS: max(ceil(50/0.95/2.0)=27, ceil(200/3.854)=52) = 52 Megapacks.
+    ok(c["blocks"] == 19, f"19 single-station blocks (got {c['blocks']})")
+    # BESS (4-hour Megapack, datasheet): max(ceil(50/0.95/1.32)=40, ceil(200/3.916)=52) = 52.
     ok(c["bess_units"] == 52, f"52 Megapacks (got {c['bess_units']})")
     ok(c["main_transformers"] == 2, "two main transformers above 100 MVA")
-    # 527 A usable per feeder / 147 A per 8.8 MVA block -> 3 blocks/circuit; ceil(10/3) = 4.
+    # 527 A usable per feeder / 75.8 A per 4.532 MVA station -> 6 blocks/circuit; ceil(19/6) = 4.
     ok(c["feeders"] == 4, f"PV feeders sized by ampacity (got {c['feeders']})")
     ok(any(n["id"] == "bess_seg" for n in g["nodes"]), "BESS has its own collector segment")
     blocks = [n.get("blocks") for n in g["nodes"] if n["type"] == "feeder"]
@@ -129,8 +131,8 @@ def test_phase4_sld() -> None:
     ok(root.tag.endswith("svg"), "SVG parses")
     ok("OWNERSHIP BOUNDARY" in svg, "ownership boundary drawn")
     ok("Revenue metering" in svg, "metering point drawn")
-    ok("TYPICAL OF 10 INVERTER BLOCKS" in svg, "typical-of block notation")
-    ok(f"{d['counts']['bess_units']} x Megapack 2XL" in svg, "BESS labelled from design")
+    ok("TYPICAL OF 19 INVERTER BLOCKS" in svg, "typical-of block notation")
+    ok(f"{d['counts']['bess_units']} x Megapack 2 XL" in svg, "BESS labelled from design")
     ok("Gen-tie — 5 mi" in svg, "gen-tie length labelled")
 
     out = Path("/tmp/gp_engine")

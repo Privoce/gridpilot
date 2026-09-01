@@ -593,6 +593,20 @@ async function renderOnboarding() {
     try {
       state.validation = await api.caisoValidate(loadIntake());
       mergeGraphHistory(state.validation);
+      // Never-hallucinate policy: pop an alert whenever selected equipment has
+      // parameters (or a whole device) missing from the sourced spec library,
+      // so the system admin knows to update equipment_specs.json. Keyed so it
+      // fires once per alert set — toast() re-renders, which re-validates, and
+      // an unguarded toast here would loop forever.
+      const alerts = state.validation?.admin_alerts || [];
+      const alertKey = alerts.map((a) => `${a.device}|${a.param}`).join(";");
+      if (alerts.length && state.adminAlertKey !== alertKey) {
+        state.adminAlertKey = alertKey;
+        toast(
+          `SYSTEM ADMIN: ${alerts.length} equipment parameter(s) lack an OEM source — ` +
+          `see the alert on this page (equipment_specs.json needs updating)`
+        );
+      }
     } catch {
       state.validation = null;
     }
@@ -1297,6 +1311,27 @@ function renderWizardStep(step) {
           <strong class="block ${v.ok ? "text-ok" : "text-danger"}">${v.ok ? "Intake is clean — ready to generate" : "Blocking issues found"}</strong>
           <p class="text-[13px] text-muted">${esc(v.summary)}</p>
         </div>
+        ${(v.admin_alerts || []).length ? `
+        <div class="mb-4 rounded-card border-2 border-warn/60 bg-warn-soft p-4">
+          <div class="flex items-center gap-2">
+            <span class="rounded-pill border border-warn/60 px-2 py-0.5 font-mono text-[10px] uppercase tracking-[0.08em] text-ink">System admin action</span>
+            <strong class="text-[13.5px] tracking-tightish">Equipment parameters without an OEM source</strong>
+          </div>
+          <p class="mt-1 text-[12.5px] leading-snug text-muted">
+            These values have no source on file, so they are <strong>excluded from Attachment A</strong>
+            (never hallucinated). Add sourced values to
+            <code class="font-mono text-[11px]">backend/app/assets/equipment_specs.json</code> and re-validate.
+          </p>
+          <ul class="mt-2 space-y-1">
+            ${v.admin_alerts
+              .map(
+                (a) => `<li class="text-[12px] leading-snug">
+                  <span class="font-mono text-[11px]">${esc(a.device)}</span> —
+                  <strong>${esc(a.param)}</strong>: <span class="text-muted">${esc(a.note)}</span></li>`
+              )
+              .join("")}
+          </ul>
+        </div>` : ""}
         <div class="space-y-2.5">
           ${checks.map(checkCard).join("")}
         </div>
@@ -2679,6 +2714,27 @@ async function renderRequest(projectId) {
             ? `<div class="mb-4 rounded-card border border-danger/25 bg-danger-soft p-4"><strong class="text-danger">Blocking issues found</strong><p class="mt-0.5 text-[13px] text-muted">${errCount} blocking issue(s) — edit the intake or re-attach corrected documents, then revalidate.</p></div>`
             : `<div class="mb-4 rounded-card border border-ok/25 bg-ok-soft p-4"><strong class="text-ok">Intake is clean</strong><p class="mt-0.5 text-[13px] text-muted">All blocking checks passed — the packet can be generated.</p></div>`
         }
+        ${(state.reqValidation?.admin_alerts || []).length ? `
+        <div class="mb-4 rounded-card border-2 border-warn/60 bg-warn-soft p-4">
+          <div class="flex items-center gap-2">
+            <span class="rounded-pill border border-warn/60 px-2 py-0.5 font-mono text-[10px] uppercase tracking-[0.08em] text-ink">System admin action</span>
+            <strong class="text-[13.5px] tracking-tightish">Equipment parameters without an OEM source</strong>
+          </div>
+          <p class="mt-1 text-[12.5px] leading-snug text-muted">
+            These values have no source on file, so they are <strong>excluded from Attachment A</strong>
+            (never hallucinated). Add sourced values to
+            <code class="font-mono text-[11px]">backend/app/assets/equipment_specs.json</code> and re-validate.
+          </p>
+          <ul class="mt-2 space-y-1">
+            ${state.reqValidation.admin_alerts
+              .map(
+                (a) => `<li class="text-[12px] leading-snug">
+                  <span class="font-mono text-[11px]">${esc(a.device)}</span> —
+                  <strong>${esc(a.param)}</strong>: <span class="text-muted">${esc(a.note)}</span></li>`
+              )
+              .join("")}
+          </ul>
+        </div>` : ""}
         <div class="space-y-2">${cards}</div>
       </div>
       ${footer(

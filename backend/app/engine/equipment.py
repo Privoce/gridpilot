@@ -1,192 +1,65 @@
 """Phase 2 — Equipment library.
 
-Curated OEM equipment entries with the parameters the engineering engine
-needs: ratings, impedances, fault contribution, P-Q capability, and the
-ISO-accepted WECC dynamic models with OEM-published parameter sets.
-
-Entries marked verified=True carry OEM datasheet values; the generic entries
-are engineering defaults and are always tagged as assumptions requiring
-approval when the design engine falls back to them.
+All device parameters load from `backend/app/assets/equipment_specs.json`,
+the single source of truth maintained by the system administrator. Each JSON
+entry separates `sourced_keys` (verified against the cited OEM datasheet or
+the developer ground-truth workbook) from `assumed_keys` (engineering
+defaults pending a source). Documents that must never carry unsourced
+numbers — Attachment A above all — write a parameter only when it is
+sourced; assumed parameters surface as SYSTEM ADMIN alerts instead.
 """
 
 from __future__ import annotations
 
+import json
 import re
+from pathlib import Path
 from typing import Any
 
-# ---------------------------------------------------------------------------
-# Inverters (utility-scale central inverters, MV skid output)
-# ---------------------------------------------------------------------------
+_SPECS_PATH = Path(__file__).resolve().parents[1] / "assets" / "equipment_specs.json"
 
-INVERTERS: dict[str, dict[str, Any]] = {
-    "sungrow_sg4400ud_mv": {
-        "id": "sungrow_sg4400ud_mv",
-        "vendor": "Sungrow", "model": "SG4400UD-MV",
-        "kind": "pv_inverter", "verified": True,
-        "mva": 4.4, "mw": 4.4, "pf_range": 0.9,          # +/- 0.9 PF at rated
-        "ac_kv": 0.69,                                    # inverter terminal LV
-        "fault_current_pu": 1.25,                         # of rated current
-        "q_pu_max": 0.484,                                # tan(acos(0.9)) * P
-        "wecc_models": {"gen": "REGC_A", "elec": "REEC_A", "plant": "REPC_A"},
-        "dyd_params": {
-            "regc": {"tg": 0.02, "rrpwr": 10.0, "brkpt": 0.9, "zerox": 0.4, "lvpl1": 1.22},
-            "reec": {"trv": 0.02, "vdip": 0.9, "vup": 1.1, "kqv": 2.0, "iqh1": 1.05,
-                     "iql1": -1.05, "tp": 0.05, "qmax": 0.484, "qmin": -0.484},
-            "repc": {"tfltr": 0.02, "kp": 18.0, "ki": 5.0, "tft": 0.0, "tfv": 0.05,
-                     "ddn": 20.0, "dup": 0.0, "fdbd1": -0.0006, "fdbd2": 0.0006},
-        },
-        "datasheet": "Sungrow SG4400UD-MV datasheet V1.4 (2025)",
-    },
-    "sma_sc4600up": {
-        "id": "sma_sc4600up",
-        "vendor": "SMA", "model": "Sunny Central 4600 UP",
-        "kind": "pv_inverter", "verified": True,
-        "mva": 4.6, "mw": 4.6, "pf_range": 0.9,
-        "ac_kv": 0.69,
-        "fault_current_pu": 1.20,
-        "q_pu_max": 0.484,
-        "wecc_models": {"gen": "REGC_A", "elec": "REEC_A", "plant": "REPC_A"},
-        "dyd_params": {
-            "regc": {"tg": 0.02, "rrpwr": 10.0, "brkpt": 0.9, "zerox": 0.4, "lvpl1": 1.20},
-            "reec": {"trv": 0.02, "vdip": 0.9, "vup": 1.1, "kqv": 2.2, "iqh1": 1.03,
-                     "iql1": -1.03, "tp": 0.05, "qmax": 0.484, "qmin": -0.484},
-            "repc": {"tfltr": 0.02, "kp": 16.0, "ki": 4.5, "tft": 0.0, "tfv": 0.05,
-                     "ddn": 20.0, "dup": 0.0, "fdbd1": -0.0006, "fdbd2": 0.0006},
-        },
-        "datasheet": "SMA SC 4600 UP datasheet (2024)",
-    },
-    "pe_fs3430k": {
-        "id": "pe_fs3430k",
-        "vendor": "Power Electronics", "model": "FS3430K",
-        "kind": "pv_inverter", "verified": True,
-        "mva": 3.43, "mw": 3.43, "pf_range": 0.9,
-        "ac_kv": 0.645,
-        "fault_current_pu": 1.30,
-        "q_pu_max": 0.484,
-        "wecc_models": {"gen": "REGC_A", "elec": "REEC_A", "plant": "REPC_A"},
-        "dyd_params": {
-            "regc": {"tg": 0.02, "rrpwr": 10.0, "brkpt": 0.9, "zerox": 0.4, "lvpl1": 1.30},
-            "reec": {"trv": 0.02, "vdip": 0.9, "vup": 1.1, "kqv": 2.0, "iqh1": 1.05,
-                     "iql1": -1.05, "tp": 0.05, "qmax": 0.484, "qmin": -0.484},
-            "repc": {"tfltr": 0.02, "kp": 18.0, "ki": 5.0, "tft": 0.0, "tfv": 0.05,
-                     "ddn": 20.0, "dup": 0.0, "fdbd1": -0.0006, "fdbd2": 0.0006},
-        },
-        "datasheet": "Power Electronics FS3430K datasheet (2024)",
-    },
-    "generic_pv_4mva": {
-        "id": "generic_pv_4mva",
-        "vendor": "Generic", "model": "4.0 MVA central inverter",
-        "kind": "pv_inverter", "verified": False,
-        "mva": 4.0, "mw": 4.0, "pf_range": 0.9,
-        "ac_kv": 0.69,
-        "fault_current_pu": 1.20,
-        "q_pu_max": 0.484,
-        "wecc_models": {"gen": "REGC_A", "elec": "REEC_A", "plant": "REPC_A"},
-        "dyd_params": {
-            "regc": {"tg": 0.02, "rrpwr": 10.0, "brkpt": 0.9, "zerox": 0.4, "lvpl1": 1.20},
-            "reec": {"trv": 0.02, "vdip": 0.9, "vup": 1.1, "kqv": 2.0, "iqh1": 1.05,
-                     "iql1": -1.05, "tp": 0.05, "qmax": 0.484, "qmin": -0.484},
-            "repc": {"tfltr": 0.02, "kp": 18.0, "ki": 5.0, "tft": 0.0, "tfv": 0.05,
-                     "ddn": 20.0, "dup": 0.0, "fdbd1": -0.0006, "fdbd2": 0.0006},
-        },
-        "datasheet": "WECC generic parameters — replace with OEM data",
-    },
-}
+with open(_SPECS_PATH, encoding="utf-8") as _f:
+    _SPECS: dict[str, Any] = json.load(_f)
+
+
+def specs_path() -> str:
+    return str(_SPECS_PATH)
+
+
+def is_sourced(entry: dict[str, Any], key: str) -> bool:
+    """True when the parameter is verified against the entry's cited source."""
+    return key in (entry.get("sourced_keys") or [])
+
+
+def spec_gaps(entry: dict[str, Any]) -> list[dict[str, str]]:
+    """Assumed (unsourced) parameters of a library entry, with admin notes."""
+    notes = entry.get("source_notes") or {}
+    gaps = []
+    for key in entry.get("assumed_keys") or []:
+        gaps.append({
+            "device": f"{entry.get('vendor', '')} {entry.get('model', entry.get('id', '?'))}".strip(),
+            "param": key,
+            "note": notes.get(key) or notes.get("_all") or "No source on file — ADMIN: add value + source to equipment_specs.json",
+        })
+    return gaps
+
 
 # ---------------------------------------------------------------------------
-# BESS units (integrated AC blocks)
+# Library tables (materialized from the admin-maintained JSON)
 # ---------------------------------------------------------------------------
 
-BESS_UNITS: dict[str, dict[str, Any]] = {
-    "tesla_megapack_2xl": {
-        "id": "tesla_megapack_2xl",
-        "vendor": "Tesla", "model": "Megapack 2XL",
-        "kind": "bess", "verified": True,
-        "mw": 1.927, "mwh": 3.854, "mva": 2.0,
-        "ac_kv": 0.48,
-        "fault_current_pu": 1.15,
-        "q_pu_max": 0.62,
-        "wecc_models": {"gen": "REGC_A", "elec": "REEC_C", "plant": "REPC_A"},
-        "dyd_params": {
-            "regc": {"tg": 0.02, "rrpwr": 10.0, "brkpt": 0.9, "zerox": 0.4, "lvpl1": 1.15},
-            "reec": {"trv": 0.02, "vdip": 0.9, "vup": 1.1, "kqv": 2.0, "iqh1": 1.05,
-                     "iql1": -1.05, "tp": 0.05, "qmax": 0.62, "qmin": -0.62,
-                     "soc_ini": 0.8, "socmax": 1.0, "socmin": 0.0},
-            "repc": {"tfltr": 0.02, "kp": 18.0, "ki": 5.0, "tft": 0.0, "tfv": 0.05,
-                     "ddn": 20.0, "dup": 20.0, "fdbd1": -0.0006, "fdbd2": 0.0006},
-        },
-        "datasheet": "Tesla Megapack 2XL datasheet (2025)",
-    },
-    "generic_bess_2mw": {
-        "id": "generic_bess_2mw",
-        "vendor": "Generic", "model": "2.0 MW / 4.0 MWh AC block",
-        "kind": "bess", "verified": False,
-        "mw": 2.0, "mwh": 4.0, "mva": 2.1,
-        "ac_kv": 0.48,
-        "fault_current_pu": 1.15,
-        "q_pu_max": 0.62,
-        "wecc_models": {"gen": "REGC_A", "elec": "REEC_C", "plant": "REPC_A"},
-        "dyd_params": {
-            "regc": {"tg": 0.02, "rrpwr": 10.0, "brkpt": 0.9, "zerox": 0.4, "lvpl1": 1.15},
-            "reec": {"trv": 0.02, "vdip": 0.9, "vup": 1.1, "kqv": 2.0, "iqh1": 1.05,
-                     "iql1": -1.05, "tp": 0.05, "qmax": 0.62, "qmin": -0.62,
-                     "soc_ini": 0.8, "socmax": 1.0, "socmin": 0.0},
-            "repc": {"tfltr": 0.02, "kp": 18.0, "ki": 5.0, "tft": 0.0, "tfv": 0.05,
-                     "ddn": 20.0, "dup": 20.0, "fdbd1": -0.0006, "fdbd2": 0.0006},
-        },
-        "datasheet": "WECC generic parameters — replace with OEM data",
-    },
-}
+INVERTERS: dict[str, dict[str, Any]] = dict(_SPECS["inverters"])
+BESS_UNITS: dict[str, dict[str, Any]] = dict(_SPECS["bess_units"])
+PAD_TRANSFORMERS: dict[str, dict[str, Any]] = dict(_SPECS["pad_transformers"])
+MAIN_TRANSFORMERS: dict[str, dict[str, Any]] = dict(_SPECS["main_transformers"])
+CABLES: dict[str, dict[str, Any]] = dict(_SPECS["cables"])
 
-# ---------------------------------------------------------------------------
-# Transformers
-# ---------------------------------------------------------------------------
-
-PAD_TRANSFORMERS: dict[str, dict[str, Any]] = {
-    # Inverter-block pad-mount (LV -> collector)
-    "pad_5mva": {"id": "pad_5mva", "mva": 5.0, "z_pct": 5.75, "xr": 7.0,
-                 "vector": "Dyn11", "verified": True,
-                 "datasheet": "Standard 5 MVA pad-mount, 0.69/34.5 kV"},
-    "pad_9mva": {"id": "pad_9mva", "mva": 9.0, "z_pct": 6.0, "xr": 8.0,
-                 "vector": "Dyn11", "verified": True,
-                 "datasheet": "Standard 9 MVA pad-mount, 0.69/34.5 kV"},
-    "pad_12mva": {"id": "pad_12mva", "mva": 12.0, "z_pct": 6.5, "xr": 9.0,
-                  "vector": "Dyn11", "verified": True,
-                  "datasheet": "Standard 12 MVA pad-mount, 0.69/34.5 kV"},
-}
-
-MAIN_TRANSFORMERS: dict[str, dict[str, Any]] = {
-    # Main power transformer families (collector -> transmission)
-    "mpt_75mva": {"id": "mpt_75mva", "mva": 75.0, "z_pct": 8.0, "xr": 35.0,
-                  "vector": "YNd1", "taps": "±10% / 33 steps (OLTC)", "verified": True},
-    "mpt_140mva": {"id": "mpt_140mva", "mva": 140.0, "z_pct": 8.5, "xr": 40.0,
-                   "vector": "YNd1", "taps": "±10% / 33 steps (OLTC)", "verified": True},
-    "mpt_230mva": {"id": "mpt_230mva", "mva": 230.0, "z_pct": 9.0, "xr": 45.0,
-                   "vector": "YNd1", "taps": "±10% / 33 steps (OLTC)", "verified": True},
-}
-
-# ---------------------------------------------------------------------------
-# Collector cables (34.5 kV class, direct buried, typical spacing)
-# ---------------------------------------------------------------------------
-
-CABLES: dict[str, dict[str, Any]] = {
-    "al_1000_35kv": {"id": "al_1000_35kv", "desc": "1000 kcmil Al XLPE 35 kV",
-                     "ampacity_a": 585, "r_ohm_per_mi": 0.115, "x_ohm_per_mi": 0.205,
-                     "verified": True},
-    "al_750_35kv": {"id": "al_750_35kv", "desc": "750 kcmil Al XLPE 35 kV",
-                    "ampacity_a": 500, "r_ohm_per_mi": 0.148, "x_ohm_per_mi": 0.215,
-                    "verified": True},
-}
-
-# Gen-tie overhead line constants by voltage class (ACSR bundles, per mile).
+# Gen-tie overhead line constants by voltage class (per mile). JSON keys are
+# strings; the engine indexes by integer kV class.
 GENTIE_LINES: dict[int, dict[str, Any]] = {
-    500: {"r_ohm_per_mi": 0.012, "x_ohm_per_mi": 0.55, "ampacity_a": 3000},
-    345: {"r_ohm_per_mi": 0.037, "x_ohm_per_mi": 0.58, "ampacity_a": 2000},
-    230: {"r_ohm_per_mi": 0.062, "x_ohm_per_mi": 0.75, "ampacity_a": 1200},
-    138: {"r_ohm_per_mi": 0.110, "x_ohm_per_mi": 0.79, "ampacity_a": 900},
-    115: {"r_ohm_per_mi": 0.120, "x_ohm_per_mi": 0.80, "ampacity_a": 850},
-    69:  {"r_ohm_per_mi": 0.280, "x_ohm_per_mi": 0.85, "ampacity_a": 600},
+    int(k): v for k, v in _SPECS["gentie_lines"].items()
 }
+GENTIE_META: dict[str, Any] = _SPECS.get("gentie_lines_meta") or {}
 
 
 def catalog() -> dict[str, Any]:
@@ -287,6 +160,11 @@ def custom_entry(e: dict[str, Any]) -> dict[str, Any]:
         "verified": False,
         "custom": True,
         "datasheet": f"Datasheet upload: {e.get('source') or 'customer datasheet'} — unverified",
+        # Uploaded datasheet values count as customer-sourced for the ratings
+        # it actually carries; everything else stays assumed.
+        "sourced_keys": [k for k in ("mva", "mw", "ac_kv", "pf_range", "mwh") if e.get(k)],
+        "assumed_keys": ["fault_current_pu", "q_pu_max", "dyd_params"],
+        "source_notes": {"_all": "Customer datasheet upload — engineer of record to verify before filing"},
     }
     if is_bess:
         out["mwh"] = float(e.get("mwh") or e.get("mw") or base["mwh"])
@@ -307,6 +185,41 @@ def pick_pad_transformer(block_mva: float) -> dict[str, Any]:
         if PAD_TRANSFORMERS[key]["mva"] >= block_mva:
             return PAD_TRANSFORMERS[key]
     return PAD_TRANSFORMERS["pad_12mva"]
+
+
+def integrated_pad(inverter: dict[str, Any]) -> dict[str, Any] | None:
+    """Pad-transformer entry for a turnkey station's integrated MV transformer.
+
+    Stations like the Sungrow SG4400UD-MV ship with the MV transformer inside
+    the unit, so the 'pad' is the OEM-integrated transformer — one per
+    inverter — with datasheet impedance instead of a generic family pick.
+    """
+    x = inverter.get("integrated_xfmr")
+    if not x:
+        return None
+    prefix = "integrated_xfmr."
+    sourced = [k[len(prefix):] for k in (inverter.get("sourced_keys") or []) if k.startswith(prefix)]
+    assumed = [k[len(prefix):] for k in (inverter.get("assumed_keys") or []) if k.startswith(prefix)]
+    notes = {k[len(prefix):]: v for k, v in (inverter.get("source_notes") or {}).items()
+             if k.startswith(prefix)}
+    return {
+        "id": f"{inverter['id']}_integrated_xfmr",
+        "mva": float(x["mva"]),
+        "z_pct": float(x["z_pct"]),
+        "xr": float(x.get("xr") or 9.5),
+        "vector": x.get("vector", "Dy11"),
+        "cooling": x.get("cooling"),
+        "lv_kv": x.get("lv_kv"),
+        "integrated": True,
+        "vendor": inverter.get("vendor"),
+        "model": f"{inverter.get('model')} integrated MV transformer",
+        "verified": bool(inverter.get("verified")),
+        "datasheet": inverter.get("datasheet"),
+        "source": inverter.get("source"),
+        "sourced_keys": sourced,
+        "assumed_keys": assumed,
+        "source_notes": notes,
+    }
 
 
 def gentie_constants(kv: float) -> dict[str, Any]:
