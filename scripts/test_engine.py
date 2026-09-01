@@ -76,16 +76,16 @@ def test_phase3_design() -> None:
     g = build_graph(INTAKE, "CAISO")
     d = design_plant(g, INTAKE)
     c = d["counts"]
-    # 128 gross - 50 BESS = 78 MW PV / 0.95 = 82.1 MVA / 4.532 (datasheet 40 C
-    # rating) -> 19 stations; the SG4400UD-MV integrates its MV transformer, so
-    # every station is its own block.
+    # 128 gross - 50 BESS = 78 MW PV / 0.95 = 82.1 MVA / 4.4 (SG4400UD-MV-US,
+    # 4400 kVA @ 40 C) -> 19 stations; the SG4400UD-MV-US integrates its MV
+    # transformer, so every station is its own block.
     ok(c["inverters"] == 19, f"19 inverters via MVA = MW / 0.95 rule (got {c['inverters']})")
     ok(c["blocks"] == 19, f"19 single-station blocks (got {c['blocks']})")
     # BESS (4-hour Megapack, datasheet): max(ceil(50/0.95/1.32)=40, ceil(200/3.916)=52) = 52.
     ok(c["bess_units"] == 52, f"52 Megapacks (got {c['bess_units']})")
     ok(c["main_transformers"] == 2, "two main transformers above 100 MVA")
-    # 527 A usable per feeder / 75.8 A per 4.532 MVA station -> 6 blocks/circuit; ceil(19/6) = 4.
-    ok(c["feeders"] == 4, f"PV feeders sized by ampacity (got {c['feeders']})")
+    # 527 A usable per feeder / 73.6 A per 4.4 MVA station -> 7 blocks/circuit; ceil(19/7) = 3.
+    ok(c["feeders"] == 3, f"PV feeders sized by ampacity (got {c['feeders']})")
     ok(any(n["id"] == "bess_seg" for n in g["nodes"]), "BESS has its own collector segment")
     blocks = [n.get("blocks") for n in g["nodes"] if n["type"] == "feeder"]
     ok(min(blocks) >= 1 and sum(blocks) == c["blocks"], f"blocks distributed evenly {blocks}")

@@ -55,6 +55,17 @@ MAIN_TRANSFORMERS: dict[str, dict[str, Any]] = dict(_SPECS["main_transformers"])
 CABLES: dict[str, dict[str, Any]] = dict(_SPECS["cables"])
 PV_MODULES: dict[str, dict[str, Any]] = dict(_SPECS.get("pv_modules") or {})
 
+# Attachment A requires a nominal terminal voltage (II.10) for every generating
+# unit, so a verified library entry without a sourced ac_kv is a data error the
+# admin must fix in equipment_specs.json — fail loudly at load rather than
+# emitting a form with a missing or unsourced voltage.
+for _entry in list(INVERTERS.values()) + list(BESS_UNITS.values()):
+    if _entry.get("verified") and (
+            _entry.get("ac_kv") is None or "ac_kv" not in (_entry.get("sourced_keys") or [])):
+        raise ValueError(
+            f"equipment_specs.json: verified entry '{_entry.get('id')}' must carry a "
+            f"sourced 'ac_kv' (nominal terminal voltage) — required by Attachment A II.10")
+
 # Gen-tie overhead line constants by voltage class (per mile). JSON keys are
 # strings; the engine indexes by integer kV class.
 GENTIE_LINES: dict[int, dict[str, Any]] = {

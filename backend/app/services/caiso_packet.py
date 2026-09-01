@@ -219,10 +219,10 @@ DEFAULT_INTAKE: dict[str, Any] = {
     "queue_ref": "",
     "project_type": "Solar PV + BESS (AC-coupled)",
     # Machine-table sum anchored to the 128 MW gross output goal (MVA = MW / 0.95):
-    # 19 x 4.532 MVA PV stations (SG4400UD-MV rated at the 40 C design temp per
-    # the Sungrow datasheet) + 52 x 1.05 MVA Megapack PCS (4-hour configured,
-    # 50 kVA orderable steps) = 140.708 MVA — matches Attachment A's SUMPRODUCT.
-    "gross_mva": 140.708,
+    # 19 x 4.4 MVA PV stations (SG4400UD-MV-US rated 4400 kVA @ 40 C per the US
+    # datasheet) + 52 x 1.05 MVA Megapack PCS (4-hour configured, 50 kVA
+    # orderable steps) = 138.2 MVA — matches Attachment A's SUMPRODUCT.
+    "gross_mva": 138.2,
     "gross_mw": 128.0,
     "aux_mw": 2.5,
     "losses_mw": 0.5,
