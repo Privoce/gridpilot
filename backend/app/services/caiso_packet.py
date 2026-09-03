@@ -1654,9 +1654,13 @@ def _fill_attachment_a_xlsm(intake: dict, d: dict, eng: dict, path: Path) -> Non
         W(ws, "F226", 0.05)   # min SOC — percent-formatted cell (5%)
         W(ws, "F227", 0.95)   # max SOC — percent-formatted cell (95%)
 
-    # Section VII — reactive capability, frequency response, PPC
+    # Section VII — reactive capability, frequency response, PPC.
+    # Same formula as the template's own reference bound (hidden cell L240
+    # '=SQRT(F4^2-F5^2)'): Q = sqrt(gross MVA^2 - gross MW^2). Rounded DOWN so
+    # the written value never lands outside the template's data-validation
+    # range (rounding up 52.10796 -> 52.11 trips the 'Invalid' flag).
     gross_mva = eng["design"].get("total_mva") or _num(intake.get("gross_mva")) or d["gross"] * 1.05
-    qmax = round(_math.sqrt(max(gross_mva ** 2 - d["gross"] ** 2, 0)), 2)
+    qmax = _math.floor(_math.sqrt(max(gross_mva ** 2 - d["gross"] ** 2, 0)) * 100) / 100
     W(ws, "F240", qmax)
     W(ws, "F241", -qmax)
     W(ws, "F242", 40)
