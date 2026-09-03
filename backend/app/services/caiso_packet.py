@@ -1337,7 +1337,8 @@ def _fill_appendix1_docx(intake: dict, d: dict, path: Path) -> None:
              f"{intake.get('module') or 'modules TBD'}"
              + (f"; {d.get('bess_desc') or intake.get('bess_vendor') or 'BESS TBD'}"
                 if d["has_bess"] else ""))
-    text(81, f"GSU {intake.get('transformer') or 'TBD'}; {_fmt(d['col_kv'])} kV collector "
+    text(81, f"GSU {d.get('gsu_desc') or intake.get('transformer') or 'TBD'}; "
+             f"{_fmt(d['col_kv'])} kV collector "
              f"system; gross {_fmt(d['gross'])} MW, net {_fmt(d['net'])} MW at POI.")
     # ---- 4d. Dates
     text(82, d["in_service"].strftime("%m/%d/%Y"))
@@ -3935,6 +3936,11 @@ def generate_packet(intake: dict[str, Any], org_id: str, iso: str | None = None)
     _bess_e = eng["design"].get("bess_unit")
     d["bess_desc"] = (f"{_cnt['bess_units']} x {_bess_e['vendor']} {_bess_e['model']}"
                       if _bess_e and _cnt.get("bess_units") else None)
+    # GSU description carries the engine-computed transformer count, e.g.
+    # "2 x 75 MVA, 34.5/230 kV, Z = 9% @ ONAF, YNd1".
+    _xfmr = str(intake.get("transformer") or "").strip()
+    d["gsu_desc"] = (f"{_cnt['main_transformers']} x {_xfmr}"
+                     if _xfmr and _cnt.get("main_transformers") else None)
 
     docs: list[dict[str, Any]] = []
 
