@@ -25,6 +25,27 @@ import fitz
 from backend.app.config import DATA_ROOT
 from backend.app.services.iso_profiles import get_profile, localize
 from backend.app.engine import equipment as lib
+
+# ---------------------------------------------------------------------------
+# Ride-through rule (national standards — never hallucinated):
+#   - NERC PRC-024-3 / PRC-024-4, Attachment 1, Table 2 "Frequency Boundary
+#     Data Points - Western Interconnection" (official NERC standard PDF):
+#     low ≤57.0 Hz instantaneous, ≤57.3 Hz 0.75 s, ≤57.8 Hz 7.5 s,
+#     ≤58.4 Hz 30 s, ≤59.4 Hz 180 s; continuous 59.4-60.6 Hz;
+#     high ≥60.6 Hz 180 s, ≥61.6 Hz 30 s, ≥61.7 Hz instantaneous.
+#     "Instantaneous" is written as 0.1 s per the PRC-024 footnote (frequency
+#     must be measured over a 3-6 cycle window; instantaneous measurement is
+#     not permissible).
+#   - NERC PRC-029-1 (FERC Order No. 909, 07/24/2025; effective 10/01/2026)
+#     supersedes PRC-024-3 for IBRs and requires continued current injection
+#     (no momentary cessation, no self-lockout) through the ride-through zones.
+#   - IEEE 2800-2022 governs IBR fault behavior: reactive-current priority
+#     voltage support during ride-through.
+PRC024_WECC_FREQ: list[tuple[float, float]] = [
+    (57.0, 0.1), (57.3, 0.75), (57.8, 7.5), (58.4, 30),
+    (59.4, 180), (60.6, 180), (61.6, 30), (61.7, 0.1),
+]
+RIDE_THROUGH_STD = "NERC PRC-024-3, NERC PRC-029-1 and IEEE 2800-2022"
 from backend.app.engine.consistency import run_engineering
 from backend.app.engine.models_out import dyd_text, dyr_text, epc_text, raw_text
 from backend.app.engine.reports import (
@@ -1569,14 +1590,18 @@ def _fill_attachment_a_xlsm(intake: dict, d: dict, eng: dict, path: Path) -> Non
                           "UL 1741 SB listing; harmonic study at final design")
             W(ws, "H158", "Grid-connected start; auxiliary and thermal systems are powered "
                           "from the unit's internal AC bus — no separate start-up source")
-            W(ws, "H184", "Continuous current injection through the ride-through envelope "
-                          "per the UL 1741 SB / IEEE 1547-2018 listing")
-            W(ws, "H188", "Automatic reconnection per the IEEE 1547-2018 enter-service "
-                          "settings; no self-lockout")
+            W(ws, "H184", f"Continued current injection through the {RIDE_THROUGH_STD} "
+                          f"ride-through envelope; reactive-current priority voltage "
+                          f"support per IEEE 2800-2022; no control freeze; plant-level "
+                          f"control via PPC with local inverter control during faults")
+            W(ws, "H188", f"No self-lockout for excursions within the {RIDE_THROUGH_STD} "
+                          f"ride-through envelope; automatic return to dispatch after "
+                          f"voltage/frequency re-enter the continuous operating region")
         if lib.is_sourced(bess, "control_modes"):
             W(ws, "H192", "Ramp Rate Control mode per the OEM datasheet controls; numeric "
                           "rate to be provided with the vendor MOD-026/027 model package")
-        for i, (hz, sec) in enumerate([(57.0, 0.16), (58.4, 300), (61.2, 300), (61.8, 0.16)]):
+        # V.19 — frequency trip settings at the PRC-024-3 WECC no-trip boundary
+        for i, (hz, sec) in enumerate(PRC024_WECC_FREQ):
             W(ws, f"H{194 + i}", hz)
             W(ws, f"I{194 + i}", sec)
     W(ws, "F150", "OEM voltage/frequency protection settings per datasheet; adjustable via PPC")
@@ -1584,9 +1609,13 @@ def _fill_attachment_a_xlsm(intake: dict, d: dict, eng: dict, path: Path) -> Non
     W(ws, "F158", "Self-start from grid; no external start-up power required")
     W(ws, "F168", "Yes")  # negative sequence fault current (see I-a table)
     W(ws, "F176", "No")   # momentary cessation
-    W(ws, "F184", "Continuous current injection through the ride-through envelope; "
-                  "reactive-priority K-factor response per IEEE 2800 and the OEM datasheet.")
-    W(ws, "F188", "No self-lockout; automatic restart after grid conditions normalize per OEM settings")
+    W(ws, "F184", f"Continued current injection through the {RIDE_THROUGH_STD} "
+                  f"ride-through envelope; reactive-current priority (K-factor) voltage "
+                  f"support per IEEE 2800-2022; no control freeze; plant-level control "
+                  f"via PPC with local inverter control during faults")
+    W(ws, "F188", f"No self-lockout for excursions within the {RIDE_THROUGH_STD} "
+                  f"ride-through envelope; automatic return to dispatch after "
+                  f"voltage/frequency re-enter the continuous operating region")
     # Return ramp rate: only quoted when it traces to the vendor model file;
     # otherwise the OEM data is pending and the cell must not carry a guess.
     if inv.get("vendor_file"):
@@ -1595,7 +1624,10 @@ def _fill_attachment_a_xlsm(intake: dict, d: dict, eng: dict, path: Path) -> Non
     else:
         W(ws, "F192", "OEM ramp-rate data pending — to be provided with the vendor "
                       "MOD-026/027 model package")
-    for i, (hz, sec) in enumerate([(57.0, 0.16), (58.4, 300), (61.2, 300), (61.8, 0.16)]):
+    # V.19 — frequency trip settings at the PRC-024-3 Attachment 1 Table 2
+    # (Western Interconnection) no-trip boundary; "instantaneous" = 0.1 s per
+    # the PRC-024 measurement-window footnote.
+    for i, (hz, sec) in enumerate(PRC024_WECC_FREQ):
         W(ws, f"F{194 + i}", hz)   # frequency
         W(ws, f"G{194 + i}", sec)  # time
     W(ws, "F204", "Yes" if "DC-coupled" in str(intake.get("project_type") or "") else "No")
@@ -1775,12 +1807,14 @@ def _fill_attachment_a_xlsm(intake: dict, d: dict, eng: dict, path: Path) -> Non
                   dp.get("regc") or {}, {"generator bus": bus, "mva": mva_agg, "lvplsw": 1})
         dyn_block(25, 81, col, name, str(wecc.get("elec", "reec_a")).lower(),
                   dp.get("reec") or {}, {"mvab": mva_agg})
-        # Frequency ride-through (PRC-024 envelope defaults)
+        # Frequency ride-through — lhfrt has four stages, so it carries the
+        # corners of the PRC-024-3 WECC no-trip boundary (57.0 Hz inst.,
+        # 59.4 Hz 180 s, 60.6 Hz 180 s, 61.7 Hz inst.)
         frt = labels(148, 172)
         W(ws4, f"{_cl(col)}{frt['generator']}", name)
         W(ws4, f"{_cl(col)}{frt['model name']}", "lhfrt")
         W(ws4, f"{_cl(col)}{frt['monitored bus']}", bus)
-        for i, (hz, sec) in enumerate([(57.0, 0.16), (58.4, 300.0), (61.2, 300.0), (61.8, 0.16)], 1):
+        for i, (hz, sec) in enumerate([(57.0, 0.1), (59.4, 180.0), (60.6, 180.0), (61.7, 0.1)], 1):
             W(ws4, f"{_cl(col)}{frt[f'dftrp{i}']}", hz)
             W(ws4, f"{_cl(col)}{frt[f'dttrp{i}']}", sec)
         W(ws4, f"{_cl(col)}{labels(176, 176)['generator']}", name)
@@ -1973,9 +2007,10 @@ def _gen_attachment_a_xlsx(intake: dict, d: dict, eng: dict, path: Path) -> None
     row("V.9", "Does the inverter produce negative sequence fault current?", "",
         "Yes", "", "Per OEM capability; see I-a table")
     row("V.10", "Will the inverter go into momentary cessation?", "", "No", "",
-        "Continuous current injection through the ride-through envelope")
-    row("V.19", "Frequency tripping settings", "Hz, Sec",
-        "57.0/0.16; 58.4/300; 61.2/300; 61.8/0.16", "", "PRC-024 envelope defaults")
+        "Momentary cessation not permitted within the ride-through zones per NERC PRC-029-1")
+    _frt_txt = "; ".join(f"{hz:g}/{sec:g}" for hz, sec in PRC024_WECC_FREQ)
+    row("V.19", "Frequency tripping settings", "Hz, Sec", _frt_txt, _frt_txt if gt2 else "",
+        "PRC-024-3 Att. 1 Table 2 — Western Interconnection no-trip boundary")
     row("V.20", "Is your facility a DC coupled facility?", "",
         "Yes" if "DC-coupled" in str(intake.get("project_type") or "") else "No")
 
@@ -2246,7 +2281,8 @@ def _gen_attachment_a_xlsx(intake: dict, d: dict, eng: dict, path: Path) -> None
         ("Yes", "Are appropriate models used in the dyd file for generator/converter, exciter/Q-var "
                 "control, governor/P-frequency control?",
          "/".join(inv["wecc_models"].values())),
-        ("Yes", "Do dyd models provided include lhvrt and lhfrt?", "Ride-through envelope per PRC-024"),
+        ("Yes", "Do dyd models provided include lhvrt and lhfrt?",
+         "Ride-through envelope per PRC-024-3 WECC / PRC-029-1"),
         ("Yes", "Do the control flags in the dyd file indicate voltage control mode per WECC model "
                 "validation guideline?", ""),
         ("Yes", "Are the frequency control flag, deadband and droops in the .dyd file set properly?", ""),
