@@ -14,7 +14,11 @@
       "id": "sungrow_sg4400ud_mv",
       "vendor": "Sungrow",
       "model": "SG4400UD-MV-US",
-      "aliases": ["SG4400UD-MV", "SG4400UD", "SG4400"],
+      "aliases": [
+        "SG4400UD-MV",
+        "SG4400UD",
+        "SG4400"
+      ],
       "kind": "pv_inverter",
       "verified": true,
       "mva": 4.4,
@@ -33,25 +37,66 @@
         "lv_kv": 0.645,
         "mv_kv": 34.5
       },
-      "wecc_models": {"gen": "REGC_A", "elec": "REEC_A", "plant": "REPC_A"},
+      "wecc_models": {
+        "gen": "REGC_A",
+        "elec": "REEC_A",
+        "plant": "REPC_A"
+      },
       "dyd_params": {
-        "regc": {"tg": 0.02, "rrpwr": 10.0, "brkpt": 0.9, "zerox": 0.4, "lvpl1": 1.25},
-        "reec": {"trv": 0.02, "vdip": 0.9, "vup": 1.1, "kqv": 2.0, "iqh1": 1.05,
-                 "iql1": -1.05, "tp": 0.05, "qmax": 0.6, "qmin": -0.6},
-        "repc": {"tfltr": 0.02, "kp": 18.0, "ki": 5.0, "tft": 0.0, "tfv": 0.05,
-                 "ddn": 20.0, "dup": 0.0, "fdbd1": -0.0006, "fdbd2": 0.0006}
+        "regc": {
+          "tg": 0.02,
+          "rrpwr": 10.0,
+          "brkpt": 0.9,
+          "zerox": 0.4,
+          "lvpl1": 1.25
+        },
+        "reec": {
+          "trv": 0.02,
+          "vdip": 0.9,
+          "vup": 1.1,
+          "kqv": 2.0,
+          "iqh1": 1.05,
+          "iql1": -1.05,
+          "tp": 0.05,
+          "qmax": 0.6,
+          "qmin": -0.6
+        },
+        "repc": {
+          "tfltr": 0.02,
+          "kp": 18.0,
+          "ki": 5.0,
+          "tft": 0.0,
+          "tfv": 0.05,
+          "ddn": 20.0,
+          "dup": 0.0,
+          "fdbd1": -0.0006,
+          "fdbd2": 0.0006
+        }
       },
       "datasheet": "Sungrow SG4400UD-MV-US Turnkey Station Datasheet (official US variant)",
       "source": {
         "title": "Sungrow SG4400UD-MV-US Datasheet — Turnkey Station for 1500 Vdc System, MV Transformer Integrated (en.sungrowpower.com product page 4132)",
         "url": "https://en.sungrowpower.com/productDetail/4132/1-x-modular-inverter-sg4400ud-mv-us"
       },
-      "sourced_keys": ["mva", "mw", "pf_range", "ac_kv", "q_pu_max",
-                        "integrated_xfmr.mva", "integrated_xfmr.max_mva",
-                        "integrated_xfmr.z_pct", "integrated_xfmr.vector",
-                        "integrated_xfmr.cooling", "integrated_xfmr.lv_kv",
-                        "integrated_xfmr.mv_kv"],
-      "assumed_keys": ["fault_current_pu", "integrated_xfmr.xr", "dyd_params"],
+      "sourced_keys": [
+        "mva",
+        "mw",
+        "pf_range",
+        "ac_kv",
+        "q_pu_max",
+        "integrated_xfmr.mva",
+        "integrated_xfmr.max_mva",
+        "integrated_xfmr.z_pct",
+        "integrated_xfmr.vector",
+        "integrated_xfmr.cooling",
+        "integrated_xfmr.lv_kv",
+        "integrated_xfmr.mv_kv"
+      ],
+      "assumed_keys": [
+        "fault_current_pu",
+        "integrated_xfmr.xr",
+        "dyd_params"
+      ],
       "source_notes": {
         "mva": "US variant: AC output power 4400 kVA @ 40 C (optional 4400 kVA @ 45 C); transformer rated = max power 4400 kVA — SG4400UD-MV-US datasheet. (International SG4400UD-MV lists 4532 kVA @ 40 C; do not mix variants.)",
         "mw": "kW = kVA at unity PF; datasheet power factor at nominal power > 0.99",
@@ -71,7 +116,11 @@
       "id": "sma_sc4600up",
       "vendor": "SMA",
       "model": "Sunny Central 4600 UP",
-      "aliases": ["SC 4600 UP", "SC4600UP-US", "SC 4600 UP-US"],
+      "aliases": [
+        "SC 4600 UP",
+        "SC4600UP-US",
+        "SC 4600 UP-US"
+      ],
       "kind": "pv_inverter",
       "verified": true,
       "mva": 4.6,
@@ -81,21 +130,60 @@
       "ac_kv": 0.69,
       "fault_current_pu": 1.2,
       "q_pu_max": 0.6,
-      "wecc_models": {"gen": "REGC_A", "elec": "REEC_A", "plant": "REPC_A"},
+      "wecc_models": {
+        "gen": "REGC_A",
+        "elec": "REEC_A",
+        "plant": "REPC_A"
+      },
       "dyd_params": {
-        "regc": {"tg": 0.02, "rrpwr": 10.0, "brkpt": 0.9, "zerox": 0.4, "lvpl1": 1.2},
-        "reec": {"trv": 0.02, "vdip": 0.9, "vup": 1.1, "kqv": 2.2, "iqh1": 1.03,
-                 "iql1": -1.03, "tp": 0.05, "qmax": 0.6, "qmin": -0.6},
-        "repc": {"tfltr": 0.02, "kp": 16.0, "ki": 4.5, "tft": 0.0, "tfv": 0.05,
-                 "ddn": 20.0, "dup": 0.0, "fdbd1": -0.0006, "fdbd2": 0.0006}
+        "regc": {
+          "tg": 0.02,
+          "rrpwr": 10.0,
+          "brkpt": 0.9,
+          "zerox": 0.4,
+          "lvpl1": 1.2
+        },
+        "reec": {
+          "trv": 0.02,
+          "vdip": 0.9,
+          "vup": 1.1,
+          "kqv": 2.2,
+          "iqh1": 1.03,
+          "iql1": -1.03,
+          "tp": 0.05,
+          "qmax": 0.6,
+          "qmin": -0.6
+        },
+        "repc": {
+          "tfltr": 0.02,
+          "kp": 16.0,
+          "ki": 4.5,
+          "tft": 0.0,
+          "tfv": 0.05,
+          "ddn": 20.0,
+          "dup": 0.0,
+          "fdbd1": -0.0006,
+          "fdbd2": 0.0006
+        }
       },
       "datasheet": "SMA Sunny Central 4000/4200/4400/4600 UP(-US) Datasheet (official)",
       "source": {
         "title": "SMA Sunny Central UP Datasheet, SC4xxxUP-DS-en (US variant SCXXXXUP-US-DS-en-27), sma.de official",
         "url": "https://files.sma.de/downloads/SCXXXXUP-US-DS-en-27.pdf"
       },
-      "sourced_keys": ["mva", "mva_50c", "mw", "pf_range", "ac_kv", "q_pu_max"],
-      "assumed_keys": ["mva_40c", "fault_current_pu", "dyd_params"],
+      "sourced_keys": [
+        "mva",
+        "mva_50c",
+        "mw",
+        "pf_range",
+        "ac_kv",
+        "q_pu_max"
+      ],
+      "assumed_keys": [
+        "mva_40c",
+        "fault_current_pu",
+        "dyd_params"
+      ],
       "source_notes": {
         "mva": "Nominal AC power at cos phi = 1: 4600 kVA @ 35 C (4140 kVA @ 50 C) — datasheet 'Output (AC)'",
         "mva_40c": "Rating at the 40 C design temperature is NOT published (datasheet gives 35 C and 50 C points only) — ADMIN: obtain the SMA derating curve before using this unit in a filing",
@@ -111,7 +199,10 @@
       "id": "pe_fs3430k",
       "vendor": "Power Electronics",
       "model": "Freesun HEMK FS3430K",
-      "aliases": ["FS3430K", "HEMK"],
+      "aliases": [
+        "FS3430K",
+        "HEMK"
+      ],
       "kind": "pv_inverter",
       "verified": true,
       "mva": 3.55,
@@ -123,21 +214,61 @@
       "thd_pct": 3.0,
       "fault_current_pu": 1.3,
       "q_pu_max": 0.866,
-      "wecc_models": {"gen": "REGC_A", "elec": "REEC_A", "plant": "REPC_A"},
+      "wecc_models": {
+        "gen": "REGC_A",
+        "elec": "REEC_A",
+        "plant": "REPC_A"
+      },
       "dyd_params": {
-        "regc": {"tg": 0.02, "rrpwr": 10.0, "brkpt": 0.9, "zerox": 0.4, "lvpl1": 1.3},
-        "reec": {"trv": 0.02, "vdip": 0.9, "vup": 1.1, "kqv": 2.0, "iqh1": 1.05,
-                 "iql1": -1.05, "tp": 0.05, "qmax": 0.866, "qmin": -0.866},
-        "repc": {"tfltr": 0.02, "kp": 18.0, "ki": 5.0, "tft": 0.0, "tfv": 0.05,
-                 "ddn": 20.0, "dup": 0.0, "fdbd1": -0.0006, "fdbd2": 0.0006}
+        "regc": {
+          "tg": 0.02,
+          "rrpwr": 10.0,
+          "brkpt": 0.9,
+          "zerox": 0.4,
+          "lvpl1": 1.3
+        },
+        "reec": {
+          "trv": 0.02,
+          "vdip": 0.9,
+          "vup": 1.1,
+          "kqv": 2.0,
+          "iqh1": 1.05,
+          "iql1": -1.05,
+          "tp": 0.05,
+          "qmax": 0.866,
+          "qmin": -0.866
+        },
+        "repc": {
+          "tfltr": 0.02,
+          "kp": 18.0,
+          "ki": 5.0,
+          "tft": 0.0,
+          "tfv": 0.05,
+          "ddn": 20.0,
+          "dup": 0.0,
+          "fdbd1": -0.0006,
+          "fdbd2": 0.0006
+        }
       },
       "datasheet": "Power Electronics Freesun HEMK technical characteristics (FS3430K column)",
       "source": {
         "title": "Power Electronics Freesun HEMK datasheet — FS3430K: 3430 kVA @ 50 C / 3550 kVA @ 40 C, 645 VAC, PF 0.5-0.5 (OEM table)",
         "url": "https://cdn.enfsolar.com/Product/pdf/Inverter/5c81ed6357171.pdf"
       },
-      "sourced_keys": ["mva", "mva_50c", "mw", "pf_range", "ac_kv", "max_efficiency_pct", "thd_pct", "q_pu_max"],
-      "assumed_keys": ["fault_current_pu", "dyd_params"],
+      "sourced_keys": [
+        "mva",
+        "mva_50c",
+        "mw",
+        "pf_range",
+        "ac_kv",
+        "max_efficiency_pct",
+        "thd_pct",
+        "q_pu_max"
+      ],
+      "assumed_keys": [
+        "fault_current_pu",
+        "dyd_params"
+      ],
       "source_notes": {
         "mva": "AC output power 3550 kVA @ 40 C (3430 kVA @ 50 C) — HEMK datasheet; 40 C matches the site design temperature",
         "mw": "kVA = kW rating basis per the HEMK datasheet output table",
@@ -160,19 +291,57 @@
       "ac_kv": 0.69,
       "fault_current_pu": 1.2,
       "q_pu_max": 0.484,
-      "wecc_models": {"gen": "REGC_A", "elec": "REEC_A", "plant": "REPC_A"},
+      "wecc_models": {
+        "gen": "REGC_A",
+        "elec": "REEC_A",
+        "plant": "REPC_A"
+      },
       "dyd_params": {
-        "regc": {"tg": 0.02, "rrpwr": 10.0, "brkpt": 0.9, "zerox": 0.4, "lvpl1": 1.2},
-        "reec": {"trv": 0.02, "vdip": 0.9, "vup": 1.1, "kqv": 2.0, "iqh1": 1.05,
-                 "iql1": -1.05, "tp": 0.05, "qmax": 0.484, "qmin": -0.484},
-        "repc": {"tfltr": 0.02, "kp": 18.0, "ki": 5.0, "tft": 0.0, "tfv": 0.05,
-                 "ddn": 20.0, "dup": 0.0, "fdbd1": -0.0006, "fdbd2": 0.0006}
+        "regc": {
+          "tg": 0.02,
+          "rrpwr": 10.0,
+          "brkpt": 0.9,
+          "zerox": 0.4,
+          "lvpl1": 1.2
+        },
+        "reec": {
+          "trv": 0.02,
+          "vdip": 0.9,
+          "vup": 1.1,
+          "kqv": 2.0,
+          "iqh1": 1.05,
+          "iql1": -1.05,
+          "tp": 0.05,
+          "qmax": 0.484,
+          "qmin": -0.484
+        },
+        "repc": {
+          "tfltr": 0.02,
+          "kp": 18.0,
+          "ki": 5.0,
+          "tft": 0.0,
+          "tfv": 0.05,
+          "ddn": 20.0,
+          "dup": 0.0,
+          "fdbd1": -0.0006,
+          "fdbd2": 0.0006
+        }
       },
       "datasheet": "Placeholder — engineering defaults, no OEM source",
       "source": null,
       "sourced_keys": [],
-      "assumed_keys": ["mva", "mw", "pf_range", "ac_kv", "fault_current_pu", "q_pu_max", "dyd_params"],
-      "source_notes": {"_all": "Fallback entry used only when the intake device is unknown — generation is blocked until the admin adds the real device to this file"}
+      "assumed_keys": [
+        "mva",
+        "mw",
+        "pf_range",
+        "ac_kv",
+        "fault_current_pu",
+        "q_pu_max",
+        "dyd_params"
+      ],
+      "source_notes": {
+        "_all": "Fallback entry used only when the intake device is unknown — generation is blocked until the admin adds the real device to this file"
+      }
     }
   },
   "bess_units": {
@@ -180,7 +349,11 @@
       "id": "tesla_megapack_2xl",
       "vendor": "Tesla",
       "model": "Megapack 2 XL (4-hour)",
-      "aliases": ["Megapack 2XL", "Megapack", "MP2XL"],
+      "aliases": [
+        "Megapack 2XL",
+        "Megapack",
+        "MP2XL"
+      ],
       "kind": "bess",
       "verified": true,
       "mw": 0.979,
@@ -192,22 +365,66 @@
       "rte_pct": 93.7,
       "fault_current_pu": 1.15,
       "q_pu_max": 0.62,
-      "wecc_models": {"gen": "REGC_A", "elec": "REEC_C", "plant": "REPC_A"},
+      "wecc_models": {
+        "gen": "REGC_A",
+        "elec": "REEC_C",
+        "plant": "REPC_A"
+      },
       "dyd_params": {
-        "regc": {"tg": 0.02, "rrpwr": 10.0, "brkpt": 0.9, "zerox": 0.4, "lvpl1": 1.15},
-        "reec": {"trv": 0.02, "vdip": 0.9, "vup": 1.1, "kqv": 2.0, "iqh1": 1.05,
-                 "iql1": -1.05, "tp": 0.05, "qmax": 0.62, "qmin": -0.62,
-                 "soc_ini": 0.8, "socmax": 1.0, "socmin": 0.0},
-        "repc": {"tfltr": 0.02, "kp": 18.0, "ki": 5.0, "tft": 0.0, "tfv": 0.05,
-                 "ddn": 20.0, "dup": 20.0, "fdbd1": -0.0006, "fdbd2": 0.0006}
+        "regc": {
+          "tg": 0.02,
+          "rrpwr": 10.0,
+          "brkpt": 0.9,
+          "zerox": 0.4,
+          "lvpl1": 1.15
+        },
+        "reec": {
+          "trv": 0.02,
+          "vdip": 0.9,
+          "vup": 1.1,
+          "kqv": 2.0,
+          "iqh1": 1.05,
+          "iql1": -1.05,
+          "tp": 0.05,
+          "qmax": 0.62,
+          "qmin": -0.62,
+          "soc_ini": 0.8,
+          "socmax": 1.0,
+          "socmin": 0.0
+        },
+        "repc": {
+          "tfltr": 0.02,
+          "kp": 18.0,
+          "ki": 5.0,
+          "tft": 0.0,
+          "tfv": 0.05,
+          "ddn": 20.0,
+          "dup": 20.0,
+          "fdbd1": -0.0006,
+          "fdbd2": 0.0006
+        }
       },
       "datasheet": "Tesla Megapack 2 XL Datasheet (4-hour configuration)",
       "source": {
         "title": "Tesla Megapack 2 XL Datasheet (public spec sheet; figures also on tesla.com/megapack/design)",
         "url": "https://www.carverma.gov/sites/g/files/vyhlif4221/f/uploads/megapack_2_xl_datasheet_0.pdf"
       },
-      "sourced_keys": ["mw", "mwh", "mva", "mva_increment", "mva_min", "ac_kv", "rte_pct"],
-      "assumed_keys": ["fault_current_pu", "q_pu_max", "dyd_params"],
+      "sourced_keys": [
+        "mw",
+        "mwh",
+        "mva",
+        "mva_increment",
+        "mva_min",
+        "ac_kv",
+        "rte_pct",
+        "certifications",
+        "control_modes"
+      ],
+      "assumed_keys": [
+        "fault_current_pu",
+        "q_pu_max",
+        "dyd_params"
+      ],
       "source_notes": {
         "mw": "4-Hour configuration: 979 kW AC power per Megapack (nominal at 25 C) — datasheet",
         "mwh": "4-Hour configuration: 3916 kWh per Megapack (nominal at 25 C) — datasheet",
@@ -217,14 +434,20 @@
         "rte_pct": "Round-trip efficiency, 4-Hour: 93.7% (full-depth cycle at 25 C) — datasheet",
         "fault_current_pu": "ASSUMED 1.15 — not in the public datasheet; ADMIN: request Tesla short-circuit contribution data",
         "q_pu_max": "ASSUMED 0.62 — reactive envelope not in the public datasheet; ADMIN: request Tesla PQ capability curve",
-        "dyd_params": "Generic WECC parameter set — replaced by the vendor .dyd (MOD-026/027) when uploaded"
-      }
+        "dyd_params": "Generic WECC parameter set — replaced by the vendor .dyd (MOD-026/027) when uploaded",
+        "certifications": "System NRTL listed to UL 1973, UL 9540, UL 9540A, UL 1741 SB, IEC 62619, IEEE 1547; cells to UL 1642 — datasheet 'Regulatory'",
+        "control_modes": "Core control modes and protocols — datasheet 'Controls and Communications'; aux/thermal power drawn from the Megapack internal AC bus per the Tesla MP2XL engineering report"
+      },
+      "certifications": "UL 1973, UL 9540, UL 9540A, UL 1741 SB, IEC 62619, IEEE 1547 (NRTL listed)",
+      "control_modes": "Direct Real Power, Direct Reactive Power, Frequency Support, Virtual Inertia, Ramp Rate Control, Site Control, Power Factor Control, Voltage Control — via Modbus TCP / DNP3 / REST API"
     },
     "tesla_megapack_2xl_2h": {
       "id": "tesla_megapack_2xl_2h",
       "vendor": "Tesla",
       "model": "Megapack 2 XL (2-hour)",
-      "aliases": ["Megapack 2XL 2h"],
+      "aliases": [
+        "Megapack 2XL 2h"
+      ],
       "kind": "bess",
       "verified": true,
       "mw": 1.927,
@@ -236,22 +459,66 @@
       "rte_pct": 92.0,
       "fault_current_pu": 1.15,
       "q_pu_max": 0.62,
-      "wecc_models": {"gen": "REGC_A", "elec": "REEC_C", "plant": "REPC_A"},
+      "wecc_models": {
+        "gen": "REGC_A",
+        "elec": "REEC_C",
+        "plant": "REPC_A"
+      },
       "dyd_params": {
-        "regc": {"tg": 0.02, "rrpwr": 10.0, "brkpt": 0.9, "zerox": 0.4, "lvpl1": 1.15},
-        "reec": {"trv": 0.02, "vdip": 0.9, "vup": 1.1, "kqv": 2.0, "iqh1": 1.05,
-                 "iql1": -1.05, "tp": 0.05, "qmax": 0.62, "qmin": -0.62,
-                 "soc_ini": 0.8, "socmax": 1.0, "socmin": 0.0},
-        "repc": {"tfltr": 0.02, "kp": 18.0, "ki": 5.0, "tft": 0.0, "tfv": 0.05,
-                 "ddn": 20.0, "dup": 20.0, "fdbd1": -0.0006, "fdbd2": 0.0006}
+        "regc": {
+          "tg": 0.02,
+          "rrpwr": 10.0,
+          "brkpt": 0.9,
+          "zerox": 0.4,
+          "lvpl1": 1.15
+        },
+        "reec": {
+          "trv": 0.02,
+          "vdip": 0.9,
+          "vup": 1.1,
+          "kqv": 2.0,
+          "iqh1": 1.05,
+          "iql1": -1.05,
+          "tp": 0.05,
+          "qmax": 0.62,
+          "qmin": -0.62,
+          "soc_ini": 0.8,
+          "socmax": 1.0,
+          "socmin": 0.0
+        },
+        "repc": {
+          "tfltr": 0.02,
+          "kp": 18.0,
+          "ki": 5.0,
+          "tft": 0.0,
+          "tfv": 0.05,
+          "ddn": 20.0,
+          "dup": 20.0,
+          "fdbd1": -0.0006,
+          "fdbd2": 0.0006
+        }
       },
       "datasheet": "Tesla Megapack 2 XL Datasheet (2-hour configuration)",
       "source": {
         "title": "Tesla Megapack 2 XL Datasheet (public spec sheet; figures also on tesla.com/megapack/design)",
         "url": "https://www.carverma.gov/sites/g/files/vyhlif4221/f/uploads/megapack_2_xl_datasheet_0.pdf"
       },
-      "sourced_keys": ["mw", "mwh", "mva", "mva_increment", "mva_min", "ac_kv", "rte_pct"],
-      "assumed_keys": ["fault_current_pu", "q_pu_max", "dyd_params"],
+      "sourced_keys": [
+        "mw",
+        "mwh",
+        "mva",
+        "mva_increment",
+        "mva_min",
+        "ac_kv",
+        "rte_pct",
+        "certifications",
+        "control_modes"
+      ],
+      "assumed_keys": [
+        "fault_current_pu",
+        "q_pu_max",
+        "dyd_params"
+      ],
       "source_notes": {
         "mw": "2-Hour configuration: 1927 kW AC power per Megapack (nominal at 25 C) — datasheet",
         "mwh": "2-Hour configuration: 3854 kWh per Megapack (nominal at 25 C) — datasheet",
@@ -261,14 +528,22 @@
         "rte_pct": "Round-trip efficiency, 2-Hour: 92.0% (full-depth cycle at 25 C) — datasheet",
         "fault_current_pu": "ASSUMED 1.15 — not in the public datasheet; ADMIN: request Tesla short-circuit contribution data",
         "q_pu_max": "ASSUMED 0.62 — reactive envelope not in the public datasheet; ADMIN: request Tesla PQ capability curve",
-        "dyd_params": "Generic WECC parameter set — replaced by the vendor .dyd (MOD-026/027) when uploaded"
-      }
+        "dyd_params": "Generic WECC parameter set — replaced by the vendor .dyd (MOD-026/027) when uploaded",
+        "certifications": "System NRTL listed to UL 1973, UL 9540, UL 9540A, UL 1741 SB, IEC 62619, IEEE 1547; cells to UL 1642 — datasheet 'Regulatory'",
+        "control_modes": "Core control modes and protocols — datasheet 'Controls and Communications'; aux/thermal power drawn from the Megapack internal AC bus per the Tesla MP2XL engineering report"
+      },
+      "certifications": "UL 1973, UL 9540, UL 9540A, UL 1741 SB, IEC 62619, IEEE 1547 (NRTL listed)",
+      "control_modes": "Direct Real Power, Direct Reactive Power, Frequency Support, Virtual Inertia, Ramp Rate Control, Site Control, Power Factor Control, Voltage Control — via Modbus TCP / DNP3 / REST API"
     },
     "sungrow_powertitan2_4h": {
       "id": "sungrow_powertitan2_4h",
       "vendor": "Sungrow",
       "model": "PowerTitan 2.0 ST5015UX-4H-US",
-      "aliases": ["PowerTitan", "ST5015UX-4H", "ST5015UX"],
+      "aliases": [
+        "PowerTitan",
+        "ST5015UX-4H",
+        "ST5015UX"
+      ],
       "kind": "bess",
       "verified": true,
       "mw": 1.26,
@@ -277,22 +552,62 @@
       "ac_kv": 0.69,
       "fault_current_pu": 1.15,
       "q_pu_max": 1.0,
-      "wecc_models": {"gen": "REGC_A", "elec": "REEC_C", "plant": "REPC_A"},
+      "wecc_models": {
+        "gen": "REGC_A",
+        "elec": "REEC_C",
+        "plant": "REPC_A"
+      },
       "dyd_params": {
-        "regc": {"tg": 0.02, "rrpwr": 10.0, "brkpt": 0.9, "zerox": 0.4, "lvpl1": 1.15},
-        "reec": {"trv": 0.02, "vdip": 0.9, "vup": 1.1, "kqv": 2.0, "iqh1": 1.05,
-                 "iql1": -1.05, "tp": 0.05, "qmax": 1.0, "qmin": -1.0,
-                 "soc_ini": 0.8, "socmax": 1.0, "socmin": 0.0},
-        "repc": {"tfltr": 0.02, "kp": 18.0, "ki": 5.0, "tft": 0.0, "tfv": 0.05,
-                 "ddn": 20.0, "dup": 20.0, "fdbd1": -0.0006, "fdbd2": 0.0006}
+        "regc": {
+          "tg": 0.02,
+          "rrpwr": 10.0,
+          "brkpt": 0.9,
+          "zerox": 0.4,
+          "lvpl1": 1.15
+        },
+        "reec": {
+          "trv": 0.02,
+          "vdip": 0.9,
+          "vup": 1.1,
+          "kqv": 2.0,
+          "iqh1": 1.05,
+          "iql1": -1.05,
+          "tp": 0.05,
+          "qmax": 1.0,
+          "qmin": -1.0,
+          "soc_ini": 0.8,
+          "socmax": 1.0,
+          "socmin": 0.0
+        },
+        "repc": {
+          "tfltr": 0.02,
+          "kp": 18.0,
+          "ki": 5.0,
+          "tft": 0.0,
+          "tfv": 0.05,
+          "ddn": 20.0,
+          "dup": 20.0,
+          "fdbd1": -0.0006,
+          "fdbd2": 0.0006
+        }
       },
       "datasheet": "Sungrow PowerTitan 2.0 ST5015UX-2H-US / ST5015UX-4H-US Datasheet (official)",
       "source": {
         "title": "Sungrow ST5015UX-2H-US / ST5015UX-4H-US PowerTitan 2.0 Datasheet V5 (2024), info-support.sungrowpower.com official",
         "url": "https://info-support.sungrowpower.com/application/pdf/2024/12/07/ST5015UX-2H-US_ST5015UX-4H-US%20Datasheet.pdf"
       },
-      "sourced_keys": ["mw", "mwh", "mva", "ac_kv", "q_pu_max"],
-      "assumed_keys": ["rte_pct", "fault_current_pu", "dyd_params"],
+      "sourced_keys": [
+        "mw",
+        "mwh",
+        "mva",
+        "ac_kv",
+        "q_pu_max"
+      ],
+      "assumed_keys": [
+        "rte_pct",
+        "fault_current_pu",
+        "dyd_params"
+      ],
       "source_notes": {
         "mw": "4H-US nominal AC power 1260 kVA (210 kVA x 6 PCS), PF > 0.99 at nominal — datasheet",
         "mwh": "Nominal capacity 5015 kWh (LFP, 416S12P) — datasheet",
@@ -308,7 +623,9 @@
       "id": "sungrow_powertitan2_2h",
       "vendor": "Sungrow",
       "model": "PowerTitan 2.0 ST5015UX-2H-US",
-      "aliases": ["ST5015UX-2H"],
+      "aliases": [
+        "ST5015UX-2H"
+      ],
       "kind": "bess",
       "verified": true,
       "mw": 2.52,
@@ -317,22 +634,62 @@
       "ac_kv": 0.69,
       "fault_current_pu": 1.15,
       "q_pu_max": 1.0,
-      "wecc_models": {"gen": "REGC_A", "elec": "REEC_C", "plant": "REPC_A"},
+      "wecc_models": {
+        "gen": "REGC_A",
+        "elec": "REEC_C",
+        "plant": "REPC_A"
+      },
       "dyd_params": {
-        "regc": {"tg": 0.02, "rrpwr": 10.0, "brkpt": 0.9, "zerox": 0.4, "lvpl1": 1.15},
-        "reec": {"trv": 0.02, "vdip": 0.9, "vup": 1.1, "kqv": 2.0, "iqh1": 1.05,
-                 "iql1": -1.05, "tp": 0.05, "qmax": 1.0, "qmin": -1.0,
-                 "soc_ini": 0.8, "socmax": 1.0, "socmin": 0.0},
-        "repc": {"tfltr": 0.02, "kp": 18.0, "ki": 5.0, "tft": 0.0, "tfv": 0.05,
-                 "ddn": 20.0, "dup": 20.0, "fdbd1": -0.0006, "fdbd2": 0.0006}
+        "regc": {
+          "tg": 0.02,
+          "rrpwr": 10.0,
+          "brkpt": 0.9,
+          "zerox": 0.4,
+          "lvpl1": 1.15
+        },
+        "reec": {
+          "trv": 0.02,
+          "vdip": 0.9,
+          "vup": 1.1,
+          "kqv": 2.0,
+          "iqh1": 1.05,
+          "iql1": -1.05,
+          "tp": 0.05,
+          "qmax": 1.0,
+          "qmin": -1.0,
+          "soc_ini": 0.8,
+          "socmax": 1.0,
+          "socmin": 0.0
+        },
+        "repc": {
+          "tfltr": 0.02,
+          "kp": 18.0,
+          "ki": 5.0,
+          "tft": 0.0,
+          "tfv": 0.05,
+          "ddn": 20.0,
+          "dup": 20.0,
+          "fdbd1": -0.0006,
+          "fdbd2": 0.0006
+        }
       },
       "datasheet": "Sungrow PowerTitan 2.0 ST5015UX-2H-US / ST5015UX-4H-US Datasheet (official)",
       "source": {
         "title": "Sungrow ST5015UX-2H-US / ST5015UX-4H-US PowerTitan 2.0 Datasheet V5 (2024), info-support.sungrowpower.com official",
         "url": "https://info-support.sungrowpower.com/application/pdf/2024/12/07/ST5015UX-2H-US_ST5015UX-4H-US%20Datasheet.pdf"
       },
-      "sourced_keys": ["mw", "mwh", "mva", "ac_kv", "q_pu_max"],
-      "assumed_keys": ["rte_pct", "fault_current_pu", "dyd_params"],
+      "sourced_keys": [
+        "mw",
+        "mwh",
+        "mva",
+        "ac_kv",
+        "q_pu_max"
+      ],
+      "assumed_keys": [
+        "rte_pct",
+        "fault_current_pu",
+        "dyd_params"
+      ],
       "source_notes": {
         "mw": "2H-US nominal AC power 2520 kVA (210 kVA x 12 PCS), PF > 0.99 at nominal — datasheet",
         "mwh": "Nominal capacity 5015 kWh (LFP, 416S12P) — datasheet",
@@ -356,112 +713,323 @@
       "ac_kv": 0.48,
       "fault_current_pu": 1.15,
       "q_pu_max": 0.62,
-      "wecc_models": {"gen": "REGC_A", "elec": "REEC_C", "plant": "REPC_A"},
+      "wecc_models": {
+        "gen": "REGC_A",
+        "elec": "REEC_C",
+        "plant": "REPC_A"
+      },
       "dyd_params": {
-        "regc": {"tg": 0.02, "rrpwr": 10.0, "brkpt": 0.9, "zerox": 0.4, "lvpl1": 1.15},
-        "reec": {"trv": 0.02, "vdip": 0.9, "vup": 1.1, "kqv": 2.0, "iqh1": 1.05,
-                 "iql1": -1.05, "tp": 0.05, "qmax": 0.62, "qmin": -0.62,
-                 "soc_ini": 0.8, "socmax": 1.0, "socmin": 0.0},
-        "repc": {"tfltr": 0.02, "kp": 18.0, "ki": 5.0, "tft": 0.0, "tfv": 0.05,
-                 "ddn": 20.0, "dup": 20.0, "fdbd1": -0.0006, "fdbd2": 0.0006}
+        "regc": {
+          "tg": 0.02,
+          "rrpwr": 10.0,
+          "brkpt": 0.9,
+          "zerox": 0.4,
+          "lvpl1": 1.15
+        },
+        "reec": {
+          "trv": 0.02,
+          "vdip": 0.9,
+          "vup": 1.1,
+          "kqv": 2.0,
+          "iqh1": 1.05,
+          "iql1": -1.05,
+          "tp": 0.05,
+          "qmax": 0.62,
+          "qmin": -0.62,
+          "soc_ini": 0.8,
+          "socmax": 1.0,
+          "socmin": 0.0
+        },
+        "repc": {
+          "tfltr": 0.02,
+          "kp": 18.0,
+          "ki": 5.0,
+          "tft": 0.0,
+          "tfv": 0.05,
+          "ddn": 20.0,
+          "dup": 20.0,
+          "fdbd1": -0.0006,
+          "fdbd2": 0.0006
+        }
       },
       "datasheet": "Placeholder — engineering defaults, no OEM source",
       "source": null,
       "sourced_keys": [],
-      "assumed_keys": ["mw", "mwh", "mva", "ac_kv", "fault_current_pu", "q_pu_max", "dyd_params"],
-      "source_notes": {"_all": "Fallback entry used only when the intake device is unknown — generation is blocked until the admin adds the real device to this file"}
+      "assumed_keys": [
+        "mw",
+        "mwh",
+        "mva",
+        "ac_kv",
+        "fault_current_pu",
+        "q_pu_max",
+        "dyd_params"
+      ],
+      "source_notes": {
+        "_all": "Fallback entry used only when the intake device is unknown — generation is blocked until the admin adds the real device to this file"
+      }
     }
   },
   "pad_transformers": {
-    "pad_5mva": {"id": "pad_5mva", "mva": 5.0, "z_pct": 6.5, "xr": 9.5,
-                 "vector": "Dyn11", "verified": false,
-                 "datasheet": "Standard pad-mount family — no OEM source",
-                 "source": {"title": "Developer 'Generation site design' workbook — GSU section (Z, X/R)", "url": null},
-                 "sourced_keys": ["z_pct", "xr"],
-                 "assumed_keys": ["mva", "vector"],
-                 "source_notes": {"z_pct": "GSU impedance 6.5% — developer workbook C41",
-                                   "xr": "GSU X/R 9.5 — developer workbook C42"}},
-    "pad_9mva": {"id": "pad_9mva", "mva": 9.0, "z_pct": 6.5, "xr": 9.5,
-                 "vector": "Dyn11", "verified": false,
-                 "datasheet": "Standard pad-mount family — no OEM source",
-                 "source": {"title": "Developer 'Generation site design' workbook — GSU section (Z, X/R)", "url": null},
-                 "sourced_keys": ["z_pct", "xr"],
-                 "assumed_keys": ["mva", "vector"],
-                 "source_notes": {"z_pct": "GSU impedance 6.5% — developer workbook C41",
-                                   "xr": "GSU X/R 9.5 — developer workbook C42"}},
-    "pad_12mva": {"id": "pad_12mva", "mva": 12.0, "z_pct": 6.5, "xr": 9.5,
-                  "vector": "Dyn11", "verified": false,
-                  "datasheet": "Standard pad-mount family — no OEM source",
-                  "source": {"title": "Developer 'Generation site design' workbook — GSU section (Z, X/R)", "url": null},
-                  "sourced_keys": ["z_pct", "xr"],
-                  "assumed_keys": ["mva", "vector"],
-                  "source_notes": {"z_pct": "GSU impedance 6.5% — developer workbook C41",
-                                    "xr": "GSU X/R 9.5 — developer workbook C42"}}
+    "pad_5mva": {
+      "id": "pad_5mva",
+      "mva": 5.0,
+      "z_pct": 6.5,
+      "xr": 9.5,
+      "vector": "Dyn11",
+      "verified": false,
+      "datasheet": "Standard pad-mount family — no OEM source",
+      "source": {
+        "title": "Developer 'Generation site design' workbook — GSU section (Z, X/R)",
+        "url": null
+      },
+      "sourced_keys": [
+        "z_pct",
+        "xr"
+      ],
+      "assumed_keys": [
+        "mva",
+        "vector"
+      ],
+      "source_notes": {
+        "z_pct": "GSU impedance 6.5% — developer workbook C41",
+        "xr": "GSU X/R 9.5 — developer workbook C42"
+      }
+    },
+    "pad_9mva": {
+      "id": "pad_9mva",
+      "mva": 9.0,
+      "z_pct": 6.5,
+      "xr": 9.5,
+      "vector": "Dyn11",
+      "verified": false,
+      "datasheet": "Standard pad-mount family — no OEM source",
+      "source": {
+        "title": "Developer 'Generation site design' workbook — GSU section (Z, X/R)",
+        "url": null
+      },
+      "sourced_keys": [
+        "z_pct",
+        "xr"
+      ],
+      "assumed_keys": [
+        "mva",
+        "vector"
+      ],
+      "source_notes": {
+        "z_pct": "GSU impedance 6.5% — developer workbook C41",
+        "xr": "GSU X/R 9.5 — developer workbook C42"
+      }
+    },
+    "pad_12mva": {
+      "id": "pad_12mva",
+      "mva": 12.0,
+      "z_pct": 6.5,
+      "xr": 9.5,
+      "vector": "Dyn11",
+      "verified": false,
+      "datasheet": "Standard pad-mount family — no OEM source",
+      "source": {
+        "title": "Developer 'Generation site design' workbook — GSU section (Z, X/R)",
+        "url": null
+      },
+      "sourced_keys": [
+        "z_pct",
+        "xr"
+      ],
+      "assumed_keys": [
+        "mva",
+        "vector"
+      ],
+      "source_notes": {
+        "z_pct": "GSU impedance 6.5% — developer workbook C41",
+        "xr": "GSU X/R 9.5 — developer workbook C42"
+      }
+    }
   },
   "main_transformers": {
-    "mpt_75mva": {"id": "mpt_75mva", "mva": 75.0, "z_pct": 9.0, "xr": 42.0, "z0_z1": 0.9,
-                  "vector": "YNd1", "taps": "±10% / 33 steps (OLTC)", "verified": true,
-                  "datasheet": "Developer-specified MPT family",
-                  "source": {"title": "Developer 'Generation site design' workbook — MPT section", "url": null},
-                  "sourced_keys": ["z_pct", "xr", "z0_z1", "vector"],
-                  "assumed_keys": ["mva", "taps"],
-                  "source_notes": {"z_pct": "Transformer impedance 9% — developer workbook C20",
-                                    "xr": "Impedance X/R ratio 42 — developer workbook C21",
-                                    "z0_z1": "Z0/Z1 ratio 0.9 — developer workbook C22",
-                                    "vector": "HV Wye-Grounded / LV Delta — developer workbook C28/C29",
-                                    "mva": "Family rating is an engine procurement pick — confirm with procurement",
-                                    "taps": "ASSUMED OLTC ±10%/33 steps; developer workbook shows DETC 5 x 2.5% — ADMIN: confirm tap scheme"}},
-    "mpt_140mva": {"id": "mpt_140mva", "mva": 140.0, "z_pct": 9.0, "xr": 42.0, "z0_z1": 0.9,
-                   "vector": "YNd1", "taps": "±10% / 33 steps (OLTC)", "verified": true,
-                   "datasheet": "Developer-specified MPT family",
-                   "source": {"title": "Developer 'Generation site design' workbook — MPT section", "url": null},
-                   "sourced_keys": ["z_pct", "xr", "z0_z1", "vector"],
-                   "assumed_keys": ["mva", "taps"],
-                   "source_notes": {"z_pct": "Transformer impedance 9% — developer workbook C20",
-                                     "xr": "Impedance X/R ratio 42 — developer workbook C21"}},
-    "mpt_230mva": {"id": "mpt_230mva", "mva": 230.0, "z_pct": 9.0, "xr": 42.0, "z0_z1": 0.9,
-                   "vector": "YNd1", "taps": "±10% / 33 steps (OLTC)", "verified": true,
-                   "datasheet": "Developer-specified MPT family",
-                   "source": {"title": "Developer 'Generation site design' workbook — MPT section", "url": null},
-                   "sourced_keys": ["z_pct", "xr", "z0_z1", "vector"],
-                   "assumed_keys": ["mva", "taps"],
-                   "source_notes": {"z_pct": "Transformer impedance 9% — developer workbook C20",
-                                     "xr": "Impedance X/R ratio 42 — developer workbook C21"}}
+    "mpt_75mva": {
+      "id": "mpt_75mva",
+      "mva": 75.0,
+      "z_pct": 9.0,
+      "xr": 42.0,
+      "z0_z1": 0.9,
+      "vector": "YNd1",
+      "taps": "±10% / 33 steps (OLTC)",
+      "verified": true,
+      "datasheet": "Developer-specified MPT family",
+      "source": {
+        "title": "Developer 'Generation site design' workbook — MPT section",
+        "url": null
+      },
+      "sourced_keys": [
+        "z_pct",
+        "xr",
+        "z0_z1",
+        "vector"
+      ],
+      "assumed_keys": [
+        "mva",
+        "taps"
+      ],
+      "source_notes": {
+        "z_pct": "Transformer impedance 9% — developer workbook C20",
+        "xr": "Impedance X/R ratio 42 — developer workbook C21",
+        "z0_z1": "Z0/Z1 ratio 0.9 — developer workbook C22",
+        "vector": "HV Wye-Grounded / LV Delta — developer workbook C28/C29",
+        "mva": "Family rating is an engine procurement pick — confirm with procurement",
+        "taps": "ASSUMED OLTC ±10%/33 steps; developer workbook shows DETC 5 x 2.5% — ADMIN: confirm tap scheme"
+      }
+    },
+    "mpt_140mva": {
+      "id": "mpt_140mva",
+      "mva": 140.0,
+      "z_pct": 9.0,
+      "xr": 42.0,
+      "z0_z1": 0.9,
+      "vector": "YNd1",
+      "taps": "±10% / 33 steps (OLTC)",
+      "verified": true,
+      "datasheet": "Developer-specified MPT family",
+      "source": {
+        "title": "Developer 'Generation site design' workbook — MPT section",
+        "url": null
+      },
+      "sourced_keys": [
+        "z_pct",
+        "xr",
+        "z0_z1",
+        "vector"
+      ],
+      "assumed_keys": [
+        "mva",
+        "taps"
+      ],
+      "source_notes": {
+        "z_pct": "Transformer impedance 9% — developer workbook C20",
+        "xr": "Impedance X/R ratio 42 — developer workbook C21"
+      }
+    },
+    "mpt_230mva": {
+      "id": "mpt_230mva",
+      "mva": 230.0,
+      "z_pct": 9.0,
+      "xr": 42.0,
+      "z0_z1": 0.9,
+      "vector": "YNd1",
+      "taps": "±10% / 33 steps (OLTC)",
+      "verified": true,
+      "datasheet": "Developer-specified MPT family",
+      "source": {
+        "title": "Developer 'Generation site design' workbook — MPT section",
+        "url": null
+      },
+      "sourced_keys": [
+        "z_pct",
+        "xr",
+        "z0_z1",
+        "vector"
+      ],
+      "assumed_keys": [
+        "mva",
+        "taps"
+      ],
+      "source_notes": {
+        "z_pct": "Transformer impedance 9% — developer workbook C20",
+        "xr": "Impedance X/R ratio 42 — developer workbook C21"
+      }
+    }
   },
   "cables": {
-    "al_1000_35kv": {"id": "al_1000_35kv", "desc": "1000 kcmil Al XLPE 35 kV",
-                     "ampacity_a": 585, "r_ohm_per_mi": 0.115, "x_ohm_per_mi": 0.205,
-                     "verified": false, "source": null,
-                     "sourced_keys": [],
-                     "assumed_keys": ["ampacity_a", "r_ohm_per_mi", "x_ohm_per_mi"],
-                     "source_notes": {"_all": "Typical manufacturer values — ADMIN: attach the cable manufacturer ampacity/impedance table (e.g. Southwire/Okonite)"}},
-    "al_750_35kv": {"id": "al_750_35kv", "desc": "750 kcmil Al XLPE 35 kV",
-                    "ampacity_a": 500, "r_ohm_per_mi": 0.148, "x_ohm_per_mi": 0.215,
-                    "verified": false, "source": null,
-                    "sourced_keys": [],
-                    "assumed_keys": ["ampacity_a", "r_ohm_per_mi", "x_ohm_per_mi"],
-                    "source_notes": {"_all": "Typical manufacturer values — ADMIN: attach the cable manufacturer ampacity/impedance table"}}
+    "al_1000_35kv": {
+      "id": "al_1000_35kv",
+      "desc": "1000 kcmil Al XLPE 35 kV",
+      "ampacity_a": 585,
+      "r_ohm_per_mi": 0.115,
+      "x_ohm_per_mi": 0.205,
+      "verified": false,
+      "source": null,
+      "sourced_keys": [],
+      "assumed_keys": [
+        "ampacity_a",
+        "r_ohm_per_mi",
+        "x_ohm_per_mi"
+      ],
+      "source_notes": {
+        "_all": "Typical manufacturer values — ADMIN: attach the cable manufacturer ampacity/impedance table (e.g. Southwire/Okonite)"
+      }
+    },
+    "al_750_35kv": {
+      "id": "al_750_35kv",
+      "desc": "750 kcmil Al XLPE 35 kV",
+      "ampacity_a": 500,
+      "r_ohm_per_mi": 0.148,
+      "x_ohm_per_mi": 0.215,
+      "verified": false,
+      "source": null,
+      "sourced_keys": [],
+      "assumed_keys": [
+        "ampacity_a",
+        "r_ohm_per_mi",
+        "x_ohm_per_mi"
+      ],
+      "source_notes": {
+        "_all": "Typical manufacturer values — ADMIN: attach the cable manufacturer ampacity/impedance table"
+      }
+    }
   },
   "gentie_lines": {
-    "500": {"r_ohm_per_mi": 0.012, "x_ohm_per_mi": 0.55, "ampacity_a": 3000},
-    "345": {"r_ohm_per_mi": 0.037, "x_ohm_per_mi": 0.58, "ampacity_a": 2000},
-    "230": {"r_ohm_per_mi": 0.062, "x_ohm_per_mi": 0.75, "ampacity_a": 1200},
-    "138": {"r_ohm_per_mi": 0.11, "x_ohm_per_mi": 0.79, "ampacity_a": 900},
-    "115": {"r_ohm_per_mi": 0.12, "x_ohm_per_mi": 0.8, "ampacity_a": 850},
-    "69": {"r_ohm_per_mi": 0.28, "x_ohm_per_mi": 0.85, "ampacity_a": 600}
+    "500": {
+      "r_ohm_per_mi": 0.012,
+      "x_ohm_per_mi": 0.55,
+      "ampacity_a": 3000
+    },
+    "345": {
+      "r_ohm_per_mi": 0.037,
+      "x_ohm_per_mi": 0.58,
+      "ampacity_a": 2000
+    },
+    "230": {
+      "r_ohm_per_mi": 0.062,
+      "x_ohm_per_mi": 0.75,
+      "ampacity_a": 1200
+    },
+    "138": {
+      "r_ohm_per_mi": 0.11,
+      "x_ohm_per_mi": 0.79,
+      "ampacity_a": 900
+    },
+    "115": {
+      "r_ohm_per_mi": 0.12,
+      "x_ohm_per_mi": 0.8,
+      "ampacity_a": 850
+    },
+    "69": {
+      "r_ohm_per_mi": 0.28,
+      "x_ohm_per_mi": 0.85,
+      "ampacity_a": 600
+    }
   },
   "gentie_lines_meta": {
     "verified": false,
     "sourced_keys": [],
-    "assumed_keys": ["r_ohm_per_mi", "x_ohm_per_mi", "ampacity_a"],
-    "source_notes": {"_all": "Typical ACSR bundle constants per voltage class — ADMIN: replace with the routed conductor's datasheet (developer workbook example: ACSR 795 26/7 Drake)"}
+    "assumed_keys": [
+      "r_ohm_per_mi",
+      "x_ohm_per_mi",
+      "ampacity_a"
+    ],
+    "source_notes": {
+      "_all": "Typical ACSR bundle constants per voltage class — ADMIN: replace with the routed conductor's datasheet (developer workbook example: ACSR 795 26/7 Drake)"
+    }
   },
   "pv_modules": {
     "jinko_tiger_neo_620": {
       "id": "jinko_tiger_neo_620",
       "vendor": "JinkoSolar",
       "model": "Tiger Neo JKM620N-66HL4M-BDV (620 W bifacial)",
-      "aliases": ["Tiger Neo 620W", "JKM620N"],
+      "aliases": [
+        "Tiger Neo 620W",
+        "JKM620N"
+      ],
       "kind": "pv_module",
       "verified": true,
       "w_stc": 620,
@@ -479,9 +1047,18 @@
         "title": "JinkoSolar JKM620N-66HL4M-BDV manufacturer datasheet (STC electricals corroborated across distributor spec listings)",
         "url": "https://www.solar-stack.com/en/panel/jinkosolar/tiger-neo-jkm600-625n-66hl4m-bdv-f1/jkm620n-66hl4m-bdv"
       },
-      "sourced_keys": ["w_stc", "voc_v", "vmp_v", "isc_a", "imp_a", "efficiency_pct",
-                        "bifaciality_pct", "max_system_vdc", "temp_coeff_pmax_pct_per_c",
-                        "max_series_fuse_a"],
+      "sourced_keys": [
+        "w_stc",
+        "voc_v",
+        "vmp_v",
+        "isc_a",
+        "imp_a",
+        "efficiency_pct",
+        "bifaciality_pct",
+        "max_system_vdc",
+        "temp_coeff_pmax_pct_per_c",
+        "max_series_fuse_a"
+      ],
       "assumed_keys": [],
       "source_notes": {
         "_all": "Module electricals are reference data (string design); no generated document currently derives numbers from them"

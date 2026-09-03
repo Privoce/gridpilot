@@ -1559,6 +1559,24 @@ def _fill_attachment_a_xlsm(intake: dict, d: dict, eng: dict, path: Path) -> Non
         W(ws, "H149", f"{bess['vendor']} {bess['model']}")
         W(ws, "H168", "Yes")
         W(ws, "H176", "No")
+        # BESS inverter/converter narrative — written only when the OEM listing
+        # is sourced in the equipment library (Tesla: datasheet 'Regulatory' and
+        # 'Controls and Communications' sections).
+        if lib.is_sourced(bess, "certifications"):
+            W(ws, "H150", f"Voltage/frequency protection per the OEM NRTL listing "
+                          f"({bess['certifications']}); set points adjustable via the "
+                          f"OEM site controller")
+            W(ws, "H154", "Harmonics per the IEEE 1547-2018 limits certified under the "
+                          "UL 1741 SB listing; harmonic study at final design")
+            W(ws, "H158", "Grid-connected start; auxiliary and thermal systems are powered "
+                          "from the unit's internal AC bus — no separate start-up source")
+            W(ws, "H184", "Continuous current injection through the ride-through envelope "
+                          "per the UL 1741 SB / IEEE 1547-2018 listing")
+            W(ws, "H188", "Automatic reconnection per the IEEE 1547-2018 enter-service "
+                          "settings; no self-lockout")
+        if lib.is_sourced(bess, "control_modes"):
+            W(ws, "H192", "Ramp Rate Control mode per the OEM datasheet controls; numeric "
+                          "rate to be provided with the vendor MOD-026/027 model package")
         for i, (hz, sec) in enumerate([(57.0, 0.16), (58.4, 300), (61.2, 300), (61.8, 0.16)]):
             W(ws, f"H{194 + i}", hz)
             W(ws, f"I{194 + i}", sec)
@@ -1941,11 +1959,17 @@ def _gen_attachment_a_xlsx(intake: dict, d: dict, eng: dict, path: Path) -> None
     row("", "V. Inverter-Based Machine Information (Individual Inverter Data)", "", "", "", "", "sect")
     row("V.1", "Will the project be using a solar tracking system?", "",
         "Yes — single-axis tracker" if "Solar" in str(intake.get("project_type") or "") else "N/A")
+    _bcert = bool(gt2 and lib.is_sourced(bess, "certifications"))
     row("V.2", "Adjustable set points for protective equipment/software", "",
-        "OEM protection settings", "", "Voltage/frequency trip settings per OEM datasheet")
-    row("V.3", "Harmonics Characteristics", "", "IEEE 519 compliant", "",
+        "OEM protection settings",
+        "Per OEM NRTL listing (UL 1741 SB / IEEE 1547); adjustable via site controller"
+        if _bcert else "",
+        "Voltage/frequency trip settings per OEM datasheet")
+    row("V.3", "Harmonics Characteristics", "", "IEEE 519 compliant",
+        "IEEE 1547-2018 harmonic limits per UL 1741 SB listing" if _bcert else "",
         "OEM certification; harmonic study at final design")
-    row("V.4", "Start-up Requirement", "", "Self-start from grid", "")
+    row("V.4", "Start-up Requirement", "", "Self-start from grid",
+        "Grid-connected start; auxiliaries powered from the internal AC bus" if _bcert else "")
     row("", "Maximum design fault contribution current", "",
         "See I-a. Short Circuit Data Table", "", "", "calc")
     row("V.9", "Does the inverter produce negative sequence fault current?", "",
