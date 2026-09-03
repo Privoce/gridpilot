@@ -85,7 +85,7 @@ const CAISO_SCENARIO = {
   type: "125 MW Solar PV + 50 MW / 200 MWh BESS",
   poi: "Whirlwind Substation (SCE) — 230 kV",
   track: "Independent Study Process",
-  cod: "06/30/2028",
+  cod: "06/30/2029",
   county: "Kern County, CA",
 };
 

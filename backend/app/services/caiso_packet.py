@@ -212,7 +212,9 @@ DEFAULT_INTAKE: dict[str, Any] = {
     "poi_voltage_kv": 230,
     "track": "Independent Study Process",
     "deliverability": "Full Capacity",
-    "cod": "2028-06-30",
+    # Sample timeline sits comfortably beyond the 2-year development horizon:
+    # in-service 12/02/2028, trial op 03/02/2029, COD 06/30/2029.
+    "cod": "2029-06-30",
     # Gen-tie route left blank on purpose: the demo shows the engine carrying it
     # as an approvable routing assumption until the developer provides the fact.
     "gentie_mi": None,
@@ -1344,7 +1346,7 @@ def _fill_appendix1_docx(intake: dict, d: dict, path: Path) -> None:
     text(82, d["in_service"].strftime("%m/%d/%Y"))
     text(83, d["trial_op"].strftime("%m/%d/%Y"))
     text(84, d["cod"].strftime("%m/%d/%Y"))
-    text(85, "40")
+    text(85, "25")  # proposed term of service (years)
     # ---- 4e. Contact person
     company_addr = intake.get("company_address") or "500 Capitol Mall, Suite 2350"
     company_city = intake.get("company_city") or "Sacramento"

@@ -74,8 +74,8 @@ def make_technical() -> None:
         ("State", "CA"),
         ("Latitude", 33.9284),
         ("Longitude", -116.3945),
-        ("Proposed in-service date", "10/15/2027"),
-        ("Proposed commercial operation date", "05/30/2028"),
+        ("Proposed in-service date", "10/15/2028"),
+        ("Proposed commercial operation date", "05/30/2029"),
         ("Interconnection process", "Independent Study Process"),
         ("Deliverability status", "Full Capacity"),
     ]

@@ -105,7 +105,7 @@ await fillIntake({
   county: "Riverside", state: "CA", site_acreage: 640,
   site_control: "Lease Agreement", site_owner: "Sunrise Ranch Holdings LP",
   poi_name: "Devers Substation (SCE)", poi_voltage_kv: 115,
-  track: "Independent Study Process", cod: "2028-12-31",
+  track: "Independent Study Process", cod: "2029-12-31",
   project_type: "Solar PV", gross_mva: 112, gross_mw: 108,
   aux_mw: 2, losses_mw: 1, net_mw_poi: 105,
   inverter: "TBD", dyd_status: "Requested — pending",
