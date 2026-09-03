@@ -1551,7 +1551,7 @@ def _fill_attachment_a_xlsm(intake: dict, d: dict, eng: dict, path: Path) -> Non
             (15, name), (16, "DC With Inverter"), (17, gtype),
             (18, unit["vendor"]), (19, unit["model"]), (23, count),
             (24, unit["ac_kv"]), (25, 40), (26, unit["mva"]), (27, unit["mw"]),
-            (31, 5),
+            (31, 0.05),  # voltage regulation range +/-5% — percent-formatted cell
             (32, "Three Phase"), (33, "Grounded WYE"),
         ]
         if lib.is_sourced(unit, "pf_range"):
@@ -1643,14 +1643,16 @@ def _fill_attachment_a_xlsm(intake: dict, d: dict, eng: dict, path: Path) -> Non
         # Charge/discharge cycle efficiency: OEM round-trip efficiency when the
         # library sources it (Tesla 4-hour: 93.7% per datasheet); never guessed.
         if lib.is_sourced(bess, "rte_pct"):
-            W(ws, "F215", bess["rte_pct"])
+            # Percent-formatted cell: Excel expects a fraction (0.937 -> 93.7%)
+            W(ws, "F215", round(bess["rte_pct"] / 100.0, 4))
+            ws["F215"].number_format = "0.0%"
         for r in (216, 218, 220, 222):   # rated/max discharge + charge power
             W(ws, f"F{r}", d["bess_mw"])
         for r in (217, 219, 221, 223):   # durations
             W(ws, f"F{r}", dur)
         W(ws, "F224", d["bess_mw"] if "Grid" in charging else 0)
-        W(ws, "F226", 5)
-        W(ws, "F227", 95)
+        W(ws, "F226", 0.05)   # min SOC — percent-formatted cell (5%)
+        W(ws, "F227", 0.95)   # max SOC — percent-formatted cell (95%)
 
     # Section VII — reactive capability, frequency response, PPC
     gross_mva = eng["design"].get("total_mva") or _num(intake.get("gross_mva")) or d["gross"] * 1.05
@@ -1664,8 +1666,8 @@ def _fill_attachment_a_xlsm(intake: dict, d: dict, eng: dict, path: Path) -> Non
     W(ws, "F249", qmax)
     W(ws, "F251", qmax)
     W(ws, "F253", q_req_site)
-    W(ws, "F260", 5)
-    W(ws, "F261", 5)
+    W(ws, "F260", 0.05)   # upward frequency-response droop 5% — percent cell
+    W(ws, "F261", 0.05)   # downward frequency-response droop 5% — percent cell
     W(ws, "F262", d["net"])
     W(ws, "F263", 0.036)
     W(ws, "F265", "Yes")
