@@ -25,6 +25,7 @@ import fitz
 from backend.app.config import DATA_ROOT
 from backend.app.services.iso_profiles import get_profile, localize
 from backend.app.engine import equipment as lib
+from backend.app.engine.design import INVERTER_SIZING_PF
 from backend.app.engine.consistency import run_engineering
 from backend.app.engine.models_out import dyd_text, dyr_text, epc_text, raw_text
 from backend.app.engine.reports import (
@@ -1518,10 +1519,10 @@ def _fill_attachment_a_xlsm(intake: dict, d: dict, eng: dict, path: Path) -> Non
     W(ws, "F10", round(d["aux"] * 0.2, 2))
 
     # Section II — one column per generation type: F = PV, G = BESS.
-    # Never-hallucinate rule: the PF regulation range (II.15/16) is written only
-    # when the equipment library sources it from the OEM datasheet (Sungrow:
-    # 0.8 leading – 0.8 lagging). Unsourced device parameters stay blank and
-    # surface as SYSTEM ADMIN alerts instead.
+    # PF regulation range (II.15/16) rule: OEM adjustable power factor x the
+    # fleet sizing-rule factor (MVA = MW / 0.95) — e.g. Sungrow 0.8 x 0.95 =
+    # 0.76. Never-hallucinate: written only when the OEM PF range is sourced;
+    # otherwise the cells stay blank and surface as SYSTEM ADMIN alerts.
     def gen_col(col: str, name: str, unit: dict, gtype: str, count: int) -> None:
         rows: list[tuple[int, Any]] = [
             (15, name), (16, "DC With Inverter"), (17, gtype),
@@ -1531,7 +1532,7 @@ def _fill_attachment_a_xlsm(intake: dict, d: dict, eng: dict, path: Path) -> Non
             (32, "Three Phase"), (33, "Grounded WYE"),
         ]
         if lib.is_sourced(unit, "pf_range"):
-            pf_rng = float(unit["pf_range"])
+            pf_rng = round(float(unit["pf_range"]) * INVERTER_SIZING_PF, 2)
             rows += [(29, -pf_rng), (30, pf_rng)]
         for row_n, val in rows:
             W(ws, f"{col}{row_n}", val)
@@ -1920,8 +1921,11 @@ def _gen_attachment_a_xlsx(intake: dict, d: dict, eng: dict, path: Path) -> None
         round(inv["mw"] / inv["mva"], 4),
         round(_bmw / _bmva, 4) if gt2 else "", "= II.13 / II.12", "calc")
     # PF regulation range: written only when sourced from the OEM datasheet.
-    _pv_pf = -float(inv["pf_range"]) if lib.is_sourced(inv, "pf_range") else ""
-    _b_pf = (float(bess["pf_range"]) if (gt2 and lib.is_sourced(bess, "pf_range")) else "")
+    # Rule: OEM adjustable PF x sizing-rule factor (e.g. 0.8 x 0.95 = 0.76).
+    _pv_pf = (-round(float(inv["pf_range"]) * INVERTER_SIZING_PF, 2)
+              if lib.is_sourced(inv, "pf_range") else "")
+    _b_pf = (round(float(bess["pf_range"]) * INVERTER_SIZING_PF, 2)
+             if (gt2 and lib.is_sourced(bess, "pf_range")) else "")
     row("II.15", "PF regulation range at rated MW — Leading (−)", "", _pv_pf,
         _b_pf and -_b_pf, "" if _pv_pf else "OEM PF range pending — admin to source")
     row("II.16", "PF regulation range at rated MW — Lagging (+)", "", _pv_pf and -_pv_pf, _b_pf)
